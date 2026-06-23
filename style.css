@@ -1278,3 +1278,7 @@ body {
     right: 12px;
     color: #ffffff;
 }
+
+.force-hide-element {
+    display: none !important;
+}

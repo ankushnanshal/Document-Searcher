@@ -67,6 +67,11 @@ const fullHistoryContainer = document.getElementById('fullHistoryContainer');
 const historyCountText = document.getElementById('historyCountText');
 const navBrandHome = document.getElementById('navBrandHome');
 
+const academicActionBtn = document.getElementById('academicActionBtn');
+const academicModal = document.getElementById('academicModal');
+const closeAcademicModalBtn = document.getElementById('closeAcademicModalBtn');
+const submitAcademicDetailsBtn = document.getElementById('submitAcademicDetailsBtn');
+
 const API_URL = "http://localhost:5000/api";
 let currentMode = 'signin';
 let activeUserEmail = null;
@@ -556,6 +561,14 @@ function handleUserSession(user) {
         }
     }
     
+    if (academicActionBtn) {
+        if (user.role === 'admin' && currentSelectedCategory === "Academic Resource") {
+            academicActionBtn.classList.remove('hidden-vault-element');
+        } else {
+            academicActionBtn.classList.add('hidden-vault-element');
+        }
+    }
+    
     if (recommendedTab) {
         if (user.role === 'student' && user.branch) {
             recommendedTab.classList.remove('hidden');
@@ -839,6 +852,16 @@ filterTabs.forEach(tab => {
         filterTabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
         currentSelectedCategory = tab.getAttribute('data-category');
+        
+        const isAdmin = userSession.role === 'admin';
+
+        if (currentSelectedCategory === "Academic Resource" && isAdmin) {
+            if (academicActionBtn) academicActionBtn.classList.remove('hidden-vault-element');
+        } else {
+            if (academicActionBtn) academicActionBtn.classList.add('hidden-vault-element');
+            if (academicModal) academicModal.classList.add('hidden');
+        }
+
         fetchDocuments(searchInput ? searchInput.value.trim() : "");
         if (searchSuggestions) searchSuggestions.classList.add('hidden');
     });
@@ -966,14 +989,24 @@ async function fetchDocuments(query = "") {
             resultsGrid.appendChild(card);
         });
 
-        const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-        savedCards.forEach(cardData => {
-            resultsGrid.insertAdjacentHTML('beforeend', generateCardHTML(cardData));
-        });
+        if (academicActionBtn) {
+            if (currentSelectedCategory === "Academic Resource" && userSession && userSession.role === 'admin') {
+                academicActionBtn.classList.remove('hidden-vault-element');
+            } else {
+                academicActionBtn.classList.add('hidden-vault-element');
+            }
+        }
+
+        if (currentSelectedCategory === "Academic Resource") {
+            const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
+            savedCards.forEach(cardData => {
+                resultsGrid.insertAdjacentHTML('beforeend', generateCardHTML(cardData));
+            });
+        }
     } catch (err) {
-        if (resultCount) resultCount.textContent = `0 items ready`;
+        console.error("Error fetching documents:", err);
     }
-}
+} // <--- Added the missing closing curly brace for fetchDocuments here!
 
 function renderActionButtons() {
     const adminButtons = document.querySelectorAll('.admin-only');
@@ -1022,20 +1055,12 @@ window.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-
-const academicActionBtn = document.getElementById('academicActionBtn');
-const academicModal = document.getElementById('academicModal');
-const closeAcademicModalBtn = document.getElementById('closeAcademicModalBtn');
-const submitAcademicDetailsBtn = document.getElementById('submitAcademicDetailsBtn');
-
-
 if (academicActionBtn) {
     academicActionBtn.addEventListener('click', (e) => {
-        e.stopPropagation(); // Prevents clicking the tab filter simultaneously
+        e.stopPropagation(); 
         academicModal.classList.remove('hidden');
     });
 }
-
 
 if (closeAcademicModalBtn) {
     closeAcademicModalBtn.addEventListener('click', () => {
@@ -1043,14 +1068,11 @@ if (closeAcademicModalBtn) {
     });
 }
 
-
 window.addEventListener('click', (e) => {
     if (e.target === academicModal) {
         academicModal.classList.add('hidden');
     }
 });
-
-
 
 function getAvatarColor(username) {
     if (!username || username.trim() === "") return '#4f46e5';
@@ -1109,6 +1131,7 @@ window.addEventListener('load', () => {
         targetGrid.insertAdjacentHTML('beforeend', generateCardHTML(cardData));
     });
 });
+
 if (submitAcademicDetailsBtn) {
     submitAcademicDetailsBtn.addEventListener('click', (e) => {
         e.preventDefault();
@@ -1117,6 +1140,11 @@ if (submitAcademicDetailsBtn) {
         const branchSelect = document.getElementById('academicBranchSelect');
         const semesterSelect = document.getElementById('academicSemesterSelect');
         const teacherInput = document.getElementById('academicTeacherInput');
+
+        if (!subjectInput || !branchSelect || !semesterSelect || !teacherInput) {
+            console.error('One or more form elements were not found in the DOM.');
+            return;
+        }
 
         const subject = subjectInput.value.trim();
         const branch = branchSelect.value;
@@ -1129,7 +1157,11 @@ if (submitAcademicDetailsBtn) {
         }
         
         const firstLetter = teacher.charAt(0).toUpperCase() || '?';
-        const avatarBgColor = getAvatarColor(teacher);
+        
+        const avatarBgColor = (typeof getAvatarColor === 'function') 
+            ? getAvatarColor(teacher) 
+            : '#4f46e5'; 
+
         const bannerThemes = ['banner-blue', 'banner-teal', 'banner-slate'];
         const chosenTheme = bannerThemes[Math.floor(Math.random() * bannerThemes.length)];
 
@@ -1147,10 +1179,15 @@ if (submitAcademicDetailsBtn) {
         currentCards.push(newCard);
         localStorage.setItem('academicCards', JSON.stringify(currentCards));
         
-        fetchDocuments(searchInput ? searchInput.value.trim() : "");
+        const searchInputValue = searchInput ? searchInput.value.trim() : "";
+        if (typeof fetchDocuments === 'function') {
+            fetchDocuments(searchInputValue);
+        } else {
+            console.warn('fetchDocuments function is not defined.');
+        }
         
-        if (subjectInput) subjectInput.value = '';
-        if (teacherInput) teacherInput.value = '';
+        subjectInput.value = '';
+        teacherInput.value = '';
 
         if (academicModal) {
             academicModal.classList.add('hidden');
