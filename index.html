@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Academic Resource Finder</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <div class="background-glow"></div>
+
+    <div class="app-layout">
+        <nav class="navbar">
+            <div id="navBrandHome" class="nav-brand">
+                <div class="brand-logo"><i class="fa-solid fa-bolt"></i></div>
+                <span>GradeGuru</span>
+            </div>
+            
+            <div class="nav-actions">
+                <button id="mainUploadBtn" class="primary-upload-trigger hidden">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Upload Document
+                </button>
+
+                <div class="auth-wrapper">
+                    <button id="profileMenuBtn" class="account-trigger-btn">
+                        <div id="avatarContainer" class="avatar-icon-wrap">
+                            <i class="fa-solid fa-user"></i>
+                        </div>
+                        <span id="workspaceName">My Workspace</span>
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                    
+                    <div id="authDropdown" class="glass-dropdown hidden">
+                        <button id="goSignInBtn"><i class="fa-solid fa-right-to-bracket"></i> Sign In</button>
+                        <button id="goSignUpBtn"><i class="fa-solid fa-user-plus"></i> Register</button>
+                        <div id="authorizedActionsBlock" class="hidden">
+                            <div class="dropdown-divider"></div>
+                            <div class="recent-activity-header">
+                                <span>Recent Activity</span>
+                            </div>
+                            <div id="recentActivityList" class="recent-activity-list"></div>
+                            <button id="viewFullHistoryBtn" class="view-history-btn"><i class="fa-solid fa-clock-rotate-left"></i> See All History</button>
+                            <div class="dropdown-divider"></div>
+                            <button id="updateProfileBtn"><i class="fa-solid fa-id-card"></i> Change Avatar</button>
+                            <button id="logoutBtn"><i class="fa-solid fa-power-off"></i> Exit Session</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <div id="mainDashboardView">
+            <header class="hero-header">
+                <h1>Find and Share <span>Academic Resources</span> Instantly</h1>
+                <p>Access notes, official updates, and university papers uploaded by administrators.</p>
+            </header>
+
+            <main class="dashboard-core">
+                <section class="control-panel">
+                    <div class="search-container">
+                        <div class="search-wrap">
+                            <i class="fa-solid fa-magnifying-glass input-search-icon"></i>
+                            <input type="text" id="searchInput" autocomplete="off" placeholder="Search by document title...">
+                            <button id="searchBtn" class="search-submit-action">Search</button>
+                        </div>
+                        <div id="searchSuggestions" class="search-suggestions-box hidden"></div>
+                    </div>
+                    
+                    <div class="category-filter-table">
+                        <div class="filter-tab active" data-category="all">
+                            <i class="fa-solid fa-vault"></i> All Vault
+                        </div>
+                        <div class="filter-tab" data-category="Official Update">
+                            <i class="fa-solid fa-file-shield"></i> Official Document
+                        </div>
+                        <div class="filter-tab" data-category="University Paper">
+                            <i class="fa-solid fa-graduation-cap"></i> University Paper
+                        </div>
+                        <div class="filter-tab academic-tab-wrapper" data-category="Academic Resource">
+                            <i class="fa-solid fa-book-bookmark"></i> 
+                            <span>Academic Resource</span>
+                            <button class="tab-inline-action-btn" id="academicActionBtn" type="button" title="Add Academic Resource">
+                                <i class="fa-solid fa-plus"></i>
+                            </button>
+                        </div>
+                        <div class="filter-tab hidden" id="recommendedTab" data-category="recommended">
+                            <i class="fa-solid fa-star"></i> Recommended
+                        </div>
+                    </div>
+                </section>
+
+                <section class="results-layout">
+                    <div class="results-meta">
+                        <h2>Available Resources</h2>
+                        <span id="resultCount" class="badge-counter">4 items ready</span>
+                    </div>
+
+                    <div id="resultsGrid" class="resources-stack"></div>
+                </section>
+            </main>
+        </div>
+
+        <div id="historyPageView" class="hidden history-page-view">
+            <div class="history-header-block">
+                <button id="backToHomeBtn" class="action-btn-link back-home-btn"><i class="fa-solid fa-arrow-left"></i> Back to Resources</button>
+                <h1 class="history-title">Your Document History Logs</h1>
+            </div>
+            
+            <div class="history-card-wrapper">
+                <div class="history-meta-actions">
+                    <span id="historyCountText" class="history-count">0 items recorded</span>
+                    <button id="clearHistoryBtn" class="clear-history-btn"><i class="fa-solid fa-trash-can"></i> Clear History Log</button>
+                </div>
+                <div id="fullHistoryContainer" class="results-stack">
+                    <span class="history-empty-state">No download or viewing history found.</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="authModal" class="modal-overlay hidden">
+        <div class="modal-glass-card">
+            <div class="modal-top-bar">
+                <h2 id="modalTitle">Account Login</h2>
+                <button id="closeModalBtn" class="modal-dismiss-icon">&times;</button>
+            </div>
+            
+            <form id="authForm" class="modal-form">
+                <div id="modalAvatarBlock" class="input-block hidden">
+                    <label>Profile Picture</label>
+                    <div id="modalAvatarPreview" class="avatar-icon-wrap modal-avatar-preview">
+                        <i class="fa-solid fa-camera"></i>
+                    </div>
+                    <input type="file" id="modalAvatarInput" accept="image/*" class="hidden-file-input">
+                </div>
+
+                <div id="nameField" class="input-block hidden">
+                    <label for="username">Full Identity Name</label>
+                    <input type="text" id="username" placeholder="Alex Mercer">
+                </div>
+                <div class="input-block">
+                    <label for="email">Institutional Email</label>
+                    <input type="email" id="email" required placeholder="alex@college.edu">
+                </div>
+                
+                <div id="studentFields" class="hidden">
+                    <div class="input-block">
+                        <label for="regYearSelect">Current Academic Year</label>
+                        <select id="regYearSelect">
+                            <option value="2026">2026</option>
+                            <option value="2025">2025</option>
+                            <option value="2024">2024</option>
+                            <option value="2023">2023</option>
+                        </select>
+                    </div>
+                    <div class="input-block">
+                        <label for="regSemSelect">Current Semester</label>
+                        <select id="regSemSelect">
+                            <option value="1">Semester 1</option>
+                            <option value="2">Semester 2</option>
+                            <option value="3">Semester 3</option>
+                            <option value="4">Semester 4</option>
+                            <option value="5">Semester 5</option>
+                            <option value="6">Semester 6</option>
+                            <option value="7">Semester 7</option>
+                            <option value="8">Semester 8</option>
+                        </select>
+                    </div>
+                    <div class="input-block">
+                        <label for="regBranchSelect">Branch Name</label>
+                        <select id="regBranchSelect">
+                            <option value="CSE-(R)">CSE-(R)</option>
+                            <option value="CSE-A.I">CSE-A.I</option>
+                            <option value="CSE-SF">CSE-SF</option>
+                            <option value="ECE">ECE</option>
+                            <option value="EE">EE</option>
+                            <option value="ME">ME</option>
+                            <option value="CE">CE</option>
+                            <option value="CHE">CHE</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="input-block">
+                    <label for="password">Security Password</label>
+                    <input type="password" id="password" required placeholder="••••••••">
+                </div>
+                <button type="submit" id="submitAuthBtn" class="form-action-trigger">Authenticate</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="uploadPopup" class="modal-overlay hidden">
+        <div class="modal-glass-card">
+            <div class="modal-top-bar">
+                <h3>Select Document Details</h3>
+                <button id="closeUploadPopupBtn" class="modal-dismiss-icon">&times;</button>
+            </div>
+            <div class="modal-form">
+                <div class="input-block">
+                    <label for="docCategorySelect">Resource Category</label>
+                    <select id="docCategorySelect">
+                        <option value="" disabled selected>-- Select Category --</option>
+                        <option value="University">University Paper</option>
+                        <option value="Official">Official Document</option>
+                    </select>
+                </div>
+                <div id="universityFields" class="category-conditional-fields">
+                    <div class="input-block">
+                        <label for="docSessionSelect">Academic Session</label>
+                        <select id="docSessionSelect">
+                            <option value="" disabled selected>-- Select Session --</option>
+                            <option value="2024-25">2024-25</option>
+                            <option value="2023-24">2023-24</option>
+                            <option value="2022-23">2022-23</option>
+                            <option value="2021-22">2021-22</option>
+                            <option value="2020-21">2020-21</option>
+                        </select>
+                    </div>
+                    <div class="input-block">
+                        <label for="docSemSelect">Semester</label>
+                        <select id="docSemSelect">
+                            <option value="1">Semester 1</option>
+                            <option value="2">Semester 2</option>
+                            <option value="3">Semester 3</option>
+                            <option value="4">Semester 4</option>
+                            <option value="5">Semester 5</option>
+                            <option value="6">Semester 6</option>
+                            <option value="7">Semester 7</option>
+                            <option value="8">Semester 8</option>
+                        </select>
+                    </div>
+                    <div class="input-block">
+                        <label for="docBranchSelect">Branch Name</label>
+                        <select id="docBranchSelect">
+                            <option value="All Branches" id="allBranchesOpt">All Branches</option>
+                            <option value="CSE-(R)">CSE-(R)</option>
+                            <option value="CSE-A.I">CSE-A.I</option>
+                            <option value="CSE-SF">CSE-SF</option>
+                            <option value="ECE">ECE</option>
+                            <option value="EE">EE</option>
+                            <option value="ME">ME</option>
+                            <option value="CE">CE</option>
+                            <option value="CHE">CHE</option>
+                        </select>
+                    </div>
+                    <div class="input-block">
+                        <label for="docTypeSelect">Paper Type</label>
+                        <select id="docTypeSelect">
+                            <option value="End Sem">End Sem</option>
+                            <option value="C.T">C.T</option>
+                            <option value="Makeup C.T">Makeup C.T</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="officialFields" class="category-conditional-fields">
+                    <div class="input-block">
+                        <label for="officialDocTypeSelect">Official Document Type</label>
+                        <select id="officialDocTypeSelect">
+                           <option value="Notice">Notice</option>
+                           <option value="Circular">Circular</option>
+                           <option value="Academic Calendar">Academic Calendar</option>
+                           <option value="Examination Schedule">Examination Schedule</option>
+                           <option value="Time Table">Time Table</option>
+                           <option value="Syllabus">Syllabus</option>
+                           <option value="Result">Result</option>
+                           <option value="Internship Document">Internship Document</option>
+                           <option value="Placement Notice">Placement Notice</option>
+                           <option value="Placement Material">Placement Material</option>
+                           <option value="Workshop Notice">Workshop Notice</option>
+                           <option value="Seminar Notice">Seminar Notice</option>
+                           <option value="Scholarship Notice">Scholarship Notice</option>
+                           <option value="Fee Notice">Fee Notice</option>
+                           <option value="Hostel Notice">Hostel Notice</option>
+                           <option value="Holiday Notice">Holiday Notice</option>
+                           <option value="Training Material">Training Material</option>
+                           <option value="Placement Drive">Placement Drive</option>
+                           <option value="Faculty Document">Faculty Document</option>
+                           <option value="Student Form">Student Form</option>
+                           <option value="NOC Form">NOC Form</option>
+                           <option value="Event">Event</option>
+                           <option value="ID Card Form">ID Card Form</option>
+                           <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="input-block">
+                    <label for="docDateInput">Document Date</label>
+                    <input type="date" id="docDateInput">
+                </div>
+                <button id="confirmUploadBtn" class="form-action-trigger">Upload Now</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="editPopup" class="modal-overlay hidden">
+        <div class="modal-glass-card">
+            <div class="modal-top-bar">
+                <h3>Edit Document Details</h3>
+                <button id="closeEditPopupBtn" class="modal-dismiss-icon">&times;</button>
+            </div>
+            <div class="modal-form">
+                <div class="input-block">
+                    <label for="editTitleInput">Title</label>
+                    <input type="text" id="editTitleInput">
+                </div>
+                <div class="input-block">
+                    <label for="editDocCategorySelect">Resource Category</label>
+                    <select id="editDocCategorySelect">
+                        <option value="University">University Paper</option>
+                        <option value="Official">Official Document</option>
+                    </select>
+                </div>
+                <div id="editUniversityFields" class="category-conditional-fields">
+                    <div class="input-block">
+                        <label for="editDocSessionSelect">Academic Session</label>
+                        <select id="editDocSessionSelect">
+                            <option value="2024-25">2024-25</option>
+                            <option value="2023-24">2023-24</option>
+                            <option value="2022-23">2022-23</option>
+                            <option value="2021-22">2021-22</option>
+                            <option value="2020-21">2020-21</option>
+                        </select>
+                    </div>
+                    <div class="input-block">
+                        <label for="editDocSemSelect">Semester</label>
+                        <select id="editDocSemSelect">
+                            <option value="1">Semester 1</option>
+                            <option value="2">Semester 2</option>
+                            <option value="3">Semester 3</option>
+                            <option value="4">Semester 4</option>
+                            <option value="5">Semester 5</option>
+                            <option value="6">Semester 6</option>
+                            <option value="7">Semester 7</option>
+                            <option value="8">Semester 8</option>
+                        </select>
+                    </div>
+                    <div class="input-block">
+                        <label for="editDocBranchSelect">Branch Name</label>
+                        <select id="editDocBranchSelect">
+                            <option value="All Branches">All Branches</option>
+                            <option value="CSE-(R)">CSE-(R)</option>
+                            <option value="CSE-A.I">CSE-A.I</option>
+                            <option value="CSE-SF">CSE-SF</option>
+                            <option value="ECE">ECE</option>
+                            <option value="EE">EE</option>
+                            <option value="ME">ME</option>
+                            <option value="CE">CE</option>
+                            <option value="CHE">CHE</option>
+                        </select>
+                    </div>
+                    <div class="input-block">
+                        <label for="editDocTypeSelect">Paper Type</label>
+                        <select id="editDocTypeSelect">
+                            <option value="End Sem">End Sem</option>
+                            <option value="C.T">C.T</option>
+                            <option value="Makeup C.T">Makeup C.T</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="editOfficialFields" class="category-conditional-fields">
+                    <div class="input-block">
+                        <label for="editOfficialDocTypeSelect">Official Document Type</label>
+                        <select id="editOfficialDocTypeSelect">
+                           <option value="Notice">Notice</option>
+                           <option value="Circular">Circular</option>
+                           <option value="Academic Calendar">Academic Calendar</option>
+                           <option value="Examination Schedule">Examination Schedule</option>
+                           <option value="Time Table">Time Table</option>
+                           <option value="Syllabus">Syllabus</option>
+                           <option value="Result">Result</option>
+                           <option value="Internship Document">Internship Document</option>
+                           <option value="Placement Notice">Placement Notice</option>
+                           <option value="Placement Material">Placement Material</option>
+                           <option value="Workshop Notice">Workshop Notice</option>
+                           <option value="Seminar Notice">Seminar Notice</option>
+                           <option value="Scholarship Notice">Scholarship Notice</option>
+                           <option value="Fee Notice">Fee Notice</option>
+                           <option value="Hostel Notice">Hostel Notice</option>
+                           <option value="Holiday Notice">Holiday Notice</option>
+                           <option value="Training Material">Training Material</option>
+                           <option value="Placement Drive">Placement Drive</option>
+                           <option value="Faculty Document">Faculty Document</option>
+                           <option value="Student Form">Student Form</option>
+                           <option value="NOC Form">NOC Form</option>
+                           <option value="Event">Event</option>
+                           <option value="ID Card Form">ID Card Form</option>
+                           <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="input-block">
+                    <label for="editDocDateInput">Document Date</label>
+                    <input type="date" id="editDocDateInput">
+                </div>
+                <button id="confirmEditBtn" class="form-action-trigger">Save Changes</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="previewModal" class="modal-overlay preview-modal-overlay hidden">
+        <div class="modal-glass-card preview-modal-card">
+            <div class="modal-top-bar preview-modal-top-bar">
+                <h3 id="previewModalTitle">Document Preview</h3>
+                <button id="closePreviewModalBtn" class="modal-dismiss-icon preview-modal-close-btn">&times;</button>
+            </div>
+            <div id="previewContainer" class="preview-modal-container"></div>
+        </div>
+    </div>
+
+
+    <div id="academicModal" class="modal-overlay hidden">
+        <div class="modal-glass-card">
+            <div class="modal-top-bar">
+                <h3>Add Academic Details</h3>
+                <button id="closeAcademicModalBtn" class="modal-dismiss-icon">&times;</button>
+            </div>
+            <div class="modal-scroll-body">
+                <div class="input-block">
+                    <label for="academicSubjectInput">Subject Name (Subject Code)</label>
+                    <input type="text" id="academicSubjectInput" placeholder="e.g., Data Structures (CS-301)">
+                </div>
+                <div class="input-block">
+                    <label for="academicBranchSelect">Branch</label>
+                    <select id="academicBranchSelect">
+                        <option value="All Branches">All Branches</option>
+                            <option value="CSE-(R)">CSE-(R)</option>
+                            <option value="CSE-A.I">CSE-A.I</option>
+                            <option value="CSE-SF">CSE-SF</option>
+                            <option value="ECE">ECE</option>
+                            <option value="EE">EE</option>
+                            <option value="ME">ME</option>
+                            <option value="CE">CE</option>
+                            <option value="CHE">CHE</option>
+                    </select>
+                </div>
+                <div class="input-block">
+                    <label for="academicSemesterSelect">Semester</label>
+                    <select id="academicSemesterSelect">
+                        <option value="1">Semester 1</option>
+                        <option value="2">Semester 2</option>
+                        <option value="3">Semester 3</option>
+                        <option value="4">Semester 4</option>
+                        <option value="5">Semester 5</option>
+                        <option value="6">Semester 6</option>
+                        <option value="7">Semester 7</option>
+                        <option value="8">Semester 8</option>
+                    </select>
+                </div>
+                <div class="input-block">
+                    <label for="academicYearSelect">Year</label>
+                    <select id="academicYearSelect">
+                        <option value="1st">1st Year</option>
+                        <option value="2nd">2nd Year</option>
+                        <option value="3rd">3rd Year</option>
+                        <option value="4th">4th Year</option>
+                    </select>
+                </div>
+                <div class="input-block">
+                    <label for="academicTeacherInput">Teacher Name</label>
+                    <input type="text" id="academicTeacherInput" placeholder="e.g., Dr. Jane Smith">
+                </div>
+                <button id="submitAcademicDetailsBtn" class="form-action-trigger">Submit Details</button>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="profileImageInput" accept="image/*" class="hidden-file-input">
+    <input type="file" id="universalDocumentInput" accept=".pdf,image/*,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" class="hidden-file-input">
+    <div id="notification-container" class="notification-container"></div>
+
+    <script src="script.js"></script>
+</body>
+</html>
