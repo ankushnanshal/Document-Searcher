@@ -71,6 +71,7 @@ const academicActionBtn = document.getElementById('academicActionBtn');
 const academicModal = document.getElementById('academicModal');
 const closeAcademicModalBtn = document.getElementById('closeAcademicModalBtn');
 const submitAcademicDetailsBtn = document.getElementById('submitAcademicDetailsBtn');
+const resultsMeta = document.getElementById('resultsMeta');
 
 const API_URL = "http://localhost:5000/api";
 let currentMode = 'signin';
@@ -84,10 +85,6 @@ let pendingUploadFile = null;
 let currentSelectedCategory = "all";
 let cachedDocuments = [];
 let authToken = localStorage.getItem('token') || null;
-
-const userSession = {
-    role: "admin"
-};
 
 function showNotification(message) {
     if (!notificationContainer) {
@@ -243,6 +240,8 @@ if (logoutBtn) {
         currentSelectedCategory = "all";
         if (mainDashboardView) mainDashboardView.classList.remove('hidden');
         if (historyPageView) historyPageView.classList.add('hidden');
+        if (academicActionBtn) academicActionBtn.classList.add('hidden');
+        if (resultsMeta) resultsMeta.classList.remove('hidden');
         fetchDocuments();
         renderActionButtons();
     });
@@ -561,11 +560,12 @@ function handleUserSession(user) {
         }
     }
     
+    const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
     if (academicActionBtn) {
-        if (user.role === 'admin' && currentSelectedCategory === "Academic Resource") {
-            academicActionBtn.classList.remove('hidden-vault-element');
+        if (isAdminEmail && currentSelectedCategory === "Academic Resource") {
+            academicActionBtn.classList.remove('hidden');
         } else {
-            academicActionBtn.classList.add('hidden-vault-element');
+            academicActionBtn.classList.add('hidden');
         }
     }
     
@@ -586,7 +586,6 @@ function handleUserSession(user) {
     if (user.avatar) setAvatarImage(avatarContainer, user.avatar);
     fetchDocuments();
     fetchHistory();
-    userSession.role = user.role;
     renderActionButtons();
 }
 
@@ -853,12 +852,14 @@ filterTabs.forEach(tab => {
         tab.classList.add('active');
         currentSelectedCategory = tab.getAttribute('data-category');
         
-        const isAdmin = userSession.role === 'admin';
+        const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
 
-        if (currentSelectedCategory === "Academic Resource" && isAdmin) {
-            if (academicActionBtn) academicActionBtn.classList.remove('hidden-vault-element');
+        if (currentSelectedCategory === "Academic Resource" && isAdminEmail) {
+            if (academicActionBtn) academicActionBtn.classList.remove('hidden');
+            if (resultsMeta) resultsMeta.classList.add('hidden');
         } else {
-            if (academicActionBtn) academicActionBtn.classList.add('hidden-vault-element');
+            if (academicActionBtn) academicActionBtn.classList.add('hidden');
+            if (resultsMeta) resultsMeta.classList.remove('hidden');
             if (academicModal) academicModal.classList.add('hidden');
         }
 
@@ -888,10 +889,259 @@ async function deleteDocument(id) {
     }
 }
 
+function deleteAcademicCard(subject) {
+    let savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
+    savedCards = savedCards.filter(card => card.subject !== subject);
+    localStorage.setItem('academicCards', JSON.stringify(savedCards));
+    fetchDocuments(searchInput ? searchInput.value.trim() : "");
+    showNotification("Academic card removed.");
+}
+
+function renderAcademicCards() {
+    const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
+    const isAdmin = activeUserEmail === 'ankushadmin@gmail.com';
+    
+    const existingCards = resultsGrid.querySelectorAll('.classroom-card');
+    existingCards.forEach(card => card.remove());
+    
+    if (savedCards.length === 0) {
+        if (!resultsGrid.querySelector('.history-empty-state')) {
+            const emptyMsg = document.createElement('span');
+            emptyMsg.className = 'history-empty-state';
+            emptyMsg.textContent = 'No academic resources added yet.';
+            resultsGrid.appendChild(emptyMsg);
+        }
+        return;
+    }
+    
+    savedCards.forEach((cardData, index) => {
+        resultsGrid.insertAdjacentHTML('beforeend', generateCardHTML(cardData, isAdmin, index));
+    });
+    
+    const emptyState = resultsGrid.querySelector('.history-empty-state');
+    if (emptyState) emptyState.remove();
+}
+
+function showCardMenu(e, cardData, index, isUpper) {
+    e.stopPropagation();
+    
+    const existingMenu = document.querySelector('.card-context-menu');
+    if (existingMenu) existingMenu.remove();
+    
+    const menu = document.createElement('div');
+    menu.className = 'card-context-menu';
+    menu.style.cssText = `
+        position: fixed;
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 8px;
+        padding: 6px 0;
+        min-width: 180px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+        z-index: 9999;
+        color: #e2e8f0;
+    `;
+    
+    let x = e.clientX || e.pageX || 0;
+    let y = e.clientY || e.pageY || 0;
+    menu.style.left = Math.min(x, window.innerWidth - 200) + 'px';
+    menu.style.top = Math.min(y, window.innerHeight - 300) + 'px';
+    
+    let options = [];
+    
+    if (isUpper) {
+        options = [
+            { label: '✏️ Edit', action: () => { editAcademicCard(cardData, index); menu.remove(); } },
+            { label: '📌 Pin', action: () => { pinAcademicCard(index); menu.remove(); } },
+            { label: '🗑️ Delete', action: () => { deleteAcademicCard(cardData.subject); menu.remove(); } }
+        ];
+    } else {
+        options = [
+            { label: '📌 Pin', action: () => { pinAcademicCard(index); menu.remove(); } },
+            { label: '📂 Move', action: () => { moveAcademicCard(index); menu.remove(); } },
+            { label: '🔗 Share', action: () => { shareAcademicCard(cardData); menu.remove(); } }
+        ];
+    }
+    
+    options.forEach(opt => {
+        const item = document.createElement('div');
+        item.style.cssText = `
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            transition: background 0.15s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        `;
+        item.textContent = opt.label;
+        item.onmouseover = () => item.style.background = '#334155';
+        item.onmouseout = () => item.style.background = 'transparent';
+        item.onclick = (ev) => {
+            ev.stopPropagation();
+            opt.action();
+        };
+        menu.appendChild(item);
+    });
+    
+    document.body.appendChild(menu);
+    
+    setTimeout(() => {
+        document.addEventListener('click', function removeMenu(e) {
+            if (!menu.contains(e.target)) {
+                menu.remove();
+                document.removeEventListener('click', removeMenu);
+            }
+        });
+    }, 10);
+}
+
+function editAcademicCard(cardData, index) {
+    const subjectInput = document.getElementById('academicSubjectInput');
+    const branchSelect = document.getElementById('academicBranchSelect');
+    const semesterSelect = document.getElementById('academicSemesterSelect');
+    const teacherInput = document.getElementById('academicTeacherInput');
+    
+    if (subjectInput) subjectInput.value = cardData.subject;
+    if (branchSelect) branchSelect.value = cardData.branch;
+    if (semesterSelect) semesterSelect.value = cardData.semester;
+    if (teacherInput) teacherInput.value = cardData.teacher;
+    
+    academicModal.classList.remove('hidden');
+    
+    const originalSubmit = submitAcademicDetailsBtn.onclick;
+    submitAcademicDetailsBtn.onclick = (e) => {
+        e.preventDefault();
+        
+        const subject = subjectInput.value.trim();
+        const branch = branchSelect.value;
+        const semester = semesterSelect.value;
+        const teacher = teacherInput.value.trim();
+        
+        if (!subject || !teacher) {
+            alert('Please fill out all fields.');
+            return;
+        }
+        
+        let savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
+        savedCards[index] = {
+            subject,
+            branch,
+            semester,
+            teacher,
+            firstLetter: teacher.charAt(0).toUpperCase() || '?',
+            avatarBgColor: getAvatarColor(teacher),
+            chosenTheme: cardData.chosenTheme || ['banner-blue', 'banner-teal', 'banner-slate'][Math.floor(Math.random() * 3)]
+        };
+        localStorage.setItem('academicCards', JSON.stringify(savedCards));
+        
+        fetchDocuments(searchInput ? searchInput.value.trim() : "");
+        academicModal.classList.add('hidden');
+        showNotification('Academic card updated.');
+        
+        submitAcademicDetailsBtn.onclick = originalSubmit;
+    };
+}
+
+function duplicateAcademicCard(cardData) {
+    let savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
+    const newCard = {
+        ...cardData,
+        subject: cardData.subject + ' (Copy)',
+        firstLetter: cardData.teacher.charAt(0).toUpperCase() || '?',
+        chosenTheme: ['banner-blue', 'banner-teal', 'banner-slate'][Math.floor(Math.random() * 3)]
+    };
+    savedCards.push(newCard);
+    localStorage.setItem('academicCards', JSON.stringify(savedCards));
+    fetchDocuments(searchInput ? searchInput.value.trim() : "");
+    showNotification('Card duplicated.');
+}
+
+function pinAcademicCard(index) {
+    let savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
+    const card = savedCards.splice(index, 1)[0];
+    savedCards.unshift(card);
+    localStorage.setItem('academicCards', JSON.stringify(savedCards));
+    fetchDocuments(searchInput ? searchInput.value.trim() : "");
+    showNotification('Card pinned.');
+}
+
+function moveAcademicCard(index) {
+    let savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
+    const card = savedCards.splice(index, 1)[0];
+    const newIndex = prompt('Enter new position (0 to ' + savedCards.length + '):', savedCards.length);
+    if (newIndex !== null && !isNaN(newIndex) && newIndex >= 0 && newIndex <= savedCards.length) {
+        savedCards.splice(parseInt(newIndex), 0, card);
+        localStorage.setItem('academicCards', JSON.stringify(savedCards));
+        fetchDocuments(searchInput ? searchInput.value.trim() : "");
+        showNotification('Card moved.');
+    }
+}
+
+function copyAcademicCard(cardData) {
+    const text = `${cardData.subject}\n${cardData.branch} | ${cardData.semester} SEM\nTeacher: ${cardData.teacher}`;
+    navigator.clipboard.writeText(text).then(() => {
+        showNotification('Card details copied to clipboard.');
+    }).catch(() => {
+        showNotification('Could not copy.');
+    });
+}
+
+function shareAcademicCard(cardData) {
+    if (navigator.share) {
+        navigator.share({
+            title: cardData.subject,
+            text: `${cardData.subject}\n${cardData.branch} | ${cardData.semester} SEM\nTeacher: ${cardData.teacher}`
+        }).catch(() => {});
+    } else {
+        copyAcademicCard(cardData);
+    }
+}
+
+function setupCardEventListeners() {
+    resultsGrid.addEventListener('click', function(e) {
+        const upperBtn = e.target.closest('.upper-menu-btn');
+        if (upperBtn) {
+            e.stopPropagation();
+            const card = upperBtn.closest('.classroom-card');
+            if (!card) return;
+            const subject = card.getAttribute('data-subject');
+            const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
+            const cardData = savedCards.find(c => c.subject === subject);
+            const cardIndex = savedCards.findIndex(c => c.subject === subject);
+            if (cardData) {
+                showCardMenu(e, cardData, cardIndex, true);
+            }
+            return;
+        }
+        
+        const lowerBtn = e.target.closest('.lower-menu-btn');
+        if (lowerBtn) {
+            e.stopPropagation();
+            const card = lowerBtn.closest('.classroom-card');
+            if (!card) return;
+            const subject = card.getAttribute('data-subject');
+            const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
+            const cardData = savedCards.find(c => c.subject === subject);
+            const cardIndex = savedCards.findIndex(c => c.subject === subject);
+            if (cardData) {
+                showCardMenu(e, cardData, cardIndex, false);
+            }
+            return;
+        }
+    });
+}
+
 async function fetchDocuments(query = "") {
     if (!activeUserEmail || !authToken) {
         if (resultCount) resultCount.textContent = `0 items ready`;
-        if (resultsGrid) resultsGrid.innerHTML = '<span class="history-empty-state">Please login to search and access resources.</span>';
+        if (resultsGrid) {
+            resultsGrid.innerHTML = '';
+            if (currentSelectedCategory === "Academic Resource") {
+                renderAcademicCards();
+                setupCardEventListeners();
+            }
+        }
         return;
     }
 
@@ -925,7 +1175,12 @@ async function fetchDocuments(query = "") {
 
         if (resultCount) resultCount.textContent = `${docs.length} items ready`;
         if (!resultsGrid) return;
-        resultsGrid.innerHTML = docs.length === 0 ? '<span class="history-empty-state">No resources.</span>' : '';
+        
+        const documentCards = resultsGrid.querySelectorAll('.document-row-card');
+        documentCards.forEach(card => card.remove());
+        
+        const academicCards = resultsGrid.querySelectorAll('.classroom-card');
+        academicCards.forEach(card => card.remove());
         
         const isAdmin = currentUserRole === 'admin';
 
@@ -989,28 +1244,29 @@ async function fetchDocuments(query = "") {
             resultsGrid.appendChild(card);
         });
 
+        const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
         if (academicActionBtn) {
-            if (currentSelectedCategory === "Academic Resource" && userSession && userSession.role === 'admin') {
-                academicActionBtn.classList.remove('hidden-vault-element');
+            if (currentSelectedCategory === "Academic Resource" && isAdminEmail) {
+                academicActionBtn.classList.remove('hidden');
+                if (resultsMeta) resultsMeta.classList.add('hidden');
             } else {
-                academicActionBtn.classList.add('hidden-vault-element');
+                academicActionBtn.classList.add('hidden');
+                if (resultsMeta) resultsMeta.classList.remove('hidden');
             }
         }
 
         if (currentSelectedCategory === "Academic Resource") {
-            const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-            savedCards.forEach(cardData => {
-                resultsGrid.insertAdjacentHTML('beforeend', generateCardHTML(cardData));
-            });
+            renderAcademicCards();
+            setupCardEventListeners();
         }
     } catch (err) {
         console.error("Error fetching documents:", err);
     }
-} // <--- Added the missing closing curly brace for fetchDocuments here!
+}
 
 function renderActionButtons() {
     const adminButtons = document.querySelectorAll('.admin-only');
-    if (userSession.role === 'admin') {
+    if (currentUserRole === 'admin') {
         adminButtons.forEach(button => {
             button.classList.remove('hidden');
         });
@@ -1053,6 +1309,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     } else {
         fetchDocuments();
     }
+    setupCardEventListeners();
 });
 
 if (academicActionBtn) {
@@ -1090,16 +1347,19 @@ function getAvatarColor(username) {
     return color;
 }
 
-function generateCardHTML(data) {
+function generateCardHTML(data, isAdmin = false, index = 0) {
+    const upperMenuStyle = isAdmin ? '' : 'display: none;';
     return `
-        <div class="classroom-card" style="width: 300px; min-height: 280px; border: 1px solid #dadce0; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; position: relative; background: #fff; box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);">
+        <div class="classroom-card" data-subject="${data.subject}" style="width: 300px; min-height: 280px; border: 1px solid #dadce0; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; position: relative; background: #fff; box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15);">
             <div class="card-header-banner ${data.chosenTheme}" style="position: relative; padding: 16px; min-height: 100px; color: white; display: flex; flex-direction: column; justify-content: space-between;">
                 <div class="banner-content" style="max-width: 70%;">
                     <h3 class="course-title" title="${data.subject}" style="margin: 0; font-size: 1.1rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline;">${data.subject.toUpperCase()}</h3>
                     <p class="course-subtitle" style="margin: 4px 0 0 0; font-size: 0.85rem; opacity: 0.9;">B.TECH | ${data.branch.toUpperCase()} | ${data.semester} SEM</p>
                 </div>
                 <p class="teacher-name" style="margin: 12px 0 0 0; font-size: 0.8rem; opacity: 0.9; text-transform: uppercase;">${data.teacher}</p>
-                <button class="banner-options-btn" style="position: absolute; top: 12px; right: 12px; background: none; border: none; color: white; cursor: pointer; font-size: 1rem;"><i class="fas fa-ellipsis-v"></i></button>
+                <button class="banner-options-btn upper-menu-btn" style="position: absolute; top: 12px; right: 12px; background: none; border: none; color: white; cursor: pointer; font-size: 1rem; ${upperMenuStyle}">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>
                 
                 <div class="card-avatar-container" style="position: absolute; right: 24px; bottom: -30px; z-index: 2;">
                     <div class="avatar-letter" style="background-color: ${data.avatarBgColor}; width: 65px; height: 65px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.75rem; font-weight: 400; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
@@ -1112,9 +1372,9 @@ function generateCardHTML(data) {
             
             <div class="card-footer" style="padding: 8px 16px; border-top: 1px solid #e0e0e0; display: flex; justify-content: flex-end; gap: 16px; align-items: center; background: white; min-height: 48px;">
                 <div class="card-actions" style="display: flex; gap: 20px;">
-                    <button class="action-btn" title="Open Assignment Book" style="background: none; border: none; color: #5f6368; cursor: pointer; font-size: 1.2rem;"><i class="far fa-id-badge"></i></button>
-                    <button class="action-btn" title="Open Drive Folder" style="background: none; border: none; color: #5f6368; cursor: pointer; font-size: 1.2rem;"><i class="far fa-folder"></i></button>
-                    <button class="action-btn" title="More Options" style="background: none; border: none; color: #5f6368; cursor: pointer; font-size: 1.2rem;"><i class="fas fa-ellipsis-v"></i></button>
+                    <button class="action-btn lower-menu-btn" title="More options" style="background: none; border: none; color: #5f6368; cursor: pointer; font-size: 1.2rem;">
+                        <i class="fas fa-ellipsis-v"></i>
+                    </button>
                 </div>
             </div>
         </div>
@@ -1125,11 +1385,19 @@ window.addEventListener('load', () => {
     const targetGrid = document.getElementById('resultsGrid');
     if (!targetGrid) return;
     
-    const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-    targetGrid.innerHTML = ''; 
-    savedCards.forEach(cardData => {
-        targetGrid.insertAdjacentHTML('beforeend', generateCardHTML(cardData));
-    });
+    if (currentSelectedCategory === "Academic Resource") {
+        const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
+        const isAdmin = activeUserEmail === 'ankushadmin@gmail.com';
+        
+        if (savedCards.length > 0) {
+            const emptyState = targetGrid.querySelector('.history-empty-state');
+            if (emptyState) emptyState.remove();
+            savedCards.forEach((cardData) => {
+                targetGrid.insertAdjacentHTML('beforeend', generateCardHTML(cardData, isAdmin));
+            });
+            setupCardEventListeners();
+        }
+    }
 });
 
 if (submitAcademicDetailsBtn) {
