@@ -32,12 +32,10 @@ const officialFields = document.getElementById('officialFields');
 const studentFields = document.getElementById('studentFields');
 const recommendedTab = document.getElementById('recommendedTab');
 const emailInput = document.getElementById('email');
-
 const previewModal = document.getElementById('previewModal');
 const closePreviewModalBtn = document.getElementById('closePreviewModalBtn');
 const previewModalTitle = document.getElementById('previewModalTitle');
 const previewContainer = document.getElementById('previewContainer');
-
 const editPopup = document.getElementById('editPopup');
 const closeEditPopupBtn = document.getElementById('closeEditPopupBtn');
 const confirmEditBtn = document.getElementById('confirmEditBtn');
@@ -52,11 +50,9 @@ const editDocTypeSelect = document.getElementById('editDocTypeSelect');
 const editOfficialDocTypeSelect = document.getElementById('editOfficialDocTypeSelect');
 const editDocDateInput = document.getElementById('editDocDateInput');
 let editingDocId = null;
-
 const docSemSelect = document.getElementById('docSemSelect');
 const docBranchSelect = document.getElementById('docBranchSelect');
 const allBranchesOpt = document.getElementById('allBranchesOpt');
-
 const mainDashboardView = document.getElementById('mainDashboardView');
 const historyPageView = document.getElementById('historyPageView');
 const viewFullHistoryBtn = document.getElementById('viewFullHistoryBtn');
@@ -66,19 +62,16 @@ const recentActivityList = document.getElementById('recentActivityList');
 const fullHistoryContainer = document.getElementById('fullHistoryContainer');
 const historyCountText = document.getElementById('historyCountText');
 const navBrandHome = document.getElementById('navBrandHome');
-
 const academicActionBtn = document.getElementById('academicActionBtn');
 const academicModal = document.getElementById('academicModal');
 const closeAcademicModalBtn = document.getElementById('closeAcademicModalBtn');
 const submitAcademicDetailsBtn = document.getElementById('submitAcademicDetailsBtn');
 const resultsMeta = document.getElementById('resultsMeta');
-
 const deleteConfirmModal = document.getElementById('deleteConfirmModal');
 const closeDeleteConfirmBtn = document.getElementById('closeDeleteConfirmBtn');
 const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
 const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
 let pendingDeleteData = null;
-
 const API_URL = "http://localhost:5000/api";
 let currentMode = 'signin';
 let activeUserEmail = null;
@@ -92,6 +85,7 @@ let currentSelectedCategory = "all";
 let cachedDocuments = [];
 let authToken = localStorage.getItem('token') || null;
 let isUserLoggedIn = false;
+let isLoading = false;
 
 function showNotification(message) {
   if (!notificationContainer) {
@@ -137,15 +131,12 @@ if (deleteConfirmModal) {
     }
   });
 }
-
 if (closeDeleteConfirmBtn) {
   closeDeleteConfirmBtn.addEventListener('click', closeDeleteConfirmModal);
 }
-
 if (cancelDeleteBtn) {
   cancelDeleteBtn.addEventListener('click', closeDeleteConfirmModal);
 }
-
 if (confirmDeleteBtn) {
   confirmDeleteBtn.addEventListener('click', function() {
     if (pendingDeleteData) {
@@ -182,11 +173,9 @@ function handleSemesterBranchLogic() {
     }
   }
 }
-
 if (docSemSelect) {
   docSemSelect.addEventListener('change', handleSemesterBranchLogic);
 }
-
 if (docCategorySelect && universityFields && officialFields) {
   docCategorySelect.addEventListener('change', () => {
     if (docCategorySelect.value === 'University') {
@@ -293,7 +282,6 @@ if (logoutBtn) {
     if (historyPageView) historyPageView.classList.add('hidden');
     if (academicActionBtn) academicActionBtn.classList.add('hidden');
     if (resultsMeta) resultsMeta.classList.remove('hidden');
-    // Clear academic cards from view
     const academicCards = resultsGrid.querySelectorAll('.classroom-card');
     academicCards.forEach(card => card.remove());
     fetchDocuments();
@@ -308,10 +296,8 @@ if (uploadDocBtn && universalDocumentInput) {
     }
     if (universityFields) universityFields.style.display = 'none';
     if (officialFields) officialFields.style.display = 'none';
-
     const docSessionSelect = document.getElementById('docSessionSelect');
     if (docSessionSelect) docSessionSelect.value = "";
-
     const docDateInput = document.getElementById('docDateInput');
     if (docDateInput) {
       const today = new Date();
@@ -320,7 +306,6 @@ if (uploadDocBtn && universalDocumentInput) {
       const day = String(today.getDate()).padStart(2, '0');
       docDateInput.value = `${year}-${month}-${day}`;
     }
-
     universalDocumentInput.click();
   });
 }
@@ -375,23 +360,19 @@ if (closeUploadPopupBtn) {
 if (confirmUploadBtn) {
   confirmUploadBtn.addEventListener('click', async () => {
     if (!pendingUploadFile) return;
-
     const categorySelect = document.getElementById('docCategorySelect');
     const docDateInput = document.getElementById('docDateInput');
     const docSessionSelect = document.getElementById('docSessionSelect');
     const docTypeSelect = document.getElementById('docTypeSelect');
     const officialDocTypeSelect = document.getElementById('officialDocTypeSelect');
-
     if (!categorySelect || !categorySelect.value) {
       showNotification("Please select a resource category.");
       return;
     }
-
     const category = categorySelect.value;
     let finalCategory = category;
     if (category === 'Official') finalCategory = 'Official Update';
     if (category === 'University') finalCategory = 'University Paper';
-
     let selectedDate = docDateInput ? docDateInput.value : "";
     if (!selectedDate) {
       const today = new Date();
@@ -400,13 +381,11 @@ if (confirmUploadBtn) {
       const day = String(today.getDate()).padStart(2, '0');
       selectedDate = `${year}-${month}-${day}`;
     }
-
     const formData = new FormData();
     formData.append('file', pendingUploadFile);
     formData.append('title', pendingUploadFile.name);
     formData.append('category', finalCategory);
     formData.append('docDate', selectedDate);
-
     if (finalCategory === 'University Paper') {
       formData.append('year', docSessionSelect ? docSessionSelect.value : "");
       formData.append('semester', docSemSelect ? docSemSelect.value : "");
@@ -415,7 +394,6 @@ if (confirmUploadBtn) {
     } else if (finalCategory === 'Official Update') {
       formData.append('officialDocType', officialDocTypeSelect ? officialDocTypeSelect.value : "");
     }
-
     try {
       const response = await fetch(`${API_URL}/documents/upload`, {
         method: "POST",
@@ -444,13 +422,10 @@ function openEditDocumentModal(doc) {
   editingDocId = doc._id;
   if (editTitleInput) editTitleInput.value = doc.title || '';
   if (editDocDateInput) editDocDateInput.value = doc.docDate || '';
-
   const isUniversity = doc.category === 'University Paper';
   if (editDocCategorySelect) editDocCategorySelect.value = isUniversity ? 'University' : 'Official';
-
   if (editUniversityFields) editUniversityFields.style.display = isUniversity ? 'block' : 'none';
   if (editOfficialFields) editOfficialFields.style.display = isUniversity ? 'none' : 'block';
-
   if (isUniversity) {
     if (editDocSessionSelect) editDocSessionSelect.value = doc.year || '2024-25';
     if (editDocSemSelect) editDocSemSelect.value = doc.semester || '1';
@@ -459,7 +434,6 @@ function openEditDocumentModal(doc) {
   } else {
     if (editOfficialDocTypeSelect) editOfficialDocTypeSelect.value = doc.officialDocType || 'Notice';
   }
-
   if (editPopup) editPopup.classList.remove('hidden');
 }
 
@@ -485,16 +459,13 @@ if (editDocCategorySelect && editUniversityFields && editOfficialFields) {
 if (confirmEditBtn) {
   confirmEditBtn.addEventListener('click', async () => {
     if (!editingDocId) return;
-
     const category = editDocCategorySelect ? editDocCategorySelect.value : 'University';
     const finalCategory = category === 'Official' ? 'Official Update' : 'University Paper';
-
     const payload = {
       title: editTitleInput ? editTitleInput.value.trim() : '',
       category: finalCategory,
       docDate: editDocDateInput ? editDocDateInput.value : ''
     };
-
     if (finalCategory === 'University Paper') {
       payload.year = editDocSessionSelect ? editDocSessionSelect.value : '';
       payload.semester = editDocSemSelect ? editDocSemSelect.value : '';
@@ -508,12 +479,10 @@ if (confirmEditBtn) {
       payload.branch = '';
       payload.paperType = '';
     }
-
     if (!payload.title) {
       showNotification("Title cannot be empty.");
       return;
     }
-
     try {
       const response = await fetch(`${API_URL}/documents/${editingDocId}`, {
         method: "PUT",
@@ -551,12 +520,9 @@ if (authForm) {
     const regYearEl = document.getElementById('regYearSelect');
     const regSemEl = document.getElementById('regSemSelect');
     const regBranchEl = document.getElementById('regBranchSelect');
-
     if (!emailEl || !passwordEl) return;
-
     const email = emailEl.value.trim().toLowerCase();
     const password = passwordEl.value;
-
     let payload = { email, password };
     if (currentMode === 'signup') {
       payload.name = usernameEl ? usernameEl.value : '';
@@ -568,7 +534,6 @@ if (authForm) {
         payload.branch = regBranchEl ? regBranchEl.value : '';
       }
     }
-
     try {
       const response = await fetch(`${API_URL}/auth/${currentMode}`, {
         method: "POST",
@@ -603,12 +568,10 @@ function handleUserSession(user) {
   currentUserBranch = user.branch;
   if (workspaceName) workspaceName.textContent = user.name;
   if (authorizedActionsBlock) authorizedActionsBlock.classList.remove('hidden');
-
   const signInBtn = document.getElementById('goSignInBtn');
   const signUpBtn = document.getElementById('goSignUpBtn');
   if (signInBtn) signInBtn.classList.add('hidden');
   if (signUpBtn) signUpBtn.classList.add('hidden');
-
   if (uploadDocBtn) {
     if (user.role === 'admin') {
       uploadDocBtn.classList.remove('hidden');
@@ -616,7 +579,6 @@ function handleUserSession(user) {
       uploadDocBtn.classList.add('hidden');
     }
   }
-
   const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
   if (academicActionBtn) {
     if (isAdminEmail && currentSelectedCategory === "Academic Resource") {
@@ -625,7 +587,6 @@ function handleUserSession(user) {
       academicActionBtn.classList.add('hidden');
     }
   }
-
   if (recommendedTab) {
     if (user.role === 'student' && user.branch) {
       recommendedTab.classList.remove('hidden');
@@ -639,7 +600,6 @@ function handleUserSession(user) {
       currentSelectedCategory = "all";
     }
   }
-
   if (user.avatar) setAvatarImage(avatarContainer, user.avatar);
   fetchDocuments();
   fetchHistory();
@@ -670,7 +630,6 @@ async function fetchHistory() {
       headers: { "Authorization": `Bearer ${authToken}` }
     });
     const data = await response.json();
-
     if (recentActivityList) {
       recentActivityList.innerHTML = '';
       const recent = data.slice(0, 5);
@@ -688,11 +647,9 @@ async function fetchHistory() {
         });
       }
     }
-
     if (historyCountText) {
       historyCountText.textContent = `${data.length} items recorded`;
     }
-
     if (fullHistoryContainer) {
       fullHistoryContainer.innerHTML = data.length === 0 ? '<span class="history-empty-state">No download or viewing history found.</span>' : '';
       data.forEach(item => {
@@ -755,11 +712,9 @@ if (navBrandHome) {
 function openPreviewModal(title, fileUrl) {
   logHistory(title);
   if (!previewModal || !previewContainer || !previewModalTitle) return;
-
   previewModalTitle.textContent = title;
   previewContainer.innerHTML = '';
   previewModal.classList.remove('hidden');
-
   if (!fileUrl) {
     const pre = document.createElement('pre');
     pre.textContent = "Preview unavailable for this asset.";
@@ -768,7 +723,6 @@ function openPreviewModal(title, fileUrl) {
     previewContainer.appendChild(pre);
     return;
   }
-
   const lowerTitle = title.toLowerCase();
   if (lowerTitle.endsWith('.pdf')) {
     const iframe = document.createElement('iframe');
@@ -834,14 +788,12 @@ if (searchInput) {
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
     }
   });
-
   searchInput.addEventListener('input', () => {
     const query = searchInput.value.trim().toLowerCase();
     if (!query || cachedDocuments.length === 0) {
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
       return;
     }
-
     let filtered = cachedDocuments.filter(doc => {
       if (currentSelectedCategory === "recommended") {
         if (currentUserBranch) {
@@ -855,22 +807,21 @@ if (searchInput) {
       }
       return true;
     });
-
-    filtered = filtered.filter(doc => doc.title.toLowerCase().includes(query));
-
+    filtered = filtered.filter(doc => doc.title.toLowerCase().includes(query) || 
+      (doc.textContent && doc.textContent.toLowerCase().includes(query)));
     if (filtered.length === 0) {
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
       return;
     }
-
     if (searchSuggestions) {
       searchSuggestions.innerHTML = '';
       filtered.forEach(doc => {
         const row = document.createElement('div');
         row.className = 'suggestion-item';
+        const hasContentMatch = doc.textContent && doc.textContent.toLowerCase().includes(query);
         row.innerHTML = `
                     <div class="suggestion-info">
-                        <span class="suggestion-title">${doc.title}</span>
+                        <span class="suggestion-title">${doc.title} ${hasContentMatch ? '📄' : ''}</span>
                         <span class="suggestion-meta">${doc.category} ${doc.branch ? `• ${doc.branch}` : ''}</span>
                     </div>
                     <div class="suggestion-actions">
@@ -893,7 +844,6 @@ if (searchInput) {
       searchSuggestions.classList.remove('hidden');
     }
   });
-
   document.addEventListener('click', (e) => {
     if (searchSuggestions && !e.target.closest('.search-container')) {
       searchSuggestions.classList.add('hidden');
@@ -906,9 +856,7 @@ filterTabs.forEach(tab => {
     filterTabs.forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     currentSelectedCategory = tab.getAttribute('data-category');
-
     const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
-
     if (currentSelectedCategory === "Academic Resource" && isAdminEmail && isUserLoggedIn) {
       if (academicActionBtn) academicActionBtn.classList.remove('hidden');
       if (resultsMeta) resultsMeta.classList.add('hidden');
@@ -917,7 +865,6 @@ filterTabs.forEach(tab => {
       if (resultsMeta) resultsMeta.classList.remove('hidden');
       if (academicModal) academicModal.classList.add('hidden');
     }
-
     fetchDocuments(searchInput ? searchInput.value.trim() : "");
     if (searchSuggestions) searchSuggestions.classList.add('hidden');
   });
@@ -985,7 +932,6 @@ function deleteAcademicCard(subject) {
     showNotification('Only admins can delete academic resources.');
     return;
   }
-
   const confirmModal = document.createElement('div');
   confirmModal.className = 'modal-overlay';
   confirmModal.style.zIndex = '3000';
@@ -1007,7 +953,6 @@ function deleteAcademicCard(subject) {
         </div>
     `;
   document.body.appendChild(confirmModal);
-
   confirmModal.querySelector('#confirmAcademicDeleteBtn').addEventListener('click', function() {
     let savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
     savedCards = savedCards.filter(card => card.subject !== subject);
@@ -1023,28 +968,22 @@ function editAcademicCard(cardData, index) {
   const branchSelect = document.getElementById('academicBranchSelect');
   const semesterSelect = document.getElementById('academicSemesterSelect');
   const teacherInput = document.getElementById('academicTeacherInput');
-
   if (subjectInput) subjectInput.value = cardData.subject;
   if (branchSelect) branchSelect.value = cardData.branch;
   if (semesterSelect) semesterSelect.value = cardData.semester;
   if (teacherInput) teacherInput.value = cardData.teacher;
-
   academicModal.classList.remove('hidden');
-
   const originalSubmit = submitAcademicDetailsBtn.onclick;
   submitAcademicDetailsBtn.onclick = (e) => {
     e.preventDefault();
-
     const subject = subjectInput.value.trim();
     const branch = branchSelect.value;
     const semester = semesterSelect.value;
     const teacher = teacherInput.value.trim();
-
     if (!subject || !teacher) {
       alert('Please fill out all fields.');
       return;
     }
-
     let savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
     savedCards[index] = {
       subject,
@@ -1056,11 +995,9 @@ function editAcademicCard(cardData, index) {
       chosenTheme: cardData.chosenTheme || ['banner-blue', 'banner-teal', 'banner-slate'][Math.floor(Math.random() * 3)]
     };
     localStorage.setItem('academicCards', JSON.stringify(savedCards));
-
     fetchDocuments(searchInput ? searchInput.value.trim() : "");
     academicModal.classList.add('hidden');
     showNotification('Academic card updated.');
-
     submitAcademicDetailsBtn.onclick = originalSubmit;
   };
 }
@@ -1108,10 +1045,8 @@ function shareAcademicCard(cardData) {
 
 function showCardMenu(e, cardData, index, isUpper) {
   e.stopPropagation();
-
   const existingMenu = document.querySelector('.card-context-menu');
   if (existingMenu) existingMenu.remove();
-
   const menu = document.createElement('div');
   menu.className = 'card-context-menu';
   menu.style.cssText = `
@@ -1125,15 +1060,12 @@ function showCardMenu(e, cardData, index, isUpper) {
         z-index: 9999;
         color: #e2e8f0;
     `;
-
   let x = e.clientX || e.pageX || 0;
   let y = e.clientY || e.pageY || 0;
   menu.style.left = Math.min(x, window.innerWidth - 200) + 'px';
   menu.style.top = Math.min(y, window.innerHeight - 300) + 'px';
-
   let options = [];
   const isAdmin = activeUserEmail === 'ankushadmin@gmail.com';
-
   if (isUpper) {
     options = [
       { label: '👁️ View', action: () => { viewAcademicCard(cardData);
@@ -1159,7 +1091,6 @@ function showCardMenu(e, cardData, index, isUpper) {
           menu.remove(); } }
     ];
   }
-
   options.forEach(opt => {
     const item = document.createElement('div');
     item.style.cssText = `
@@ -1188,9 +1119,7 @@ function showCardMenu(e, cardData, index, isUpper) {
     };
     menu.appendChild(item);
   });
-
   document.body.appendChild(menu);
-
   setTimeout(() => {
     document.addEventListener('click', function removeMenu(e) {
       if (!menu.contains(e.target)) {
@@ -1217,7 +1146,6 @@ function setupCardEventListeners() {
       }
       return;
     }
-
     const lowerBtn = e.target.closest('.lower-menu-btn');
     if (lowerBtn) {
       e.stopPropagation();
@@ -1236,24 +1164,20 @@ function setupCardEventListeners() {
 }
 
 async function fetchDocuments(query = "") {
-  // Only render academic cards if user is logged in
+  if (isLoading) return;
+  isLoading = true;
   const shouldRenderAcademic = isUserLoggedIn && currentSelectedCategory === "Academic Resource";
-
   if (!activeUserEmail || !authToken) {
     if (resultCount) resultCount.textContent = `0 items ready`;
     if (resultsGrid) {
-      // Clear everything first
       const documentCards = resultsGrid.querySelectorAll('.document-row-card');
       documentCards.forEach(card => card.remove());
       const academicCards = resultsGrid.querySelectorAll('.classroom-card');
       academicCards.forEach(card => card.remove());
-      
-      // Only render academic cards if logged in
       if (shouldRenderAcademic) {
         renderAcademicCards();
         setupCardEventListeners();
       } else {
-        // Show empty state for academic resources when not logged in
         if (currentSelectedCategory === "Academic Resource") {
           const emptyMsg = document.createElement('span');
           emptyMsg.className = 'history-empty-state';
@@ -1262,56 +1186,67 @@ async function fetchDocuments(query = "") {
         }
       }
     }
+    isLoading = false;
     return;
   }
-
   try {
-    const response = await fetch(`${API_URL}/documents?search=${encodeURIComponent(query)}&limit=200`, {
+    let url = `${API_URL}/documents/search?query=${encodeURIComponent(query)}`;
+    const response = await fetch(url, {
       headers: { "Authorization": `Bearer ${authToken}` }
     });
     if (!response.ok) {
       if (resultCount) resultCount.textContent = `0 items ready`;
-      if (resultsGrid) resultsGrid.innerHTML = '<span class="history-empty-state">Unable to load resources.</span>';
+      if (resultsGrid) {
+        resultsGrid.innerHTML = '';
+        const emptyMsg = document.createElement('span');
+        emptyMsg.className = 'history-empty-state';
+        emptyMsg.textContent = query ? `No documents found matching "${query}"` : 'No documents available.';
+        resultsGrid.appendChild(emptyMsg);
+      }
+      isLoading = false;
       return;
     }
-    const responseData = await response.json();
-    let docs = Array.isArray(responseData) ? responseData : (responseData.docs || []);
-
+    let docs = await response.json();
+    if (!Array.isArray(docs)) {
+      docs = docs.docs || [];
+    }
     if (query === "") {
       cachedDocuments = docs;
     }
-
-    if (currentSelectedCategory === "recommended") {
-      if (currentUserBranch) {
-        docs = docs.filter(doc => {
-          const matchesBranch = doc.branch === currentUserBranch || doc.branch === "All Branches";
-          const matchesSem = !currentUserSemester || String(doc.semester) === String(currentUserSemester);
-          return doc.category === "University Paper" && matchesBranch && matchesSem;
-        });
-      }
-    } else if (currentSelectedCategory !== "all") {
+    if (currentSelectedCategory === "recommended" && currentUserBranch) {
+      docs = docs.filter(doc => {
+        const matchesBranch = doc.branch === currentUserBranch || doc.branch === "All Branches";
+        const matchesSem = !currentUserSemester || String(doc.semester) === String(currentUserSemester);
+        return doc.category === "University Paper" && matchesBranch && matchesSem;
+      });
+    }
+    if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended") {
       docs = docs.filter(doc => doc.category === currentSelectedCategory);
     }
-
-    if (resultCount) resultCount.textContent = `${docs.length} items ready`;
-    if (!resultsGrid) return;
-
-    // Clear document cards but keep academic cards if needed
+    if (resultCount) {
+      const count = docs.length;
+      resultCount.textContent = `${count} item${count !== 1 ? 's' : ''} ready`;
+    }
+    if (!resultsGrid) {
+      isLoading = false;
+      return;
+    }
     const documentCards = resultsGrid.querySelectorAll('.document-row-card');
     documentCards.forEach(card => card.remove());
-
-    // Clear academic cards if not in academic resource view or not logged in
     if (!shouldRenderAcademic) {
       const academicCards = resultsGrid.querySelectorAll('.classroom-card');
       academicCards.forEach(card => card.remove());
     }
-
     const isAdmin = currentUserRole === 'admin';
-
+    if (docs.length === 0 && !shouldRenderAcademic) {
+      const emptyMsg = document.createElement('span');
+      emptyMsg.className = 'history-empty-state';
+      emptyMsg.textContent = query ? `No documents found matching "${query}"` : 'No documents available.';
+      resultsGrid.appendChild(emptyMsg);
+    }
     docs.forEach((doc) => {
       const card = document.createElement('div');
       card.className = 'document-row-card';
-
       let pillsHtml = `<span style="background: rgba(99, 102, 241, 0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.category || 'University Paper'}</span>`;
       if (doc.category === 'University Paper') {
         if (doc.branch) {
@@ -1331,43 +1266,46 @@ async function fetchDocuments(query = "") {
           pillsHtml += `<span style="background: rgba(168, 85, 247, 0.15); color: #c084fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.officialDocType}</span>`;
         }
       }
-
       const hasFile = !!doc.fileUrl;
-
+      let relevanceInfo = '';
+      if (query && doc.extractedText && doc.extractedText.toLowerCase().includes(query.toLowerCase())) {
+        relevanceInfo = `<span style="color: #4ade80; font-size: 0.75rem; margin-left: 8px;">✓ Content match</span>`;
+      }
       card.innerHTML = `
-                <div class="doc-body-details">
-                    <h3>${doc.title}</h3>
-                    <p>Category: ${doc.category}</p>
-                    ${doc.category === 'University Paper' && doc.year ? `<p>Session: ${doc.year}</p>` : ''}
-                    ${doc.category === 'University Paper' && doc.semester ? `<p>Semester: ${doc.semester}</p>` : ''}
-                    ${doc.category === 'University Paper' && doc.branch ? `<p>Branch: ${doc.branch}</p>` : ''}
-                    ${doc.category === 'University Paper' && doc.paperType ? `<p>Type: ${doc.paperType}</p>` : ''}
-                    ${doc.category === 'Official Update' && doc.officialDocType ? `<p>Doc Type: ${doc.officialDocType}</p>` : ''}
-                    ${doc.docDate ? `<p>Date: ${doc.docDate}</p>` : ''}
-                    ${!hasFile ? `<p style="color:#ef4444; font-size:0.8rem;">File missing on storage — re-upload required.</p>` : ''}
-                    <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;">
-                        ${pillsHtml}
-                    </div>
-                </div>
-                <div class="doc-action-zone" style="display: flex; align-items: center; gap: 8px;">
-                    <button class="action-btn-link view-btn" style="background: rgba(99, 102, 241, 0.1); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem; transition: background 0.2s;">View</button>
-                    ${hasFile
-                        ? `<a href="${doc.fileUrl}" target="_blank" rel="noopener" download class="action-btn-link get-btn" style="display: inline-flex; align-items: center; justify-content: center; background: var(--accent-gradient); color: #ffffff; padding: 6px 14px; border-radius: 6px; font-weight: 500; text-decoration: none; font-size: 0.9rem; transition: opacity 0.2s;">Get</a>`
-                        : `<button class="action-btn-link" disabled style="background: rgba(148, 163, 184, 0.1); color: #64748b; border: 1px solid rgba(148, 163, 184, 0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: not-allowed; font-size: 0.9rem;">Get</button>`
-                    }
-                    ${isAdmin ? `<button class="action-btn-link edit-btn" title="Edit Resource" style="background: rgba(234, 179, 8, 0.1); color: #fde047; border: 1px solid rgba(234, 179, 8, 0.2); padding: 6px 10px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem; transition: background 0.2s;"><i class="fa-solid fa-pen"></i></button>` : ''}
-                    ${isAdmin ? `<button class="action-btn-link" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem; transition: background 0.2s;" onclick="deleteDocument('${doc._id}')">Delete</button>` : ''}
-                </div>
-            `;
-
+        <div class="doc-body-details">
+          <h3>${doc.title} ${relevanceInfo}</h3>
+          <p>Category: ${doc.category}</p>
+          ${doc.category === 'University Paper' && doc.year ? `<p>Session: ${doc.year}</p>` : ''}
+          ${doc.category === 'University Paper' && doc.semester ? `<p>Semester: ${doc.semester}</p>` : ''}
+          ${doc.category === 'University Paper' && doc.branch ? `<p>Branch: ${doc.branch}</p>` : ''}
+          ${doc.category === 'University Paper' && doc.paperType ? `<p>Type: ${doc.paperType}</p>` : ''}
+          ${doc.category === 'Official Update' && doc.officialDocType ? `<p>Doc Type: ${doc.officialDocType}</p>` : ''}
+          ${doc.docDate ? `<p>Date: ${doc.docDate}</p>` : ''}
+          ${!hasFile ? `<p style="color:#ef4444; font-size:0.8rem;">File missing on storage — re-upload required.</p>` : ''}
+          ${query && doc.extractedText ? `<p style="color: #94a3b8; font-size: 0.75rem; margin-top: 4px;">📄 Content indexed: ${doc.extractedText.substring(0, 100)}...</p>` : ''}
+          <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;">
+            ${pillsHtml}
+          </div>
+        </div>
+        <div class="doc-action-zone" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+          <button class="action-btn-link view-btn" style="background: rgba(99, 102, 241, 0.1); color: #a5b4fc; border: 1px solid rgba(99, 102, 241, 0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem; transition: background 0.2s;">View</button>
+          ${hasFile
+            ? `<a href="${doc.fileUrl}" target="_blank" rel="noopener" download class="action-btn-link get-btn" style="display: inline-flex; align-items: center; justify-content: center; background: var(--accent-gradient); color: #ffffff; padding: 6px 14px; border-radius: 6px; font-weight: 500; text-decoration: none; font-size: 0.9rem; transition: opacity 0.2s;">Get</a>`
+            : `<button class="action-btn-link" disabled style="background: rgba(148, 163, 184, 0.1); color: #64748b; border: 1px solid rgba(148, 163, 184, 0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: not-allowed; font-size: 0.9rem;">Get</button>`
+          }
+          ${isAdmin ? `<button class="action-btn-link edit-btn" title="Edit Resource" style="background: rgba(234, 179, 8, 0.1); color: #fde047; border: 1px solid rgba(234, 179, 8, 0.2); padding: 6px 10px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem; transition: background 0.2s;"><i class="fa-solid fa-pen"></i></button>` : ''}
+          ${isAdmin ? `<button class="action-btn-link delete-btn" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem; transition: background 0.2s;" data-id="${doc._id}">Delete</button>` : ''}
+        </div>
+      `;
       card.querySelector('.view-btn').addEventListener('click', () => openPreviewModal(doc.title, doc.fileUrl));
       const getBtn = card.querySelector('.get-btn');
       if (getBtn) getBtn.addEventListener('click', () => logHistory(doc.title));
       const editBtn = card.querySelector('.edit-btn');
       if (editBtn) editBtn.addEventListener('click', () => openEditDocumentModal(doc));
+      const deleteBtn = card.querySelector('.delete-btn');
+      if (deleteBtn) deleteBtn.addEventListener('click', () => deleteDocument(doc._id));
       resultsGrid.appendChild(card);
     });
-
     const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
     if (academicActionBtn) {
       if (currentSelectedCategory === "Academic Resource" && isAdminEmail && isUserLoggedIn) {
@@ -1378,21 +1316,29 @@ async function fetchDocuments(query = "") {
         if (resultsMeta) resultsMeta.classList.remove('hidden');
       }
     }
-
-    // Only render academic cards if user is logged in and viewing Academic Resource
     if (shouldRenderAcademic) {
       renderAcademicCards();
       setupCardEventListeners();
     } else if (currentSelectedCategory === "Academic Resource" && !isUserLoggedIn) {
-      // Show login message when not logged in
-      const emptyMsg = document.createElement('span');
-      emptyMsg.className = 'history-empty-state';
-      emptyMsg.textContent = 'Please login to view academic resources.';
-      resultsGrid.appendChild(emptyMsg);
+      const emptyMsg = resultsGrid.querySelector('.history-empty-state');
+      if (!emptyMsg) {
+        const msg = document.createElement('span');
+        msg.className = 'history-empty-state';
+        msg.textContent = 'Please login to view academic resources.';
+        resultsGrid.appendChild(msg);
+      }
     }
   } catch (err) {
     console.error("Error fetching documents:", err);
+    if (resultsGrid) {
+      resultsGrid.innerHTML = '';
+      const emptyMsg = document.createElement('span');
+      emptyMsg.className = 'history-empty-state';
+      emptyMsg.textContent = 'Error loading documents. Please try again.';
+      resultsGrid.appendChild(emptyMsg);
+    }
   }
+  isLoading = false;
 }
 
 function renderActionButtons() {
@@ -1496,14 +1442,12 @@ function generateCardHTML(data, isAdmin = false, index = 0) {
                 <button class="banner-options-btn upper-menu-btn" style="position: absolute; top: 12px; right: 12px; background: none; border: none; color: white; cursor: pointer; font-size: 1rem; ${upperMenuStyle}">
                     <i class="fas fa-ellipsis-v"></i>
                 </button>
-
                 <div class="card-avatar-container" style="position: absolute; right: 24px; bottom: -30px; z-index: 2;">
                     <div class="avatar-letter" style="background-color: ${data.avatarBgColor}; width: 65px; height: 65px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.75rem; font-weight: 400; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                         ${data.firstLetter}
                     </div>
                 </div>
             </div>
-
             <div class="card-body" style="flex-grow: 1; padding: 12px 16px; background: white; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #e0e0e0;">
                 <span style="font-size: 0.8rem; color: #5f6368;">${data.semester} SEM • ${data.branch}</span>
                 <div class="card-actions" style="display: flex; gap: 4px;">
@@ -1517,19 +1461,15 @@ function generateCardHTML(data, isAdmin = false, index = 0) {
 }
 
 function renderAcademicCards() {
-  // Only render if user is logged in
   if (!isUserLoggedIn) {
     const existingCards = resultsGrid.querySelectorAll('.classroom-card');
     existingCards.forEach(card => card.remove());
     return;
   }
-
   const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
   const isAdmin = activeUserEmail === 'ankushadmin@gmail.com';
-
   const existingCards = resultsGrid.querySelectorAll('.classroom-card');
   existingCards.forEach(card => card.remove());
-
   if (savedCards.length === 0) {
     if (!resultsGrid.querySelector('.history-empty-state')) {
       const emptyMsg = document.createElement('span');
@@ -1539,11 +1479,9 @@ function renderAcademicCards() {
     }
     return;
   }
-
   savedCards.forEach((cardData, index) => {
     resultsGrid.insertAdjacentHTML('beforeend', generateCardHTML(cardData, isAdmin, index));
   });
-
   const emptyState = resultsGrid.querySelector('.history-empty-state');
   if (emptyState) emptyState.remove();
 }
@@ -1556,15 +1494,11 @@ function openClassroomModal(cardData) {
   const modal = document.getElementById('classroomModal');
   const title = document.getElementById('classroomTitle');
   const subtitle = document.getElementById('classroomSubtitle');
-
   title.textContent = cardData.subject || 'Unknown Subject';
   subtitle.textContent = `B.TECH | ${(cardData.branch || 'N/A').toUpperCase()} | ${cardData.semester || '?'} SEM | 2025-26`;
-
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
-
   loadClassroomAnnouncements(cardData.subject);
-
   document.querySelectorAll('.classroom-tab').forEach(tab => {
     tab.addEventListener('click', function() {
       document.querySelectorAll('.classroom-tab').forEach(t => t.classList.remove('active'));
@@ -1585,7 +1519,6 @@ function closeClassroomModal() {
 }
 
 document.getElementById('closeClassroomModalBtn').addEventListener('click', closeClassroomModal);
-
 document.getElementById('classroomModal').addEventListener('click', function(e) {
   if (e.target === this) {
     closeClassroomModal();
@@ -1594,13 +1527,10 @@ document.getElementById('classroomModal').addEventListener('click', function(e) 
 
 function loadClassroomAnnouncements(subject) {
   const container = document.getElementById('announcementsList');
-
   if (!classroomAnnouncements[subject]) {
     classroomAnnouncements[subject] = [];
   }
-
   container.innerHTML = '';
-
   if (classroomAnnouncements[subject].length === 0) {
     const emptyMsg = document.createElement('p');
     emptyMsg.style.color = '#5f6368';
@@ -1610,9 +1540,7 @@ function loadClassroomAnnouncements(subject) {
     container.appendChild(emptyMsg);
     return;
   }
-
   const isAdmin = activeUserEmail === 'ankushadmin@gmail.com';
-
   classroomAnnouncements[subject].forEach((announcement, index) => {
     const div = document.createElement('div');
     div.className = 'announcement-item';
@@ -1643,7 +1571,6 @@ function loadClassroomAnnouncements(subject) {
         `;
     container.appendChild(div);
   });
-
   container.querySelectorAll('.delete-announcement-btn').forEach(btn => {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -1665,7 +1592,6 @@ function deleteAnnouncement(subject, index) {
     showNotification('Only admins can delete announcements.');
     return;
   }
-
   if (classroomAnnouncements[subject]) {
     classroomAnnouncements[subject].splice(index, 1);
     localStorage.setItem('classroomAnnouncements', JSON.stringify(classroomAnnouncements));
@@ -1681,33 +1607,26 @@ function postAnnouncement() {
     showNotification('Please enter an announcement message.');
     return;
   }
-
   const subject = currentClassroomCard ? currentClassroomCard.subject : 'Unknown';
   if (!classroomAnnouncements[subject]) {
     classroomAnnouncements[subject] = [];
   }
-
   const attachments = window.pendingAttachments || [];
-
   classroomAnnouncements[subject].push({
     text: text || 'Posted an attachment',
     author: workspaceName ? workspaceName.textContent : 'Anonymous',
     timestamp: Date.now(),
     attachments: attachments
   });
-
   localStorage.setItem('classroomAnnouncements', JSON.stringify(classroomAnnouncements));
-
   input.value = '';
   window.pendingAttachments = [];
   document.getElementById('streamAttachments').innerHTML = '';
-
   loadClassroomAnnouncements(subject);
   showNotification('Announcement posted successfully!');
 }
 
 document.getElementById('postAnnouncementBtn').addEventListener('click', postAnnouncement);
-
 document.getElementById('announcementInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -1716,15 +1635,12 @@ document.getElementById('announcementInput').addEventListener('keydown', functio
 });
 
 window.pendingAttachments = [];
-
 document.getElementById('addAttachmentBtn').addEventListener('click', function() {
   document.getElementById('announcementFileInput').click();
 });
-
 document.getElementById('announcementFileInput').addEventListener('change', function(e) {
   const files = Array.from(e.target.files);
   const container = document.getElementById('streamAttachments');
-
   files.forEach(file => {
     window.pendingAttachments.push({
       name: file.name,
@@ -1732,7 +1648,6 @@ document.getElementById('announcementFileInput').addEventListener('change', func
       type: file.type,
       data: URL.createObjectURL(file)
     });
-
     const div = document.createElement('div');
     div.className = 'attachment-item';
     div.innerHTML = `<i class="fa-solid fa-file"></i> ${file.name}`;
@@ -1748,7 +1663,6 @@ document.getElementById('announcementFileInput').addEventListener('change', func
     };
     container.appendChild(div);
   });
-
   this.value = '';
 });
 
@@ -1779,11 +1693,9 @@ setupClassroomCardClick();
 window.addEventListener('load', function() {
   const targetGrid = document.getElementById('resultsGrid');
   if (!targetGrid) return;
-
   if (currentSelectedCategory === "Academic Resource" && isUserLoggedIn) {
     const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
     const isAdmin = activeUserEmail === 'ankushadmin@gmail.com';
-
     if (savedCards.length > 0) {
       const emptyState = targetGrid.querySelector('.history-empty-state');
       if (emptyState) emptyState.remove();
@@ -1798,32 +1710,26 @@ window.addEventListener('load', function() {
 if (submitAcademicDetailsBtn) {
   submitAcademicDetailsBtn.addEventListener('click', (e) => {
     e.preventDefault();
-
     const subjectInput = document.getElementById('academicSubjectInput');
     const branchSelect = document.getElementById('academicBranchSelect');
     const semesterSelect = document.getElementById('academicSemesterSelect');
     const teacherInput = document.getElementById('academicTeacherInput');
-
     if (!subjectInput || !branchSelect || !semesterSelect || !teacherInput) {
       console.error('One or more form elements were not found in the DOM.');
       return;
     }
-
     const subject = subjectInput.value.trim();
     const branch = branchSelect.value;
     const semester = semesterSelect.value;
     const teacher = teacherInput.value.trim();
-
     if (!subject || !teacher) {
       alert('Please fill out all fields.');
       return;
     }
-
     const firstLetter = teacher.charAt(0).toUpperCase() || '?';
     const avatarBgColor = getAvatarColor(teacher);
     const bannerThemes = ['banner-blue', 'banner-teal', 'banner-slate'];
     const chosenTheme = bannerThemes[Math.floor(Math.random() * bannerThemes.length)];
-
     const newCard = {
       subject,
       branch,
@@ -1833,17 +1739,13 @@ if (submitAcademicDetailsBtn) {
       avatarBgColor,
       chosenTheme
     };
-
     const currentCards = JSON.parse(localStorage.getItem('academicCards')) || [];
     currentCards.push(newCard);
     localStorage.setItem('academicCards', JSON.stringify(currentCards));
-
     const searchInputValue = searchInput ? searchInput.value.trim() : "";
     fetchDocuments(searchInputValue);
-
     subjectInput.value = '';
     teacherInput.value = '';
-
     if (academicModal) {
       academicModal.classList.add('hidden');
     }
