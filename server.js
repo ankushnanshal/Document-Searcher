@@ -116,10 +116,10 @@ function requireAdmin(req, res, next) {
 }
 
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
+  destination: function(req, file, cb) {
     cb(null, uploadDir);
   },
-  filename: function (req, file, cb) {
+  filename: function(req, file, cb) {
     const ext = path.extname(file.originalname);
     const safeBase = path
       .basename(file.originalname, ext)
@@ -133,7 +133,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: function (req, file, cb) {
+  fileFilter: function(req, file, cb) {
     const allowedExtensions = [
       ".pdf",
       ".png",
@@ -499,21 +499,20 @@ app.get("/api/history/:email", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/api/login", async (req, res) => {
+app.delete("/api/history/:email", authenticateToken, async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email: email.toLowerCase() });
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ message: "Invalid credentials" });
+    const email = req.params.email.toLowerCase().trim();
+
+    if (req.user.email !== email) {
+      return res.status(403).json({ message: "Unauthorized action." });
     }
-    const token = jwt.sign({ email: user.email }, JWT_SECRET);
-    res.status(200).json({ 
-      token, 
-      user: { email: user.email },
-      adminEmails: process.env.ADMIN_EMAILS.split(',') 
-    });
+
+    await History.deleteMany({ email });
+
+    return res.status(200).json({ message: "History cleared successfully." });
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    console.error("History clear error:", error);
+    return res.status(500).json({ message: "Server error while clearing history." });
   }
 });
 
