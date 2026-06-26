@@ -1166,7 +1166,9 @@ function setupCardEventListeners() {
 async function fetchDocuments(query = "") {
   if (isLoading) return;
   isLoading = true;
+  
   const shouldRenderAcademic = isUserLoggedIn && currentSelectedCategory === "Academic Resource";
+  
   if (!activeUserEmail || !authToken) {
     if (resultCount) resultCount.textContent = `0 items ready`;
     if (resultsGrid) {
@@ -1189,11 +1191,25 @@ async function fetchDocuments(query = "") {
     isLoading = false;
     return;
   }
+  
   try {
     let url = `${API_URL}/documents/search?query=${encodeURIComponent(query)}`;
+    
+    if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended") {
+      url += `&category=${encodeURIComponent(currentSelectedCategory)}`;
+    }
+    
+    if (currentSelectedCategory === "recommended" && currentUserBranch) {
+      url += `&branch=${encodeURIComponent(currentUserBranch)}`;
+      if (currentUserSemester) {
+        url += `&semester=${encodeURIComponent(currentUserSemester)}`;
+      }
+    }
+    
     const response = await fetch(url, {
       headers: { "Authorization": `Bearer ${authToken}` }
     });
+    
     if (!response.ok) {
       if (resultCount) resultCount.textContent = `0 items ready`;
       if (resultsGrid) {
@@ -1206,13 +1222,16 @@ async function fetchDocuments(query = "") {
       isLoading = false;
       return;
     }
+    
     let docs = await response.json();
     if (!Array.isArray(docs)) {
       docs = docs.docs || [];
     }
+    
     if (query === "") {
       cachedDocuments = docs;
     }
+    
     if (currentSelectedCategory === "recommended" && currentUserBranch) {
       docs = docs.filter(doc => {
         const matchesBranch = doc.branch === currentUserBranch || doc.branch === "All Branches";
@@ -1220,34 +1239,44 @@ async function fetchDocuments(query = "") {
         return doc.category === "University Paper" && matchesBranch && matchesSem;
       });
     }
+    
     if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended") {
       docs = docs.filter(doc => doc.category === currentSelectedCategory);
     }
+    
     if (resultCount) {
       const count = docs.length;
       resultCount.textContent = `${count} item${count !== 1 ? 's' : ''} ready`;
     }
+    
     if (!resultsGrid) {
       isLoading = false;
       return;
     }
+    
     const documentCards = resultsGrid.querySelectorAll('.document-row-card');
     documentCards.forEach(card => card.remove());
+    
     if (!shouldRenderAcademic) {
       const academicCards = resultsGrid.querySelectorAll('.classroom-card');
       academicCards.forEach(card => card.remove());
     }
+    
     const isAdmin = currentUserRole === 'admin';
+    
     if (docs.length === 0 && !shouldRenderAcademic) {
       const emptyMsg = document.createElement('span');
       emptyMsg.className = 'history-empty-state';
       emptyMsg.textContent = query ? `No documents found matching "${query}"` : 'No documents available.';
       resultsGrid.appendChild(emptyMsg);
     }
+    
     docs.forEach((doc) => {
       const card = document.createElement('div');
       card.className = 'document-row-card';
+      
       let pillsHtml = `<span style="background: rgba(99, 102, 241, 0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.category || 'University Paper'}</span>`;
+      
       if (doc.category === 'University Paper') {
         if (doc.branch) {
           pillsHtml += `<span style="background: rgba(99, 102, 241, 0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.branch}</span>`;
@@ -1266,11 +1295,17 @@ async function fetchDocuments(query = "") {
           pillsHtml += `<span style="background: rgba(168, 85, 247, 0.15); color: #c084fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.officialDocType}</span>`;
         }
       }
+      
       const hasFile = !!doc.fileUrl;
       let relevanceInfo = '';
       if (query && doc.extractedText && doc.extractedText.toLowerCase().includes(query.toLowerCase())) {
         relevanceInfo = `<span style="color: #4ade80; font-size: 0.75rem; margin-left: 8px;">✓ Content match</span>`;
       }
+      
+      if (doc.relevanceScore && doc.relevanceScore > 0) {
+        relevanceInfo += `<span style="color: #94a3b8; font-size: 0.7rem; margin-left: 8px;">Score: ${doc.relevanceScore}</span>`;
+      }
+      
       card.innerHTML = `
         <div class="doc-body-details">
           <h3>${doc.title} ${relevanceInfo}</h3>
@@ -1282,7 +1317,7 @@ async function fetchDocuments(query = "") {
           ${doc.category === 'Official Update' && doc.officialDocType ? `<p>Doc Type: ${doc.officialDocType}</p>` : ''}
           ${doc.docDate ? `<p>Date: ${doc.docDate}</p>` : ''}
           ${!hasFile ? `<p style="color:#ef4444; font-size:0.8rem;">File missing on storage — re-upload required.</p>` : ''}
-          ${query && doc.extractedText ? `<p style="color: #94a3b8; font-size: 0.75rem; margin-top: 4px;">📄 Content indexed: ${doc.extractedText.substring(0, 100)}...</p>` : ''}
+          ${query && doc.extractedText ? `<p style="color: #94a3b8; font-size: 0.75rem; margin-top: 4px;">📄 Content indexed: ${doc.extractedText.substring(0, 150)}${doc.extractedText.length > 150 ? '...' : ''}</p>` : ''}
           <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;">
             ${pillsHtml}
           </div>
@@ -1297,6 +1332,7 @@ async function fetchDocuments(query = "") {
           ${isAdmin ? `<button class="action-btn-link delete-btn" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem; transition: background 0.2s;" data-id="${doc._id}">Delete</button>` : ''}
         </div>
       `;
+      
       card.querySelector('.view-btn').addEventListener('click', () => openPreviewModal(doc.title, doc.fileUrl));
       const getBtn = card.querySelector('.get-btn');
       if (getBtn) getBtn.addEventListener('click', () => logHistory(doc.title));
@@ -1304,8 +1340,10 @@ async function fetchDocuments(query = "") {
       if (editBtn) editBtn.addEventListener('click', () => openEditDocumentModal(doc));
       const deleteBtn = card.querySelector('.delete-btn');
       if (deleteBtn) deleteBtn.addEventListener('click', () => deleteDocument(doc._id));
+      
       resultsGrid.appendChild(card);
     });
+    
     const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
     if (academicActionBtn) {
       if (currentSelectedCategory === "Academic Resource" && isAdminEmail && isUserLoggedIn) {
@@ -1316,6 +1354,7 @@ async function fetchDocuments(query = "") {
         if (resultsMeta) resultsMeta.classList.remove('hidden');
       }
     }
+    
     if (shouldRenderAcademic) {
       renderAcademicCards();
       setupCardEventListeners();
@@ -1328,6 +1367,7 @@ async function fetchDocuments(query = "") {
         resultsGrid.appendChild(msg);
       }
     }
+    
   } catch (err) {
     console.error("Error fetching documents:", err);
     if (resultsGrid) {
@@ -1430,7 +1470,6 @@ function getAvatarColor(username) {
 
 function generateCardHTML(data, isAdmin = false, index = 0) {
   const upperMenuStyle = isAdmin ? '' : 'display: none;';
-  const cardDataStr = JSON.stringify(data).replace(/"/g, '&quot;');
   return `
         <div class="classroom-card" data-subject="${data.subject}" data-index="${index}" style="width: 300px; min-height: 280px; border: 1px solid #dadce0; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; position: relative; background: #fff; box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15); cursor: pointer;">
             <div class="card-header-banner ${data.chosenTheme}" style="position: relative; padding: 16px; min-height: 100px; color: white; display: flex; flex-direction: column; justify-content: space-between;">
