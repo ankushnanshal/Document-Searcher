@@ -365,6 +365,10 @@ if (confirmUploadBtn) {
     const docSessionSelect = document.getElementById('docSessionSelect');
     const docTypeSelect = document.getElementById('docTypeSelect');
     const officialDocTypeSelect = document.getElementById('officialDocTypeSelect');
+    const officialDocYearSelect = document.getElementById('officialDocYearSelect');
+    const officialDocSessionSelect = document.getElementById('officialDocSessionSelect');
+    const officialDocSemSelect = document.getElementById('officialDocSemSelect');
+    const officialDocBranchSelect = document.getElementById('officialDocBranchSelect');
     if (!categorySelect || !categorySelect.value) {
       showNotification("Please select a resource category.");
       return;
@@ -387,12 +391,23 @@ if (confirmUploadBtn) {
     formData.append('category', finalCategory);
     formData.append('docDate', selectedDate);
     if (finalCategory === 'University Paper') {
-      formData.append('year', docSessionSelect ? docSessionSelect.value : "");
-      formData.append('semester', docSemSelect ? docSemSelect.value : "");
-      formData.append('branch', docBranchSelect ? docBranchSelect.value : "");
-      formData.append('paperType', docTypeSelect ? docTypeSelect.value : "");
+      const sessionVal = docSessionSelect ? docSessionSelect.value : '';
+      formData.append('year', sessionVal || '2024-25');
+      const semVal = docSemSelect ? docSemSelect.value : '';
+      formData.append('semester', semVal || '1');
+      const branchVal = docBranchSelect ? docBranchSelect.value : '';
+      formData.append('branch', branchVal || 'All Branches');
+      formData.append('paperType', docTypeSelect ? docTypeSelect.value : 'End Sem');
     } else if (finalCategory === 'Official Update') {
-      formData.append('officialDocType', officialDocTypeSelect ? officialDocTypeSelect.value : "");
+      formData.append('officialDocType', officialDocTypeSelect ? officialDocTypeSelect.value : 'Notice');
+      const yearVal = officialDocYearSelect ? officialDocYearSelect.value : '';
+      formData.append('year', yearVal || 'All Years');
+      const sessionVal = officialDocSessionSelect ? officialDocSessionSelect.value : '';
+      formData.append('session', sessionVal || '2024-25');
+      const semVal = officialDocSemSelect ? officialDocSemSelect.value : '';
+      formData.append('semester', semVal || '1');
+      const branchVal = officialDocBranchSelect ? officialDocBranchSelect.value : '';
+      formData.append('branch', branchVal || 'All Branches');
     }
     try {
       const response = await fetch(`${API_URL}/documents/upload`, {
@@ -433,6 +448,14 @@ function openEditDocumentModal(doc) {
     if (editDocTypeSelect) editDocTypeSelect.value = doc.paperType || 'End Sem';
   } else {
     if (editOfficialDocTypeSelect) editOfficialDocTypeSelect.value = doc.officialDocType || 'Notice';
+    const yearSelect = document.getElementById('editOfficialDocYearSelect');
+    if (yearSelect) yearSelect.value = doc.year || 'All Years';
+    const sessionSelect = document.getElementById('editOfficialDocSessionSelect');
+    if (sessionSelect) sessionSelect.value = doc.session || '2024-25';
+    const semSelect = document.getElementById('editOfficialDocSemSelect');
+    if (semSelect) semSelect.value = doc.semester || '1';
+    const branchSelect = document.getElementById('editOfficialDocBranchSelect');
+    if (branchSelect) branchSelect.value = doc.branch || 'All Branches';
   }
   if (editPopup) editPopup.classList.remove('hidden');
 }
@@ -467,16 +490,22 @@ if (confirmEditBtn) {
       docDate: editDocDateInput ? editDocDateInput.value : ''
     };
     if (finalCategory === 'University Paper') {
-      payload.year = editDocSessionSelect ? editDocSessionSelect.value : '';
-      payload.semester = editDocSemSelect ? editDocSemSelect.value : '';
-      payload.branch = editDocBranchSelect ? editDocBranchSelect.value : '';
-      payload.paperType = editDocTypeSelect ? editDocTypeSelect.value : '';
+      payload.year = editDocSessionSelect ? editDocSessionSelect.value : '2024-25';
+      payload.semester = editDocSemSelect ? editDocSemSelect.value : '1';
+      payload.branch = editDocBranchSelect ? editDocBranchSelect.value : 'All Branches';
+      payload.paperType = editDocTypeSelect ? editDocTypeSelect.value : 'End Sem';
       payload.officialDocType = '';
+      payload.session = '';
     } else {
-      payload.officialDocType = editOfficialDocTypeSelect ? editOfficialDocTypeSelect.value : '';
-      payload.year = '';
-      payload.semester = '';
-      payload.branch = '';
+      payload.officialDocType = editOfficialDocTypeSelect ? editOfficialDocTypeSelect.value : 'Notice';
+      const yearSelect = document.getElementById('editOfficialDocYearSelect');
+      if (yearSelect) payload.year = yearSelect.value || 'All Years';
+      const sessionSelect = document.getElementById('editOfficialDocSessionSelect');
+      if (sessionSelect) payload.session = sessionSelect.value || '2024-25';
+      const semSelect = document.getElementById('editOfficialDocSemSelect');
+      if (semSelect) payload.semester = semSelect.value || '1';
+      const branchSelect = document.getElementById('editOfficialDocBranchSelect');
+      if (branchSelect) payload.branch = branchSelect.value || 'All Branches';
       payload.paperType = '';
     }
     if (!payload.title) {
@@ -1294,6 +1323,18 @@ async function fetchDocuments(query = "") {
         if (doc.officialDocType) {
           pillsHtml += `<span style="background: rgba(168, 85, 247, 0.15); color: #c084fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.officialDocType}</span>`;
         }
+        if (doc.year && doc.year !== 'All Years') {
+          pillsHtml += `<span style="background: rgba(234, 179, 8, 0.15); color: #fde047; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.year}</span>`;
+        }
+        if (doc.semester && doc.semester !== 'All Semesters') {
+          pillsHtml += `<span style="background: rgba(234, 179, 8, 0.15); color: #fde047; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Semester ${doc.semester}</span>`;
+        }
+        if (doc.branch && doc.branch !== 'All Branches') {
+          pillsHtml += `<span style="background: rgba(99, 102, 241, 0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.branch}</span>`;
+        }
+        if (doc.session) {
+          pillsHtml += `<span style="background: rgba(234, 179, 8, 0.15); color: #fde047; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Session: ${doc.session}</span>`;
+        }
       }
       
       const hasFile = !!doc.fileUrl;
@@ -1315,6 +1356,10 @@ async function fetchDocuments(query = "") {
           ${doc.category === 'University Paper' && doc.branch ? `<p>Branch: ${doc.branch}</p>` : ''}
           ${doc.category === 'University Paper' && doc.paperType ? `<p>Type: ${doc.paperType}</p>` : ''}
           ${doc.category === 'Official Update' && doc.officialDocType ? `<p>Doc Type: ${doc.officialDocType}</p>` : ''}
+          ${doc.category === 'Official Update' && doc.year && doc.year !== 'All Years' ? `<p>Year: ${doc.year}</p>` : ''}
+          ${doc.category === 'Official Update' && doc.session ? `<p>Session: ${doc.session}</p>` : ''}
+          ${doc.category === 'Official Update' && doc.semester && doc.semester !== 'All Semesters' ? `<p>Semester: ${doc.semester}</p>` : ''}
+          ${doc.category === 'Official Update' && doc.branch && doc.branch !== 'All Branches' ? `<p>Branch: ${doc.branch}</p>` : ''}
           ${doc.docDate ? `<p>Date: ${doc.docDate}</p>` : ''}
           ${!hasFile ? `<p style="color:#ef4444; font-size:0.8rem;">File missing on storage — re-upload required.</p>` : ''}
           ${query && doc.extractedText ? `<p style="color: #94a3b8; font-size: 0.75rem; margin-top: 4px;">📄 Content indexed: ${doc.extractedText.substring(0, 150)}${doc.extractedText.length > 150 ? '...' : ''}</p>` : ''}

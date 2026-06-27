@@ -50,6 +50,7 @@ const documentSchema = new mongoose.Schema({
   branch: { type: String, default: "" },
   paperType: { type: String, default: "" },
   officialDocType: { type: String, default: "" },
+  session: { type: String, default: "" },
   storageName: { type: String, default: "" },
   createdAt: { type: Date, default: Date.now },
   textContent: { type: String, default: "" },
@@ -138,7 +139,7 @@ function detectLanguage(text) {
   const hindiRegex = /[\u0900-\u097F]/;
   const hindiCount = (text.match(hindiRegex) || []).length;
   const totalChars = text.length || 1;
-  if (hindiCount > 0 && (hindiCount / totalChars) > 0.02) {
+  if (hindiCount > 0 && (hindiCount / totalChars) > 0.01) {
     return 'hi';
   }
   return 'en';
@@ -178,6 +179,27 @@ function romanizeHindi(text) {
     }
   }
   return result;
+}
+function normalizeText(text) {
+  if (!text) return '';
+  return text
+    .replace(/\s+/g, ' ')
+    .replace(/[^a-zA-Z0-9\s\-\.\u0900-\u097F]/g, ' ')
+    .trim();
+}
+function getUniqueWords(text) {
+  if (!text) return [];
+  const words = text.split(/\s+/).filter(word => word.length > 1);
+  const unique = [];
+  const seen = new Set();
+  for (const word of words) {
+    const normalized = word.toLowerCase().trim();
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      unique.push(word);
+    }
+  }
+  return unique;
 }
 function generateHindiSearchVariants(query) {
   const variants = [];
@@ -223,50 +245,61 @@ function generateHindiSearchVariants(query) {
     }
   }
   const hindiToEnglishMap = {
-    'ईद': ['eid', 'id'],
-    'छुट्टी': ['chutti', 'chuti', 'chhutti', 'holiday', 'leave', 'vacation', 'off', 'break', 'rest'],
-    'सूचना': ['soochana', 'suchna', 'sucna', 'notice', 'notification', 'announcement', 'circular', 'alert'],
-    'अवकाश': ['avkash', 'avakash', 'avakas', 'leave', 'vacation', 'holiday', 'off', 'break', 'rest'],
-    'नोटिस': ['notice', 'notis', 'notification', 'announcement', 'circular', 'alert'],
-    'परीक्षा': ['pariksha', 'pariksa', 'exam', 'examination', 'test', 'assessment'],
-    'परिणाम': ['parinam', 'result', 'outcome', 'score', 'grade', 'marks'],
-    'पाठ्यक्रम': ['pathyakram', 'syllabus', 'curriculum', 'course', 'study plan'],
-    'कार्यक्रम': ['karyakram', 'program', 'schedule', 'plan', 'agenda'],
-    'अधिसूचना': ['adhisuchna', 'adhsuchna', 'notification', 'notice', 'announcement', 'circular'],
-    'आदेश': ['adesh', 'order', 'command', 'directive'],
-    'नियम': ['niyam', 'rule', 'regulation', 'policy'],
-    'विनियम': ['viniyam', 'regulation', 'rule', 'policy'],
-    'अनुसूची': ['anusuchi', 'schedule', 'timetable', 'plan', 'agenda'],
-    'पत्र': ['patr', 'letter', 'correspondence', 'document'],
-    'प्रपत्र': ['prapatra', 'form', 'application', 'document'],
-    'आवेदन': ['aavedan', 'application', 'request', 'form'],
-    'प्रवेश': ['pravesh', 'admission', 'enrollment', 'registration', 'entry'],
-    'शुल्क': ['shulk', 'fee', 'fees', 'cost', 'charge', 'payment'],
-    'छात्र': ['chhatr', 'student', 'pupil', 'scholar', 'learner'],
-    'शिक्षक': ['shikshak', 'teacher', 'instructor', 'educator', 'faculty'],
-    'प्राध्यापक': ['pradhyapak', 'professor', 'teacher', 'instructor', 'educator'],
-    'विभाग': ['vibhag', 'department', 'division', 'section', 'unit'],
-    'संकाय': ['sankay', 'faculty', 'staff', 'teachers'],
-    'पुस्तकालय': ['pustakalay', 'library', 'reading room', 'book center'],
-    'प्रयोगशाला': ['prayogshala', 'laboratory', 'lab', 'workshop'],
+    'छात्रावास': ['hostel', 'dormitory', 'residence', 'chatrawas', 'chhatravas', 'hostel', 'dorm'],
+    'होस्टल': ['hostel', 'dormitory', 'residence', 'chatrawas', 'chhatravas', 'hostel', 'dorm'],
+    'छुट्टी': ['holiday', 'leave', 'vacation', 'off', 'break', 'rest', 'chutti', 'chhutti'],
+    'सूचना': ['notice', 'notification', 'announcement', 'circular', 'alert', 'soochana', 'suchna', 'notis'],
+    'अवकाश': ['leave', 'vacation', 'holiday', 'off', 'break', 'rest', 'avkash'],
+    'नोटिस': ['notice', 'notification', 'announcement', 'circular', 'alert', 'notis'],
+    'परीक्षा': ['exam', 'examination', 'test', 'assessment', 'pariksha'],
+    'परिणाम': ['result', 'outcome', 'score', 'grade', 'marks', 'parinam'],
+    'पाठ्यक्रम': ['syllabus', 'curriculum', 'course', 'pathyakram'],
+    'कार्यक्रम': ['program', 'schedule', 'plan', 'agenda', 'karyakram'],
+    'अधिसूचना': ['notification', 'notice', 'announcement', 'circular', 'adhsuchna'],
+    'आदेश': ['order', 'command', 'directive', 'adesh'],
+    'नियम': ['rule', 'regulation', 'policy', 'niyam'],
+    'विनियम': ['regulation', 'rule', 'policy', 'viniyam'],
+    'अनुसूची': ['schedule', 'timetable', 'plan', 'agenda', 'anusuchi'],
+    'पत्र': ['letter', 'correspondence', 'document', 'patr'],
+    'प्रपत्र': ['form', 'application', 'document', 'prapatra'],
+    'आवेदन': ['application', 'request', 'form', 'aavedan'],
+    'प्रवेश': ['admission', 'enrollment', 'registration', 'entry', 'pravesh'],
+    'शुल्क': ['fee', 'fees', 'cost', 'charge', 'payment', 'shulk'],
+    'छात्र': ['student', 'pupil', 'scholar', 'learner', 'chhatr'],
+    'शिक्षक': ['teacher', 'instructor', 'educator', 'faculty', 'shikshak'],
+    'प्राध्यापक': ['professor', 'teacher', 'instructor', 'educator', 'faculty', 'pradhyapak'],
+    'विभाग': ['department', 'division', 'section', 'unit', 'vibhag'],
+    'संकाय': ['faculty', 'staff', 'teachers', 'sankay'],
+    'पुस्तकालय': ['library', 'reading room', 'book center', 'pustakalay'],
+    'प्रयोगशाला': ['laboratory', 'lab', 'workshop', 'prayogshala'],
     'सेमिनार': ['seminar', 'workshop', 'lecture', 'presentation'],
-    'कार्यशाला': ['karyashala', 'workshop', 'training', 'seminar'],
-    'प्रशिक्षण': ['prashikshan', 'training', 'orientation', 'instruction', 'learning'],
+    'कार्यशाला': ['workshop', 'training', 'seminar', 'karyashala'],
+    'प्रशिक्षण': ['training', 'orientation', 'instruction', 'learning', 'prashikshan'],
     'इंटर्नशिप': ['internship', 'intern', 'internship program'],
     'प्लेसमेंट': ['placement', 'job placement', 'recruitment', 'placement drive'],
-    'भर्ती': ['bharti', 'recruitment', 'hiring', 'placement'],
-    'नौकरी': ['naukri', 'job', 'work', 'employment'],
-    'वेतन': ['vetan', 'salary', 'pay', 'wages'],
-    'भत्ता': ['bhatta', 'allowance', 'benefit', 'perk'],
-    'अनुदान': ['anudan', 'grant', 'aid', 'stipend'],
-    'छात्रवृत्ति': ['chhatravritti', 'scholarship', 'grant', 'aid', 'stipend'],
-    'ऋण': ['rin', 'loan', 'credit', 'finance'],
-    'छात्रावास': ['chhatravas', 'hostel', 'dormitory', 'residence'],
-    'पंजीकरण': ['panjikaran', 'registration', 'enrollment', 'signup'],
-    'कक्षा': ['kaksha', 'class', 'course', 'lecture', 'session'],
+    'भर्ती': ['recruitment', 'hiring', 'placement', 'bharti'],
+    'नौकरी': ['job', 'work', 'employment', 'naukri'],
+    'वेतन': ['salary', 'pay', 'wages', 'vetan'],
+    'भत्ता': ['allowance', 'benefit', 'perk', 'bhatta'],
+    'अनुदान': ['grant', 'aid', 'stipend', 'anudan'],
+    'छात्रवृत्ति': ['scholarship', 'grant', 'aid', 'stipend', 'chhatravritti'],
+    'ऋण': ['loan', 'credit', 'finance', 'rin'],
+    'पंजीकरण': ['registration', 'enrollment', 'signup', 'panjikaran'],
+    'कक्षा': ['class', 'course', 'lecture', 'session', 'kaksha'],
     'सेमेस्टर': ['semester', 'sem', 'term', 'session'],
-    'अंक': ['ank', 'marks', 'grade', 'score'],
-    'ग्रेड': ['grade', 'marks', 'score', 'result']
+    'अंक': ['marks', 'grade', 'score', 'ank'],
+    'ग्रेड': ['grade', 'marks', 'score'],
+    'ईद': ['eid', 'id'],
+    'डॉर्म': ['hostel', 'dormitory', 'residence'],
+    'निवास': ['hostel', 'residence', 'dormitory'],
+    'छात्र निवास': ['hostel', 'dormitory', 'residence'],
+    'छात्रालय': ['hostel', 'dormitory', 'residence'],
+    'रामानुजन': ['ramanujan', 'hostel', 'dormitory'],
+    'आर्यभट्ट': ['aryabhatta', 'hostel', 'dormitory'],
+    'समय सारणी': ['time table', 'timetable', 'schedule', 'samay sarani'],
+    'पाठ्यक्रम': ['syllabus', 'curriculum', 'course', 'pathyakram'],
+    'पाठ्य सामग्री': ['syllabus', 'curriculum', 'course material'],
+    'पाठ्यपुस्तक': ['textbook', 'course book', 'syllabus']
   };
   for (const [hindi, english] of Object.entries(hindiToEnglishMap)) {
     if (original.includes(hindi) || original.includes(hindi.toLowerCase())) {
@@ -291,45 +324,59 @@ function generateHindiSearchVariants(query) {
     }
   }
   const commonSynonyms = {
-    'holiday': ['leave', 'vacation', 'off', 'break', 'rest'],
-    'leave': ['holiday', 'vacation', 'off', 'break', 'rest'],
-    'vacation': ['holiday', 'leave', 'off', 'break', 'rest'],
-    'notice': ['notification', 'announcement', 'circular', 'alert'],
-    'notification': ['notice', 'announcement', 'circular', 'alert'],
-    'announcement': ['notice', 'notification', 'circular', 'alert'],
-    'circular': ['notice', 'notification', 'announcement'],
-    'exam': ['examination', 'test', 'assessment'],
-    'examination': ['exam', 'test', 'assessment'],
-    'test': ['exam', 'examination', 'assessment'],
-    'result': ['outcome', 'score', 'grade', 'marks'],
-    'syllabus': ['curriculum', 'course outline', 'study plan'],
-    'schedule': ['timetable', 'plan', 'agenda'],
-    'timetable': ['schedule', 'plan', 'agenda'],
-    'fee': ['fees', 'cost', 'charge', 'payment'],
-    'student': ['pupil', 'scholar', 'learner'],
-    'teacher': ['instructor', 'educator', 'faculty', 'professor'],
-    'professor': ['teacher', 'instructor', 'educator', 'faculty'],
-    'faculty': ['teacher', 'instructor', 'educator', 'staff'],
-    'department': ['division', 'section', 'unit'],
-    'library': ['reading room', 'book center'],
-    'laboratory': ['lab', 'workshop'],
-    'training': ['orientation', 'instruction', 'learning'],
-    'internship': ['internship', 'internship program'],
-    'placement': ['job placement', 'recruitment', 'placement drive'],
-    'scholarship': ['grant', 'aid', 'stipend'],
-    'grant': ['scholarship', 'aid', 'stipend'],
-    'admission': ['enrollment', 'registration', 'entry'],
-    'hostel': ['dormitory', 'residence'],
-    'dormitory': ['hostel', 'residence'],
-    'registration': ['enrollment', 'signup'],
-    'enrollment': ['registration', 'signup'],
-    'class': ['course', 'lecture', 'session'],
-    'course': ['class', 'lecture', 'session'],
-    'semester': ['sem', 'term', 'session'],
-    'marks': ['grade', 'score'],
-    'grade': ['marks', 'score'],
-    'application': ['request', 'form'],
-    'form': ['application', 'request']
+    'hostel': ['dormitory', 'residence', 'chatrawas', 'chhatravas', 'hostel', 'छात्रावास', 'होस्टल', 'dorm'],
+    'holiday': ['leave', 'vacation', 'off', 'break', 'rest', 'chutti', 'छुट्टी'],
+    'leave': ['holiday', 'vacation', 'off', 'break', 'rest', 'chutti', 'छुट्टी', 'avkash'],
+    'vacation': ['holiday', 'leave', 'off', 'break', 'rest', 'chutti', 'छुट्टी'],
+    'notice': ['notification', 'announcement', 'circular', 'alert', 'soochana', 'सूचना', 'notis', 'नोटिस'],
+    'notification': ['notice', 'announcement', 'circular', 'alert', 'soochana', 'सूचना'],
+    'announcement': ['notice', 'notification', 'circular', 'alert', 'soochana', 'सूचना'],
+    'circular': ['notice', 'notification', 'announcement', 'alert', 'soochana', 'सूचना'],
+    'exam': ['examination', 'test', 'assessment', 'pariksha', 'परीक्षा'],
+    'examination': ['exam', 'test', 'assessment', 'pariksha', 'परीक्षा'],
+    'test': ['exam', 'examination', 'assessment', 'pariksha', 'परीक्षा'],
+    'result': ['outcome', 'score', 'grade', 'marks', 'parinam', 'परिणाम'],
+    'syllabus': ['curriculum', 'course outline', 'study plan', 'pathyakram', 'पाठ्यक्रम'],
+    'schedule': ['timetable', 'plan', 'agenda', 'anusuchi', 'अनुसूची', 'karyakram'],
+    'timetable': ['schedule', 'plan', 'agenda', 'anusuchi', 'अनुसूची', 'samay sarani', 'समय सारणी'],
+    'time table': ['schedule', 'plan', 'agenda', 'anusuchi', 'अनुसूची', 'samay sarani', 'समय सारणी'],
+    'fee': ['fees', 'cost', 'charge', 'payment', 'shulk', 'शुल्क'],
+    'student': ['pupil', 'scholar', 'learner', 'chhatr', 'छात्र'],
+    'teacher': ['instructor', 'educator', 'faculty', 'professor', 'shikshak', 'शिक्षक'],
+    'professor': ['teacher', 'instructor', 'educator', 'faculty', 'pradhyapak', 'प्राध्यापक'],
+    'faculty': ['teacher', 'instructor', 'educator', 'staff', 'sankay', 'संकाय'],
+    'department': ['division', 'section', 'unit', 'vibhag', 'विभाग'],
+    'library': ['reading room', 'book center', 'pustakalay', 'पुस्तकालय'],
+    'laboratory': ['lab', 'workshop', 'prayogshala', 'प्रयोगशाला'],
+    'lab': ['laboratory', 'workshop', 'prayogshala', 'प्रयोगशाला'],
+    'workshop': ['training', 'seminar', 'prayogshala', 'प्रयोगशाला', 'karyashala', 'कार्यशाला'],
+    'training': ['orientation', 'instruction', 'learning', 'prashikshan', 'प्रशिक्षण'],
+    'internship': ['intern', 'internship program', 'intarnship', 'इंटर्नशिप'],
+    'placement': ['job placement', 'recruitment', 'placement drive', 'bharti', 'भर्ती'],
+    'scholarship': ['grant', 'aid', 'stipend', 'chhatravritti', 'छात्रवृत्ति', 'anudan'],
+    'admission': ['enrollment', 'registration', 'entry', 'pravesh', 'प्रवेश'],
+    'grant': ['scholarship', 'aid', 'stipend', 'anudan', 'अनुदान'],
+    'registration': ['enrollment', 'signup', 'panjikaran', 'पंजीकरण'],
+    'enrollment': ['registration', 'signup', 'panjikaran', 'पंजीकरण'],
+    'class': ['course', 'lecture', 'session', 'kaksha', 'कक्षा'],
+    'course': ['class', 'lecture', 'session', 'kaksha', 'कक्षा'],
+    'semester': ['sem', 'term', 'session', 'सेमेस्टर'],
+    'marks': ['grade', 'score', 'ank', 'अंक'],
+    'grade': ['marks', 'score', 'ग्रेड'],
+    'application': ['request', 'form', 'aavedan', 'आवेदन', 'prapatra'],
+    'form': ['application', 'request', 'prapatra', 'प्रपत्र'],
+    'order': ['command', 'directive', 'adesh', 'आदेश'],
+    'rule': ['regulation', 'policy', 'niyam', 'नियम', 'viniyam'],
+    'regulation': ['rule', 'policy', 'niyam', 'नियम', 'viniyam'],
+    'policy': ['rule', 'regulation', 'niyam', 'नियम'],
+    'letter': ['correspondence', 'document', 'patr', 'पत्र'],
+    'document': ['letter', 'file', 'patr', 'पत्र', 'prapatra'],
+    'job': ['work', 'employment', 'naukri', 'नौकरी'],
+    'salary': ['pay', 'wages', 'vetan', 'वेतन'],
+    'allowance': ['benefit', 'perk', 'bhatta', 'भत्ता'],
+    'loan': ['credit', 'finance', 'rin', 'ऋण'],
+    'ramanujan': ['hostel', 'dormitory', 'रामानुजन'],
+    'aryabhatta': ['hostel', 'dormitory', 'आर्यभट्ट']
   };
   for (const [word, synonyms] of Object.entries(commonSynonyms)) {
     if (original.includes(word) || original.includes(word.toLowerCase())) {
@@ -397,69 +444,71 @@ function generateEnglishSearchVariants(query) {
       }
     }
   }
-  const commonSynonyms = {
-    'holiday': ['leave', 'vacation', 'off', 'break', 'rest', 'chutti', 'chhutti', 'छुट्टी', 'avkash', 'अवकाश'],
-    'leave': ['holiday', 'vacation', 'off', 'break', 'rest', 'chutti', 'छुट्टी', 'avkash', 'अवकाश'],
-    'vacation': ['holiday', 'leave', 'off', 'break', 'rest', 'chutti', 'छुट्टी', 'avkash', 'अवकाश'],
-    'notice': ['notification', 'announcement', 'circular', 'alert', 'soochana', 'suchna', 'sucna', 'सूचना', 'notis', 'नोटिस'],
-    'notification': ['notice', 'announcement', 'circular', 'alert', 'soochana', 'suchna', 'सूचना', 'notis', 'नोटिस'],
-    'announcement': ['notice', 'notification', 'circular', 'alert', 'soochana', 'suchna', 'सूचना'],
-    'circular': ['notice', 'notification', 'announcement', 'soochana', 'suchna', 'सूचना'],
-    'exam': ['examination', 'test', 'assessment', 'pariksha', 'pariksa', 'परीक्षा'],
-    'examination': ['exam', 'test', 'assessment', 'pariksha', 'pariksa', 'परीक्षा'],
-    'test': ['exam', 'examination', 'assessment', 'pariksha', 'परीक्षा'],
-    'result': ['outcome', 'score', 'grade', 'marks', 'parinam', 'परिणाम', 'ank', 'अंक'],
-    'syllabus': ['curriculum', 'course outline', 'study plan', 'pathyakram', 'पाठ्यक्रम'],
-    'schedule': ['timetable', 'plan', 'agenda', 'karyakram', 'कार्यक्रम', 'anusuchi', 'अनुसूची'],
-    'timetable': ['schedule', 'plan', 'agenda', 'anusuchi', 'अनुसूची'],
-    'fee': ['fees', 'cost', 'charge', 'payment', 'shulk', 'शुल्क'],
-    'student': ['pupil', 'scholar', 'learner', 'chhatr', 'छात्र'],
-    'teacher': ['instructor', 'educator', 'faculty', 'professor', 'shikshak', 'शिक्षक'],
-    'professor': ['teacher', 'instructor', 'educator', 'faculty', 'pradhyapak', 'प्राध्यापक'],
-    'faculty': ['teacher', 'instructor', 'educator', 'staff', 'sankay', 'संकाय'],
-    'department': ['division', 'section', 'unit', 'vibhag', 'विभाग'],
-    'training': ['orientation', 'instruction', 'learning', 'prashikshan', 'प्रशिक्षण'],
-    'internship': ['intern', 'internship program', 'intarnship', 'इंटर्नशिप'],
-    'placement': ['job placement', 'recruitment', 'placement drive', 'प्लेसमेंट', 'bharti', 'भर्ती'],
-    'scholarship': ['grant', 'aid', 'stipend', 'chhatravritti', 'छात्रवृत्ति', 'anudan', 'अनुदान'],
-    'admission': ['enrollment', 'registration', 'entry', 'pravesh', 'प्रवेश', 'panjikaran', 'पंजीकरण'],
-    'grant': ['scholarship', 'aid', 'stipend', 'anudan', 'अनुदान'],
-    'hostel': ['dormitory', 'residence', 'chhatravas', 'छात्रावास'],
-    'dormitory': ['hostel', 'residence', 'chhatravas', 'छात्रावास'],
-    'registration': ['enrollment', 'signup', 'panjikaran', 'पंजीकरण'],
-    'enrollment': ['registration', 'signup', 'panjikaran', 'पंजीकरण'],
-    'class': ['course', 'lecture', 'session', 'kaksha', 'कक्षा'],
-    'course': ['class', 'lecture', 'session', 'kaksha', 'कक्षा'],
-    'semester': ['sem', 'term', 'session', 'सेमेस्टर'],
-    'marks': ['grade', 'score', 'ank', 'अंक'],
-    'grade': ['marks', 'score', 'ग्रेड'],
-    'application': ['request', 'form', 'aavedan', 'आवेदन', 'prapatra', 'प्रपत्र'],
-    'form': ['application', 'request', 'prapatra', 'प्रपत्र', 'aavedan', 'आवेदन'],
-    'order': ['command', 'directive', 'adesh', 'आदेश'],
-    'rule': ['regulation', 'policy', 'niyam', 'नियम', 'viniyam', 'विनियम'],
-    'regulation': ['rule', 'policy', 'niyam', 'नियम', 'viniyam', 'विनियम'],
-    'policy': ['rule', 'regulation', 'niyam', 'नियम'],
-    'letter': ['correspondence', 'document', 'patr', 'पत्र'],
-    'document': ['letter', 'file', 'patr', 'पत्र', 'prapatra', 'प्रपत्र'],
-    'library': ['reading room', 'book center', 'pustakalay', 'पुस्तकालय'],
-    'laboratory': ['lab', 'workshop', 'prayogshala', 'प्रयोगशाला'],
-    'lab': ['laboratory', 'workshop', 'prayogshala', 'प्रयोगशाला'],
-    'workshop': ['training', 'seminar', 'karyashala', 'कार्यशाला', 'prayogshala', 'प्रयोगशाला'],
-    'seminar': ['workshop', 'lecture', 'सेमिनार'],
-    'job': ['work', 'employment', 'naukri', 'नौकरी'],
-    'salary': ['pay', 'wages', 'vetan', 'वेतन'],
-    'allowance': ['benefit', 'perk', 'bhatta', 'भत्ता'],
-    'loan': ['credit', 'finance', 'rin', 'ऋण']
+  const bilingualMap = {
+    'hostel': ['छात्रावास', 'होस्टल', 'chatrawas', 'chhatravas', 'dormitory', 'residence', 'dorm'],
+    'dormitory': ['छात्रावास', 'होस्टल', 'chatrawas', 'chhatravas', 'hostel', 'residence'],
+    'notice': ['सूचना', 'soochana', 'suchna', 'sucna', 'notification', 'announcement', 'circular', 'alert', 'notis', 'नोटिस'],
+    'notification': ['सूचना', 'soochana', 'suchna', 'notice', 'announcement', 'circular', 'alert', 'notis', 'नोटिस'],
+    'announcement': ['सूचना', 'soochana', 'suchna', 'notice', 'notification', 'circular', 'alert'],
+    'circular': ['सूचना', 'soochana', 'suchna', 'notice', 'notification', 'announcement', 'alert'],
+    'holiday': ['छुट्टी', 'chutti', 'chhutti', 'avkash', 'अवकाश', 'leave', 'vacation', 'off', 'break', 'rest'],
+    'leave': ['छुट्टी', 'chutti', 'avkash', 'अवकाश', 'holiday', 'vacation', 'off', 'break', 'rest'],
+    'vacation': ['छुट्टी', 'chutti', 'avkash', 'अवकाश', 'holiday', 'leave', 'off', 'break', 'rest'],
+    'exam': ['परीक्षा', 'pariksha', 'pariksa', 'examination', 'test', 'assessment'],
+    'examination': ['परीक्षा', 'pariksha', 'pariksa', 'exam', 'test', 'assessment'],
+    'test': ['परीक्षा', 'pariksha', 'exam', 'examination', 'assessment'],
+    'result': ['परिणाम', 'parinam', 'outcome', 'score', 'grade', 'marks', 'ank', 'अंक'],
+    'syllabus': ['पाठ्यक्रम', 'pathyakram', 'curriculum', 'course outline', 'study plan'],
+    'schedule': ['कार्यक्रम', 'karyakram', 'अनुसूची', 'anusuchi', 'timetable', 'plan', 'agenda'],
+    'timetable': ['अनुसूची', 'anusuchi', 'schedule', 'plan', 'agenda', 'samay sarani', 'समय सारणी'],
+    'time table': ['अनुसूची', 'anusuchi', 'schedule', 'plan', 'agenda', 'samay sarani', 'समय सारणी'],
+    'fee': ['शुल्क', 'shulk', 'fees', 'cost', 'charge', 'payment'],
+    'student': ['छात्र', 'chhatr', 'pupil', 'scholar', 'learner'],
+    'teacher': ['शिक्षक', 'shikshak', 'instructor', 'educator', 'faculty', 'professor'],
+    'professor': ['प्राध्यापक', 'pradhyapak', 'teacher', 'instructor', 'educator', 'faculty'],
+    'faculty': ['संकाय', 'sankay', 'teacher', 'instructor', 'educator', 'staff'],
+    'department': ['विभाग', 'vibhag', 'division', 'section', 'unit'],
+    'library': ['पुस्तकालय', 'pustakalay', 'reading room', 'book center'],
+    'laboratory': ['प्रयोगशाला', 'prayogshala', 'lab', 'workshop'],
+    'lab': ['प्रयोगशाला', 'prayogshala', 'laboratory', 'workshop'],
+    'workshop': ['कार्यशाला', 'karyashala', 'training', 'seminar', 'prayogshala', 'प्रयोगशाला'],
+    'training': ['प्रशिक्षण', 'prashikshan', 'orientation', 'instruction', 'learning'],
+    'internship': ['इंटर्नशिप', 'intarnship', 'intern', 'internship program'],
+    'placement': ['प्लेसमेंट', 'placement', 'bharti', 'भर्ती', 'job placement', 'recruitment', 'placement drive'],
+    'scholarship': ['छात्रवृत्ति', 'chhatravritti', 'anudan', 'अनुदान', 'grant', 'aid', 'stipend'],
+    'admission': ['प्रवेश', 'pravesh', 'panjikaran', 'पंजीकरण', 'enrollment', 'registration', 'entry'],
+    'grant': ['अनुदान', 'anudan', 'scholarship', 'aid', 'stipend'],
+    'registration': ['पंजीकरण', 'panjikaran', 'enrollment', 'signup'],
+    'enrollment': ['पंजीकरण', 'panjikaran', 'registration', 'signup'],
+    'class': ['कक्षा', 'kaksha', 'course', 'lecture', 'session'],
+    'course': ['कक्षा', 'kaksha', 'class', 'lecture', 'session'],
+    'semester': ['सेमेस्टर', 'sem', 'term', 'session'],
+    'marks': ['अंक', 'ank', 'grade', 'score'],
+    'grade': ['ग्रेड', 'marks', 'score'],
+    'application': ['आवेदन', 'aavedan', 'prapatra', 'प्रपत्र', 'request', 'form'],
+    'form': ['प्रपत्र', 'prapatra', 'aavedan', 'आवेदन', 'application', 'request'],
+    'order': ['आदेश', 'adesh', 'command', 'directive'],
+    'rule': ['नियम', 'niyam', 'viniyam', 'विनियम', 'regulation', 'policy'],
+    'regulation': ['नियम', 'niyam', 'viniyam', 'विनियम', 'rule', 'policy'],
+    'policy': ['नियम', 'niyam', 'rule', 'regulation'],
+    'letter': ['पत्र', 'patr', 'correspondence', 'document'],
+    'document': ['पत्र', 'patr', 'prapatra', 'प्रपत्र', 'letter', 'file'],
+    'job': ['नौकरी', 'naukri', 'work', 'employment'],
+    'salary': ['वेतन', 'vetan', 'pay', 'wages'],
+    'allowance': ['भत्ता', 'bhatta', 'benefit', 'perk'],
+    'loan': ['ऋण', 'rin', 'credit', 'finance'],
+    'ramanujan': ['hostel', 'dormitory', 'रामानुजन', 'छात्रावास'],
+    'aryabhatta': ['hostel', 'dormitory', 'आर्यभट्ट', 'छात्रावास']
   };
-  for (const [word, synonyms] of Object.entries(commonSynonyms)) {
-    if (original.includes(word) || original.includes(word.toLowerCase())) {
-      for (const syn of synonyms) {
-        if (!variants.includes(syn)) {
-          variants.push(syn);
+  for (const [english, hindiTranslations] of Object.entries(bilingualMap)) {
+    if (original.includes(english) || original.includes(english.toLowerCase())) {
+      for (const translation of hindiTranslations) {
+        if (!variants.includes(translation)) {
+          variants.push(translation);
         }
-        const romanizedSyn = romanizeHindi(syn);
-        if (romanizedSyn !== syn && !variants.includes(romanizedSyn)) {
-          variants.push(romanizedSyn);
+        const romanizedTranslation = romanizeHindi(translation);
+        if (romanizedTranslation !== translation && !variants.includes(romanizedTranslation)) {
+          variants.push(romanizedTranslation);
         }
       }
     }
@@ -475,28 +524,7 @@ function generateEnglishSearchVariants(query) {
   }
   return unique.slice(0, 50);
 }
-function normalizeText(text) {
-  if (!text) return '';
-  return text
-    .replace(/\s+/g, ' ')
-    .replace(/[^a-zA-Z0-9\s\-\.\u0900-\u097F]/g, ' ')
-    .trim();
-}
-function getUniqueWords(text) {
-  if (!text) return [];
-  const words = text.split(/\s+/).filter(word => word.length > 1);
-  const unique = [];
-  const seen = new Set();
-  for (const word of words) {
-    const normalized = word.toLowerCase().trim();
-    if (!seen.has(normalized)) {
-      seen.add(normalized);
-      unique.push(word);
-    }
-  }
-  return unique;
-}
-function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedBy, category, docDate, year, semester, branch, paperType, officialDocType, storageName) {
+function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedBy, category, docDate, year, semester, branch, paperType, officialDocType, session, storageName) {
   const finalTitle = title || '';
   const titleLang = detectLanguage(finalTitle);
   const textLang = detectLanguage(extractedText);
@@ -505,7 +533,7 @@ function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedB
   const romanizedText = romanizeHindi(extractedText);
   const normalizedTitle = normalizeText(finalTitle);
   const normalizedText = normalizeText(extractedText);
-  const metaBlob = [finalTitle, officialDocType, paperType, category, storageName].filter(Boolean).join(' ');
+  const metaBlob = [finalTitle, officialDocType, paperType, category, storageName, year, semester, branch, session].filter(Boolean).join(' ');
   const metaBlobRomanized = romanizeHindi(metaBlob);
   let extractedTextHindi = '';
   let searchTermsHindi = [];
@@ -545,6 +573,7 @@ function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedB
     branch: branch || "",
     paperType: paperType || "",
     officialDocType: officialDocType || "",
+    session: session || "",
     storageName: storageName || "",
     textContent: textContent,
     textContentHindi: textContentHindi || '',
@@ -984,7 +1013,7 @@ app.put("/api/auth/update-avatar", authenticateToken, async (req, res) => {
 });
 app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single("file"), async (req, res) => {
   try {
-    const { title, category, docDate, year, semester, branch, paperType, officialDocType } = req.body;
+    const { title, category, docDate, year, semester, branch, paperType, officialDocType, session } = req.body;
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded." });
     }
@@ -1003,11 +1032,12 @@ app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single
       req.user.email,
       category,
       docDate,
-      year,
-      semester,
-      branch,
-      paperType,
-      officialDocType,
+      year || "",
+      semester || "",
+      branch || "",
+      paperType || "",
+      officialDocType || "",
+      session || "",
       req.file.filename
     );
     const newDoc = new Document(docData);
@@ -1062,6 +1092,10 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
         searchConditions.push({ paperType: { $regex: escaped, $options: "i" } });
         searchConditions.push({ category: { $regex: escaped, $options: "i" } });
         searchConditions.push({ storageName: { $regex: escaped, $options: "i" } });
+        searchConditions.push({ year: { $regex: escaped, $options: "i" } });
+        searchConditions.push({ semester: { $regex: escaped, $options: "i" } });
+        searchConditions.push({ branch: { $regex: escaped, $options: "i" } });
+        searchConditions.push({ session: { $regex: escaped, $options: "i" } });
       }
     }
     for (const variant of variants) {
@@ -1097,7 +1131,11 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
       const paperType = doc.paperType ? doc.paperType.toLowerCase() : '';
       const categoryText = doc.category ? doc.category.toLowerCase() : '';
       const storageName = doc.storageName ? doc.storageName.toLowerCase() : '';
-      const allText = `${title} ${titleHindi} ${titleRomanized} ${extractedText} ${extractedTextHindi} ${extractedTextRomanized} ${officialDocType} ${paperType} ${categoryText} ${storageName}`;
+      const yearText = doc.year ? doc.year.toLowerCase() : '';
+      const semesterText = doc.semester ? doc.semester.toLowerCase() : '';
+      const branchText = doc.branch ? doc.branch.toLowerCase() : '';
+      const sessionText = doc.session ? doc.session.toLowerCase() : '';
+      const allText = `${title} ${titleHindi} ${titleRomanized} ${extractedText} ${extractedTextHindi} ${extractedTextRomanized} ${officialDocType} ${paperType} ${categoryText} ${storageName} ${yearText} ${semesterText} ${branchText} ${sessionText}`;
       if (title === searchLower) score += 200;
       if (titleHindi === searchLower) score += 200;
       if (titleRomanized === searchLower) score += 180;
@@ -1108,6 +1146,10 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
       if (paperType.includes(searchLower)) score += 120;
       if (categoryText.includes(searchLower)) score += 60;
       if (storageName.includes(searchLower)) score += 70;
+      if (yearText.includes(searchLower)) score += 80;
+      if (semesterText.includes(searchLower)) score += 80;
+      if (branchText.includes(searchLower)) score += 80;
+      if (sessionText.includes(searchLower)) score += 80;
       for (const variant of variants) {
         const lowerVariant = variant.toLowerCase();
         if (lowerVariant.length < 2) continue;
@@ -1121,6 +1163,10 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
         if (paperType.includes(lowerVariant)) score += 90;
         if (categoryText.includes(lowerVariant)) score += 40;
         if (storageName.includes(lowerVariant)) score += 50;
+        if (yearText.includes(lowerVariant)) score += 60;
+        if (semesterText.includes(lowerVariant)) score += 60;
+        if (branchText.includes(lowerVariant)) score += 60;
+        if (sessionText.includes(lowerVariant)) score += 60;
         const occurrences = (allText.match(new RegExp(lowerVariant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
         score += occurrences * 10;
       }
@@ -1170,6 +1216,10 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
           conditions.push({ paperType: { $regex: escaped, $options: "i" } });
           conditions.push({ category: { $regex: escaped, $options: "i" } });
           conditions.push({ storageName: { $regex: escaped, $options: "i" } });
+          conditions.push({ year: { $regex: escaped, $options: "i" } });
+          conditions.push({ semester: { $regex: escaped, $options: "i" } });
+          conditions.push({ branch: { $regex: escaped, $options: "i" } });
+          conditions.push({ session: { $regex: escaped, $options: "i" } });
         }
       }
       const fallback = await Document.find({
@@ -1196,7 +1246,7 @@ app.get("/api/documents/:id", authenticateToken, async (req, res) => {
 });
 app.put("/api/documents/:id", authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { title, category, docDate, year, semester, branch, paperType, officialDocType } = req.body;
+    const { title, category, docDate, year, semester, branch, paperType, officialDocType, session } = req.body;
     const doc = await Document.findById(req.params.id);
     if (!doc) {
       return res.status(404).json({ message: "Document not found." });
@@ -1216,7 +1266,8 @@ app.put("/api/documents/:id", authenticateToken, requireAdmin, async (req, res) 
     if (branch !== undefined) doc.branch = branch;
     if (paperType !== undefined) doc.paperType = paperType;
     if (officialDocType !== undefined) doc.officialDocType = officialDocType;
-    const metaBlob = [doc.title, doc.officialDocType, doc.paperType, doc.category, doc.storageName].filter(Boolean).join(' ');
+    if (session !== undefined) doc.session = session;
+    const metaBlob = [doc.title, doc.officialDocType, doc.paperType, doc.category, doc.storageName, doc.year, doc.semester, doc.branch, doc.session].filter(Boolean).join(' ');
     const metaBlobRomanized = romanizeHindi(metaBlob);
     if (doc.extractedText) {
       doc.extractedTextRomanized = romanizeHindi(doc.extractedText);
@@ -1340,6 +1391,7 @@ app.post("/api/documents/reindex", authenticateToken, requireAdmin, async (req, 
                 doc.branch,
                 doc.paperType,
                 doc.officialDocType,
+                doc.session,
                 doc.storageName
               );
               Object.assign(doc, docData);
@@ -1382,6 +1434,11 @@ app.get("/api/documents/debug", authenticateToken, async (req, res) => {
         extractedTextRomanizedLength: d.extractedTextRomanized ? d.extractedTextRomanized.length : 0,
         language: d.language,
         category: d.category,
+        year: d.year,
+        semester: d.semester,
+        branch: d.branch,
+        session: d.session,
+        officialDocType: d.officialDocType,
         keywordsCount: d.keywords ? d.keywords.length : 0,
         keywordsHindiCount: d.keywordsHindi ? d.keywordsHindi.length : 0,
         keywordSynonymsCount: d.keywordSynonyms ? d.keywordSynonyms.length : 0,

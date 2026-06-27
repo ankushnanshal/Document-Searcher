@@ -14,8 +14,6 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^8.24.1",
     "multer": "^2.2.0",
-    "pdf-parse": "^2.4.5",
-    "pdf2json": "^3.2.2",
-    "transliteration": "^2.6.1"
+    "pdf2json": "^3.2.2"
   }
 }
