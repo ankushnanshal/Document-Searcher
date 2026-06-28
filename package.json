@@ -1,19 +1,25 @@
 {
+  "name": "document-searcher",
+  "version": "1.0.0",
+  "description": "Academic Resource Finder with OCR and Search",
+  "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1073.0",
-    "@aws-sdk/lib-storage": "^3.1073.0",
-    "@vitalets/google-translate-api": "^9.2.1",
-    "bcrypt": "^6.0.0",
-    "cors": "^2.8.6",
-    "dotenv": "^16.6.1",
-    "express": "^5.2.1",
-    "jsonwebtoken": "^9.0.3",
-    "mongoose": "^8.24.1",
-    "multer": "^2.2.0",
-    "pdf2json": "^3.2.2"
+    "bcrypt": "^5.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.3",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.0",
+    "mongoose": "^7.0.0",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "^1.1.1",
+    "pdf2json": "^3.2.2",
+    "tesseract.js": "^5.1.1"
+  },
+  "allowScripts": {
+    "tesseract.js@5.1.1": true
   }
 }

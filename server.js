@@ -167,10 +167,10 @@ function romanizeHindi(text) {
     let char = text[i];
     let nextChar = i + 1 < text.length ? text[i + 1] : '';
     let twoChar = char + nextChar;
-    if (mapping[twoChar]) {
+    if (mapping[twoChar] !== undefined) {
       result += mapping[twoChar];
       i += 2;
-    } else if (mapping[char]) {
+    } else if (mapping[char] !== undefined) {
       result += mapping[char];
       i++;
     } else {
@@ -498,7 +498,8 @@ function generateEnglishSearchVariants(query) {
     'allowance': ['भत्ता', 'bhatta', 'benefit', 'perk'],
     'loan': ['ऋण', 'rin', 'credit', 'finance'],
     'ramanujan': ['hostel', 'dormitory', 'रामानुजन', 'छात्रावास'],
-    'aryabhatta': ['hostel', 'dormitory', 'आर्यभट्ट', 'छात्रावास']
+    'aryabhatta': ['hostel', 'dormitory', 'आर्यभट्ट', 'छात्रावास'],
+    'eid': ['ईद', 'id', 'bakrid', 'बकरीद']
   };
   for (const [english, hindiTranslations] of Object.entries(bilingualMap)) {
     if (original.includes(english) || original.includes(english.toLowerCase())) {
@@ -509,6 +510,21 @@ function generateEnglishSearchVariants(query) {
         const romanizedTranslation = romanizeHindi(translation);
         if (romanizedTranslation !== translation && !variants.includes(romanizedTranslation)) {
           variants.push(romanizedTranslation);
+        }
+      }
+    } else {
+      for (const translation of hindiTranslations) {
+        const normalizedTranslation = translation.toLowerCase().trim();
+        if (normalizedTranslation.length > 1 && (original === normalizedTranslation || original.includes(normalizedTranslation))) {
+          if (!variants.includes(english)) {
+            variants.push(english);
+          }
+          for (const sibling of hindiTranslations) {
+            if (!variants.includes(sibling)) {
+              variants.push(sibling);
+            }
+          }
+          break;
         }
       }
     }
@@ -592,14 +608,102 @@ function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedB
     keywordSynonymsHindi: keywordSynonymsHindi
   };
 }
-async function extractTextFromPDF(filePath) {
+async function isTesseractAvailable() {
+  try {
+    await exec(`tesseract --version`);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+async function isPdftoppmAvailable() {
+  try {
+    await exec(`pdftoppm -v`);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+function looksLikeUsableText(text) {
+  if (!text) return false;
+  const trimmed = text.trim();
+  if (trimmed.length < 20) return false;
+  const devanagariCount = (trimmed.match(/[\u0900-\u097F]/g) || []).length;
+  const asciiLetterCount = (trimmed.match(/[a-zA-Z]/g) || []).length;
+  const meaningfulCount = devanagariCount + asciiLetterCount;
+  const ratio = meaningfulCount / trimmed.length;
+  if (ratio < 0.35) return false;
+  const noisyCharCount = (trimmed.match(/[0-9~`^&\[\];]/g) || []).length;
+  const looksLikeBrokenLegacyFont = devanagariCount === 0 && (noisyCharCount / trimmed.length) > 0.08;
+  if (looksLikeBrokenLegacyFont) return false;
+  return true;
+}
+async function ocrImageFile(imagePath) {
+  const outputPath = path.join(__dirname, `ocr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  const langOptions = ['hin+eng', 'eng'];
+  let bestText = '';
+  for (const lang of langOptions) {
+    try {
+      await exec(`tesseract "${imagePath}" "${outputPath}" -l ${lang} --psm 6 --oem 3`);
+      const ocrResultPath = `${outputPath}.txt`;
+      if (fs.existsSync(ocrResultPath)) {
+        const content = fs.readFileSync(ocrResultPath, 'utf8');
+        fs.unlinkSync(ocrResultPath);
+        if (content.trim().length > bestText.trim().length) {
+          bestText = content;
+        }
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+  return bestText;
+}
+async function extractTextFromScannedPDF(filePath) {
+  const tesseractReady = await isTesseractAvailable();
+  const pdftoppmReady = await isPdftoppmAvailable();
+  if (!tesseractReady || !pdftoppmReady) {
+    console.log('OCR skipped: tesseract or pdftoppm not available on this system.');
+    return '';
+  }
+  const tempPrefix = path.join(__dirname, `pdfocr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+  let combinedText = '';
+  try {
+    await exec(`pdftoppm -png -r 250 "${filePath}" "${tempPrefix}"`);
+    const dir = __dirname;
+    const baseName = path.basename(tempPrefix);
+    const pageFiles = fs.readdirSync(dir)
+      .filter((f) => f.startsWith(baseName) && f.endsWith('.png'))
+      .sort();
+    for (const pageFile of pageFiles) {
+      const pageFilePath = path.join(dir, pageFile);
+      try {
+        const pageText = await ocrImageFile(pageFilePath);
+        if (pageText) {
+          combinedText += pageText + ' ';
+        }
+      } finally {
+        if (fs.existsSync(pageFilePath)) {
+          fs.unlinkSync(pageFilePath);
+        }
+      }
+    }
+  } catch (error) {
+    console.log('Scanned PDF OCR error:', error.message);
+  }
+  if (combinedText) {
+    combinedText = combinedText.replace(/\s+/g, ' ').trim();
+  }
+  return combinedText;
+}
+async function extractTextFromEmbeddedPDFLayer(filePath) {
   return new Promise((resolve) => {
     try {
       const pdfParser = new PDFParser();
       let extractedText = '';
       pdfParser.on('pdfParser_dataError', (errData) => {
         console.log('PDF parse error:', errData.parserError);
-        resolve(extractedText);
+        resolve('');
       });
       pdfParser.on('pdfParser_dataReady', (pdfData) => {
         try {
@@ -633,6 +737,22 @@ async function extractTextFromPDF(filePath) {
       resolve('');
     }
   });
+}
+async function extractTextFromPDF(filePath) {
+  let embeddedText = '';
+  try {
+    embeddedText = await extractTextFromEmbeddedPDFLayer(filePath);
+  } catch (e) {
+    embeddedText = '';
+  }
+  if (looksLikeUsableText(embeddedText)) {
+    return embeddedText;
+  }
+  const ocrText = await extractTextFromScannedPDF(filePath);
+  if (ocrText && ocrText.trim().length > 0) {
+    return ocrText;
+  }
+  return embeddedText || '';
 }
 async function extractTextFromWord(filePath) {
   let text = '';
@@ -711,35 +831,13 @@ function extractTextFromJSON(filePath) {
 }
 async function extractTextFromImage(filePath) {
   try {
-    const tesseract = 'tesseract';
-    try {
-      await exec(`"${tesseract}" --version`);
-    } catch (e) {
+    const tesseractReady = await isTesseractAvailable();
+    if (!tesseractReady) {
       console.log("Tesseract not installed. Image OCR skipped.");
       return '';
     }
-    const outputPath = path.join(__dirname, `ocr_${Date.now()}`);
-    const langs = ['hin+eng', 'hin', 'eng'];
-    let text = '';
-    for (const lang of langs) {
-      try {
-        await exec(`"${tesseract}" "${filePath}" "${outputPath}" -l ${lang} --psm 6 --oem 3`);
-        const ocrResultPath = `${outputPath}.txt`;
-        if (fs.existsSync(ocrResultPath)) {
-          const content = fs.readFileSync(ocrResultPath, 'utf8');
-          if (content.trim().length > text.length) {
-            text = content;
-          }
-          fs.unlinkSync(ocrResultPath);
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-    if (text) {
-      text = text.replace(/\s+/g, ' ').trim();
-    }
-    return text || '';
+    const text = await ocrImageFile(filePath);
+    return text ? text.replace(/\s+/g, ' ').trim() : '';
   } catch (error) {
     console.log("Image OCR error:", error.message);
     return '';

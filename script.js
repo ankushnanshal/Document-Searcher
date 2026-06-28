@@ -1,3 +1,4 @@
+// script.js
 const profileMenuBtn = document.getElementById('profileMenuBtn');
 const authDropdown = document.getElementById('authDropdown');
 const authModal = document.getElementById('authModal');
@@ -837,7 +838,11 @@ if (searchInput) {
       return true;
     });
     filtered = filtered.filter(doc => doc.title.toLowerCase().includes(query) || 
-      (doc.textContent && doc.textContent.toLowerCase().includes(query)));
+      (doc.textContent && doc.textContent.toLowerCase().includes(query)) ||
+      (doc.textContentHindi && doc.textContentHindi.toLowerCase().includes(query)) ||
+      (doc.extractedText && doc.extractedText.toLowerCase().includes(query)) ||
+      (doc.extractedTextHindi && doc.extractedTextHindi.toLowerCase().includes(query)) ||
+      (doc.officialDocType && doc.officialDocType.toLowerCase().includes(query)));
     if (filtered.length === 0) {
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
       return;
@@ -1342,6 +1347,9 @@ async function fetchDocuments(query = "") {
       if (query && doc.extractedText && doc.extractedText.toLowerCase().includes(query.toLowerCase())) {
         relevanceInfo = `<span style="color: #4ade80; font-size: 0.75rem; margin-left: 8px;">✓ Content match</span>`;
       }
+      if (query && doc.extractedTextHindi && doc.extractedTextHindi.toLowerCase().includes(query.toLowerCase())) {
+        relevanceInfo = `<span style="color: #4ade80; font-size: 0.75rem; margin-left: 8px;">✓ Hindi content match</span>`;
+      }
       
       if (doc.relevanceScore && doc.relevanceScore > 0) {
         relevanceInfo += `<span style="color: #94a3b8; font-size: 0.7rem; margin-left: 8px;">Score: ${doc.relevanceScore}</span>`;
@@ -1363,6 +1371,7 @@ async function fetchDocuments(query = "") {
           ${doc.docDate ? `<p>Date: ${doc.docDate}</p>` : ''}
           ${!hasFile ? `<p style="color:#ef4444; font-size:0.8rem;">File missing on storage — re-upload required.</p>` : ''}
           ${query && doc.extractedText ? `<p style="color: #94a3b8; font-size: 0.75rem; margin-top: 4px;">📄 Content indexed: ${doc.extractedText.substring(0, 150)}${doc.extractedText.length > 150 ? '...' : ''}</p>` : ''}
+          ${query && doc.extractedTextHindi ? `<p style="color: #94a3b8; font-size: 0.75rem; margin-top: 2px;">📄 Hindi content: ${doc.extractedTextHindi.substring(0, 150)}${doc.extractedTextHindi.length > 150 ? '...' : ''}</p>` : ''}
           <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;">
             ${pillsHtml}
           </div>

@@ -1,3 +1,4 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -59,10 +60,10 @@
 
             <main class="dashboard-core">
                 <section class="control-panel">
-                    <div class="search-container">
+                    <div class="search-container local-search-container">
                         <div class="search-wrap">
                             <i class="fa-solid fa-magnifying-glass input-search-icon"></i>
-                            <input type="text" id="searchInput" autocomplete="off" placeholder="Search by document title or content...">
+                            <input type="text" id="searchInput" autocomplete="off" placeholder="Search in English or Hindi (e.g., hostel, छात्रावास, notice, सूचना)...">
                             <button id="searchBtn" class="search-submit-action">Search</button>
                         </div>
                         <div id="searchSuggestions" class="search-suggestions-box hidden"></div>
@@ -200,6 +201,10 @@
             </div>
             <div class="modal-form">
                 <div class="input-block">
+                    <label for="docTitleInput">Document Title</label>
+                    <input type="text" id="docTitleInput" placeholder="Enter document title (defaults to filename)">
+                </div>
+                <div class="input-block">
                     <label for="docCategorySelect">Resource Category</label>
                     <select id="docCategorySelect">
                         <option value="" disabled selected>-- Select Category --</option>
@@ -212,6 +217,8 @@
                         <label for="docSessionSelect">Academic Session</label>
                         <select id="docSessionSelect">
                             <option value="" disabled selected>-- Select Session --</option>
+                            <option value="2026-27">2026-27</option>
+                            <option value="2025-26">2025-26</option>
                             <option value="2024-25">2024-25</option>
                             <option value="2023-24">2023-24</option>
                             <option value="2022-23">2022-23</option>
@@ -300,6 +307,8 @@
                         <label for="officialDocSessionSelect">Academic Session</label>
                         <select id="officialDocSessionSelect">
                             <option value="" disabled selected>-- Select Session --</option>
+                            <option value="2026-27">2026-27</option>
+                            <option value="2025-26">2025-26</option>
                             <option value="2024-25">2024-25</option>
                             <option value="2023-24">2023-24</option>
                             <option value="2022-23">2022-23</option>
@@ -369,6 +378,8 @@
                     <div class="input-block">
                         <label for="editDocSessionSelect">Academic Session</label>
                         <select id="editDocSessionSelect">
+                            <option value="2026-27">2026-27</option>
+                            <option value="2025-26">2025-26</option>
                             <option value="2024-25">2024-25</option>
                             <option value="2023-24">2023-24</option>
                             <option value="2022-23">2022-23</option>
@@ -455,6 +466,8 @@
                     <div class="input-block">
                         <label for="editOfficialDocSessionSelect">Academic Session</label>
                         <select id="editOfficialDocSessionSelect">
+                            <option value="2026-27">2026-27</option>
+                            <option value="2025-26">2025-26</option>
                             <option value="2024-25">2024-25</option>
                             <option value="2023-24">2023-24</option>
                             <option value="2022-23">2022-23</option>
