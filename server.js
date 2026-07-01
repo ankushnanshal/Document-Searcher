@@ -1,4 +1,3 @@
-// server.js - Fixed search with proper relevance scoring
 const express = require("express");
 const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
@@ -375,6 +374,451 @@ function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedB
   };
 }
 
+const synonymMap = {
+  'eid': ['eid', 'ईद', 'bakrid', 'eid ul azha', 'bakri eid', 'ईद उल अज़हा', 'बकरीद'],
+  'hostel': ['hostel', 'छात्रावास', 'होस्टल', 'dormitory', 'residence hall'],
+  'holiday': ['holiday', 'छुट्टी', 'अवकाश', 'vacation', 'break', 'leave'],
+  'exam': ['exam', 'examination', 'परीक्षा', 'test', 'assessment'],
+  'fee': ['fee', 'fees', 'शुल्क', 'payment', 'tuition'],
+  'admission': ['admission', 'admissions', 'प्रवेश', 'enrollment', 'registration'],
+  'notice': ['notice', 'सूचना', 'announcement', 'notification', 'circular'],
+  'result': ['result', 'परिणाम', 'marks', 'grades', 'scorecard'],
+  'placement': ['placement', 'placements', 'campus placement', 'recruitment', 'job placement'],
+  'scholarship': ['scholarship', 'छात्रवृत्ति', 'financial aid', 'grant', 'fellowship'],
+  'internship': ['internship', 'internships', 'training', 'apprenticeship', 'intern'],
+  'seminar': ['seminar', 'संगोष्ठी', 'workshop', 'presentation', 'guest lecture'],
+  'syllabus': ['syllabus', 'पाठ्यक्रम', 'curriculum', 'course', 'study material'],
+  'library': ['library', 'पुस्तकालय', 'reading room', 'study center'],
+  'sports': ['sports', 'खेल', 'athletics', 'games', 'physical education'],
+  'canteen': ['canteen', 'कैंटीन', 'cafeteria', 'mess', 'food court'],
+  'rules': ['rules', 'नियम', 'regulations', 'guidelines', 'policy'],
+  'timetable': ['timetable', 'time table', 'schedule', 'routine', 'class schedule'],
+  'ramadan': ['ramadan', 'रमज़ान', 'ramzan', 'roza', 'iftaar'],
+  'diwali': ['diwali', 'दीपावली', 'deepawali', 'festival of lights'],
+  'holi': ['holi', 'होली', 'festival of colors'],
+  'bakrid': ['bakrid', 'बकरीद', 'eid ul adha', 'eid ul azha', 'qurbani'],
+  'christmas': ['christmas', 'क्रिसमस', 'xmas', 'christmas day'],
+  'new year': ['new year', 'नया साल', 'new years', 'new year day'],
+  'republic day': ['republic day', 'गणतंत्र दिवस', '26 january'],
+  'independence day': ['independence day', 'स्वतंत्रता दिवस', '15 august'],
+  'gandhi jayanti': ['gandhi jayanti', 'गांधी जयंती', '2 october'],
+};
+
+function tokenize(text) {
+  if (!text) return [];
+  return text.toLowerCase().split(/[\s,.\-_\'\"()\[\]{}:;!?@#$%^&*+=/\\|<>~`]+/).filter(w => w.length > 0);
+}
+
+function normalizeUnicode(text) {
+  if (!text) return '';
+  return text.normalize('NFKC');
+}
+
+function getWholeWordMatches(tokens, searchTokens) {
+  const matches = [];
+  const tokenSet = new Set(tokens);
+  for (const st of searchTokens) {
+    if (tokenSet.has(st)) {
+      matches.push(st);
+    }
+  }
+  return matches;
+}
+
+function getSynonymMatches(tokens, searchTokens) {
+  const matches = [];
+  const tokenSet = new Set(tokens);
+  for (const st of searchTokens) {
+    for (const [key, synonyms] of Object.entries(synonymMap)) {
+      const allTerms = [key, ...synonyms];
+      const searchTerm = st.toLowerCase().trim();
+      if (allTerms.some(t => t.toLowerCase().trim() === searchTerm)) {
+        for (const syn of allTerms) {
+          const synLower = syn.toLowerCase().trim();
+          if (tokenSet.has(synLower) && !matches.includes(synLower)) {
+            matches.push(synLower);
+          }
+        }
+      }
+    }
+  }
+  return matches;
+}
+
+function getRomanizedMatches(tokens, searchTokens) {
+  const matches = [];
+  const tokenSet = new Set(tokens);
+  for (const st of searchTokens) {
+    const romanized = romanizeHindi(st);
+    if (romanized && romanized !== st && tokenSet.has(romanized)) {
+      matches.push(romanized);
+    }
+  }
+  return matches;
+}
+
+function getFuzzyMatches(tokens, searchTokens) {
+  const matches = [];
+  const tokenSet = new Set(tokens);
+  for (const st of searchTokens) {
+    if (st.length < 3) continue;
+    for (const token of tokenSet) {
+      if (token === st) continue;
+      if (token.length < 3) continue;
+      const maxDist = Math.min(2, Math.max(1, Math.floor(Math.max(st.length, token.length) * 0.3)));
+      const dist = levenshteinDistance(st, token);
+      if (dist <= maxDist) {
+        matches.push(token);
+      }
+    }
+  }
+  return matches;
+}
+
+function levenshteinDistance(a, b) {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) {
+    matrix[i] = [i];
+  }
+  for (let j = 0; j <= a.length; j++) {
+    matrix[0][j] = j;
+  }
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b[i-1] === a[j-1]) {
+        matrix[i][j] = matrix[i-1][j-1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i-1][j-1] + 1,
+          matrix[i][j-1] + 1,
+          matrix[i-1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+function calculateRelevanceScore(doc, query, searchTokens) {
+  const filename = path.basename(doc.fileUrl || '');
+  const filenameTokens = tokenize(filename);
+  const titleTokens = tokenize(doc.title || '');
+  const titleHindiTokens = tokenize(doc.titleHindi || '');
+  const titleRomanizedTokens = tokenize(doc.titleRomanized || '');
+  const textTokens = tokenize(doc.extractedText || '');
+  const textHindiTokens = tokenize(doc.extractedTextHindi || '');
+  const textRomanizedTokens = tokenize(doc.extractedTextRomanized || '');
+  const ocrTokens = tokenize(doc.textContent || '');
+  const metadataText = [doc.officialDocType || '', doc.paperType || '', doc.category || '', doc.year || '', doc.semester || '', doc.branch || '', doc.session || ''].join(' ');
+  const metadataTokens = tokenize(metadataText);
+  
+  const allTitleTokens = [...titleTokens, ...titleHindiTokens, ...titleRomanizedTokens];
+  const allTextTokens = [...textTokens, ...textHindiTokens, ...textRomanizedTokens, ...ocrTokens];
+  const allTokens = [...allTitleTokens, ...allTextTokens, ...metadataTokens, ...filenameTokens];
+  
+  const uniqueTokens = [...new Set(allTokens)];
+  
+  const exactTitleMatches = getWholeWordMatches(allTitleTokens, searchTokens);
+  const exactFilenameMatches = getWholeWordMatches(filenameTokens, searchTokens);
+  const exactContentMatches = getWholeWordMatches(allTextTokens, searchTokens);
+  const exactMatches = getWholeWordMatches(uniqueTokens, searchTokens);
+  
+  const synonymMatches = getSynonymMatches(uniqueTokens, searchTokens);
+  const romanizedMatches = getRomanizedMatches(uniqueTokens, searchTokens);
+  const fuzzyMatches = getFuzzyMatches(uniqueTokens, searchTokens);
+  
+  const exactMatchCount = exactMatches.length;
+  const titleMatchCount = exactTitleMatches.length;
+  const filenameMatchCount = exactFilenameMatches.length;
+  const contentMatchCount = exactContentMatches.length;
+  const synonymMatchCount = synonymMatches.length;
+  const romanizedMatchCount = romanizedMatches.length;
+  const fuzzyMatchCount = fuzzyMatches.length;
+  
+  let semanticMatches = 0;
+  if (doc.embedding && doc.embedding.length > 0) {
+    semanticMatches = Math.min(1, Math.floor((doc.ocrConfidence || 0) / 85));
+  }
+  
+  let score = 0;
+  score += exactMatchCount * 1000;
+  score += titleMatchCount * 800;
+  score += filenameMatchCount * 700;
+  score += contentMatchCount * 600;
+  score += synonymMatchCount * 500;
+  score += romanizedMatchCount * 400;
+  score += semanticMatches * 350;
+  score += fuzzyMatchCount * 200;
+  score += (doc.ocrConfidence || 0) * 0.5;
+  
+  let metadataScore = 0;
+  if (doc.category === query || doc.category === query.charAt(0).toUpperCase() + query.slice(1)) metadataScore += 20;
+  if (doc.officialDocType && doc.officialDocType.toLowerCase().includes(query.toLowerCase())) metadataScore += 15;
+  if (doc.paperType && doc.paperType.toLowerCase().includes(query.toLowerCase())) metadataScore += 10;
+  if (doc.branch && doc.branch.toLowerCase().includes(query.toLowerCase())) metadataScore += 5;
+  if (doc.semester && doc.semester === query) metadataScore += 5;
+  if (doc.year && doc.year.toLowerCase().includes(query.toLowerCase())) metadataScore += 5;
+  metadataScore = Math.min(metadataScore, 100);
+  score += metadataScore;
+  
+  const daysSinceUpload = (Date.now() - new Date(doc.createdAt || Date.now()).getTime()) / (1000 * 60 * 60 * 24);
+  if (daysSinceUpload < 7 && exactMatchCount > 0) score += 10;
+  else if (daysSinceUpload < 30 && exactMatchCount > 0) score += 5;
+  
+  if (exactMatchCount === 0 && synonymMatchCount === 0 && romanizedMatchCount === 0 && semanticMatches === 0 && fuzzyMatchCount === 0) {
+    score = Math.min(score, 50);
+  }
+  
+  return {
+    score: Math.round(score),
+    exactMatches: exactMatchCount,
+    titleMatches: titleMatchCount,
+    filenameMatches: filenameMatchCount,
+    contentMatches: contentMatchCount,
+    synonymMatches: synonymMatchCount,
+    romanizedMatches: romanizedMatchCount,
+    semanticMatches: semanticMatches,
+    fuzzyMatches: fuzzyMatchCount,
+    metadataScore: Math.round(metadataScore),
+    matchedTerms: exactMatches.slice(0, 10)
+  };
+}
+
+function preprocessQuery(query) {
+  let processed = query.trim().toLowerCase();
+  processed = normalizeUnicode(processed);
+  processed = processed.replace(/[^\w\s\u0900-\u097F]/g, ' ');
+  processed = processed.replace(/\s+/g, ' ').trim();
+  return processed;
+}
+
+function transliterateEnglishToHindi(englishText) {
+  const mapping = {
+    'eid': 'ईद',
+    'id': 'ईद',
+    'e': 'इ',
+    'i': 'इ',
+    'ee': 'ई',
+    'a': 'अ',
+    'aa': 'आ',
+    'u': 'उ',
+    'oo': 'ऊ',
+    'k': 'क',
+    'kh': 'ख',
+    'g': 'ग',
+    'gh': 'घ',
+    'ch': 'च',
+    'chh': 'छ',
+    'j': 'ज',
+    'jh': 'झ',
+    't': 'ट',
+    'th': 'ठ',
+    'd': 'ड',
+    'dh': 'ढ',
+    'n': 'न',
+    'p': 'प',
+    'ph': 'फ',
+    'b': 'ब',
+    'bh': 'भ',
+    'm': 'म',
+    'y': 'य',
+    'r': 'र',
+    'l': 'ल',
+    'v': 'व',
+    'sh': 'श',
+    's': 'स',
+    'h': 'ह',
+    'ng': 'ंग',
+    'ny': 'ञ',
+    'ksh': 'क्ष',
+    'tr': 'त्र',
+    'gya': 'ज्ञ'
+  };
+  let result = '';
+  let i = 0;
+  const text = englishText.toLowerCase();
+  while (i < text.length) {
+    let found = false;
+    for (let len = 5; len >= 1; len--) {
+      if (i + len <= text.length) {
+        const sub = text.substring(i, i + len);
+        if (mapping[sub]) {
+          result += mapping[sub];
+          i += len;
+          found = true;
+          break;
+        }
+      }
+    }
+    if (!found) {
+      result += text[i];
+      i++;
+    }
+  }
+  return result;
+}
+
+async function performHybridSearch(query, filter = {}) {
+  const processedQuery = preprocessQuery(query);
+  const searchTokens = tokenize(processedQuery);
+  
+  if (searchTokens.length === 0) {
+    const docs = await Document.find(filter).sort({ createdAt: -1 }).limit(50);
+    return docs;
+  }
+  
+  const searchConditions = [];
+  const escapedQuery = processedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  
+  searchConditions.push({ title: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ titleHindi: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ titleRomanized: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ extractedText: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ extractedTextHindi: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ extractedTextRomanized: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ textContent: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ textContentHindi: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ textContentRomanized: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ officialDocType: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ paperType: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ category: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ year: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ semester: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ branch: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ session: { $regex: escapedQuery, $options: "i" } });
+  
+  for (const token of searchTokens) {
+    if (token.length < 2) continue;
+    const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    searchConditions.push({ title: { $regex: escapedToken, $options: "i" } });
+    searchConditions.push({ titleHindi: { $regex: escapedToken, $options: "i" } });
+    searchConditions.push({ titleRomanized: { $regex: escapedToken, $options: "i" } });
+    searchConditions.push({ extractedText: { $regex: escapedToken, $options: "i" } });
+    searchConditions.push({ extractedTextHindi: { $regex: escapedToken, $options: "i" } });
+    searchConditions.push({ extractedTextRomanized: { $regex: escapedToken, $options: "i" } });
+    searchConditions.push({ textContent: { $regex: escapedToken, $options: "i" } });
+    searchConditions.push({ textContentHindi: { $regex: escapedToken, $options: "i" } });
+    searchConditions.push({ textContentRomanized: { $regex: escapedToken, $options: "i" } });
+  }
+  
+  const hindiTransliteration = transliterateEnglishToHindi(processedQuery);
+  if (hindiTransliteration && hindiTransliteration !== processedQuery) {
+    const escapedHindi = hindiTransliteration.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    searchConditions.push({ titleHindi: { $regex: escapedHindi, $options: "i" } });
+    searchConditions.push({ extractedTextHindi: { $regex: escapedHindi, $options: "i" } });
+    searchConditions.push({ textContentHindi: { $regex: escapedHindi, $options: "i" } });
+  }
+  
+  const romanizedQuery = romanizeHindi(processedQuery);
+  if (romanizedQuery && romanizedQuery !== processedQuery) {
+    const escapedRomanized = romanizedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    searchConditions.push({ titleRomanized: { $regex: escapedRomanized, $options: "i" } });
+    searchConditions.push({ extractedTextRomanized: { $regex: escapedRomanized, $options: "i" } });
+    searchConditions.push({ textContentRomanized: { $regex: escapedRomanized, $options: "i" } });
+  }
+  
+  let dbFilter = { ...filter };
+  if (filter.category) dbFilter.category = filter.category;
+  if (filter.branch) dbFilter.branch = filter.branch;
+  if (filter.semester) dbFilter.semester = filter.semester;
+  if (filter.year) dbFilter.year = filter.year;
+  
+  const finalQuery = searchConditions.length > 0 ? { $or: searchConditions, ...dbFilter } : dbFilter;
+  let docs = await Document.find(finalQuery).limit(200);
+  
+  let textSearchDocs = [];
+  try {
+    textSearchDocs = await Document.find(
+      { $text: { $search: processedQuery }, ...dbFilter },
+      { score: { $meta: "textScore" } }
+    ).sort({ score: { $meta: "textScore" } }).limit(100);
+  } catch (e) {}
+  
+  const docIds = new Set();
+  const allDocs = [];
+  
+  for (const doc of docs) {
+    if (!docIds.has(doc._id.toString())) {
+      docIds.add(doc._id.toString());
+      allDocs.push(doc);
+    }
+  }
+  
+  for (const doc of textSearchDocs) {
+    if (!docIds.has(doc._id.toString())) {
+      docIds.add(doc._id.toString());
+      allDocs.push(doc);
+    }
+  }
+  
+  let semanticResults = [];
+  try {
+    if (process.env.VECTOR_SEARCH_ENABLED === 'true' || process.env.SEMANTIC_SEARCH_ENABLED === 'true') {
+      const embedding = await generateEmbedding(processedQuery);
+      if (embedding && embedding.length > 0) {
+        semanticResults = await Document.aggregate([
+          {
+            $vectorSearch: {
+              index: "default",
+              path: "embedding",
+              queryVector: embedding,
+              numCandidates: 100,
+              limit: 50,
+              filter: dbFilter
+            }
+          },
+          {
+            $project: {
+              _id: 1,
+              score: { $meta: "vectorSearchScore" }
+            }
+          }
+        ]);
+      }
+    }
+  } catch (e) {}
+  
+  const scoredDocs = allDocs.map(doc => {
+    const docObj = doc.toObject ? doc.toObject() : doc;
+    const result = calculateRelevanceScore(doc, processedQuery, searchTokens);
+    const semanticMatch = semanticResults.find(s => s._id.toString() === doc._id.toString());
+    if (semanticMatch && semanticMatch.score) {
+      result.semanticMatches = Math.max(result.semanticMatches, Math.round(semanticMatch.score * 2));
+      result.score += Math.round(semanticMatch.score * 200);
+    }
+    docObj._ranking = result;
+    docObj.relevanceScore = result.score;
+    return docObj;
+  });
+  
+  scoredDocs.sort((a, b) => {
+    const aScore = a._ranking.score || 0;
+    const bScore = b._ranking.score || 0;
+    if (aScore !== bScore) return bScore - aScore;
+    if (a._ranking.exactMatches !== b._ranking.exactMatches) return b._ranking.exactMatches - a._ranking.exactMatches;
+    if (a._ranking.titleMatches !== b._ranking.titleMatches) return b._ranking.titleMatches - a._ranking.titleMatches;
+    if (a._ranking.semanticMatches !== b._ranking.semanticMatches) return b._ranking.semanticMatches - a._ranking.semanticMatches;
+    return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
+  });
+  
+  const filteredDocs = scoredDocs.filter(doc => {
+    const rank = doc._ranking;
+    const hasRelevance = rank.exactMatches > 0 || rank.synonymMatches > 0 || 
+                         rank.romanizedMatches > 0 || rank.semanticMatches > 0 || 
+                         rank.fuzzyMatches > 0 || rank.titleMatches > 0 || 
+                         rank.filenameMatches > 0 || rank.contentMatches > 0;
+    if (!hasRelevance && rank.score < 100) {
+      return false;
+    }
+    return true;
+  });
+  
+  const limit = parseInt(process.env.SEARCH_RESULTS_LIMIT) || 50;
+  return filteredDocs.slice(0, limit);
+}
+
 function preprocessImage(imagePath) {
   return new Promise((resolve) => {
     try {
@@ -508,31 +952,59 @@ async function extractPDFText(filePath) {
     }
   } catch (e) {}
   try {
-    const { stdout } = await exec(`pdftoppm -png -r 300 "${filePath}" "${path.join(tempDir, 'pdfpage')}"`);
-    const baseName = 'pdfpage';
-    const pageFiles = fs.readdirSync(tempDir).filter(f => f.startsWith(baseName) && f.endsWith('.png')).sort();
-    let combinedText = '';
-    let pageTextsOcr = [];
-    let totalConfidence = 0;
-    let pageCount = 0;
-    for (const pageFile of pageFiles) {
-      const pagePath = path.join(tempDir, pageFile);
-      try {
-        const result = await ocrImageWithRetry(pagePath, 'hi+eng', 2);
-        if (result.text) {
-          combinedText += result.text + ' ';
-          pageTextsOcr.push(result.text);
-          totalConfidence += result.confidence;
-          pageCount++;
-        }
-      } catch (e) {}
-      if (fs.existsSync(pagePath)) fs.unlinkSync(pagePath);
+    const { stdout } = await exec(`pdftotext -layout -nopgbrk "${filePath}" -`);
+    if (stdout && stdout.trim().length > 20) {
+      const words = stdout.split(/\s+/).filter(w => w.length > 2);
+      if (words.length > 5) {
+        pageTexts = [stdout];
+        ocrConfidence = 85;
+        return { text: stdout, pageTexts, ocrApplied: false, isScanned: false, ocrConfidence: 85, totalPages: totalPages || 1 };
+      }
     }
-    if (combinedText.trim()) {
-      ocrApplied = true;
-      isScanned = true;
-      ocrConfidence = pageCount > 0 ? totalConfidence / pageCount : 60;
-      return { text: combinedText.trim(), pageTexts: pageTextsOcr, ocrApplied, isScanned, ocrConfidence, totalPages: pageCount };
+  } catch (e) {}
+  try {
+    const tempPdfDir = path.join(tempDir, `pdf_ocr_${Date.now()}`);
+    if (!fs.existsSync(tempPdfDir)) {
+      fs.mkdirSync(tempPdfDir, { recursive: true });
+    }
+    await exec(`pdftoppm -png -r 300 "${filePath}" "${path.join(tempPdfDir, 'page')}"`);
+    const pageFiles = fs.readdirSync(tempPdfDir).filter(f => f.startsWith('page') && f.endsWith('.png')).sort();
+    if (pageFiles.length > 0) {
+      let combinedText = '';
+      let pageTextsOcr = [];
+      let totalConfidence = 0;
+      let pageCount = 0;
+      for (const pageFile of pageFiles) {
+        const pagePath = path.join(tempPdfDir, pageFile);
+        try {
+          const processedPath = await preprocessImage(pagePath);
+          const result = await ocrImageWithRetry(processedPath, 'hi+eng', 3);
+          if (result.text && result.text.length > 10) {
+            combinedText += result.text + ' ';
+            pageTextsOcr.push(result.text);
+            totalConfidence += result.confidence;
+            pageCount++;
+          }
+          if (processedPath !== pagePath && fs.existsSync(processedPath)) {
+            fs.unlinkSync(processedPath);
+          }
+        } catch (e) {}
+        if (fs.existsSync(pagePath)) {
+          fs.unlinkSync(pagePath);
+        }
+      }
+      if (fs.existsSync(tempPdfDir)) {
+        fs.rmdirSync(tempPdfDir, { recursive: true });
+      }
+      if (combinedText.trim()) {
+        ocrApplied = true;
+        isScanned = true;
+        ocrConfidence = pageCount > 0 ? totalConfidence / pageCount : 60;
+        return { text: combinedText.trim(), pageTexts: pageTextsOcr, ocrApplied, isScanned, ocrConfidence, totalPages: pageCount };
+      }
+    }
+    if (fs.existsSync(tempPdfDir)) {
+      fs.rmdirSync(tempPdfDir, { recursive: true });
     }
   } catch (e) {}
   if (embeddedText && embeddedText.trim()) {
@@ -684,334 +1156,6 @@ async function generateEmbedding(text) {
     }
   } catch (e) {}
   return [];
-}
-
-async function semanticSearch(query, filter = {}) {
-  try {
-    const embedding = await generateEmbedding(query);
-    if (!embedding || embedding.length === 0) return [];
-    const docs = await Document.aggregate([
-      {
-        $vectorSearch: {
-          index: "default",
-          path: "embedding",
-          queryVector: embedding,
-          numCandidates: 100,
-          limit: 20,
-          filter: filter
-        }
-      },
-      {
-        $project: {
-          _id: 1, title: 1, titleHindi: 1, titleRomanized: 1,
-          fileUrl: 1, category: 1, year: 1, semester: 1, branch: 1,
-          extractedText: 1, extractedTextHindi: 1,
-          ocrConfidence: 1, createdAt: 1,
-          score: { $meta: "vectorSearchScore" }
-        }
-      }
-    ]);
-    return docs;
-  } catch (e) {
-    return [];
-  }
-}
-
-function extractKeywordsForSearch(query) {
-  const words = query.toLowerCase().split(/\s+/).filter(w => w.length > 1);
-  const stopWords = new Set(['the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his', 'how', 'man', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'its', 'let', 'put', 'say', 'she', 'too', 'use', 'this', 'that', 'with', 'from', 'have', 'they', 'will', 'been', 'were', 'said', 'each', 'which', 'their', 'about', 'into', 'than', 'them', 'these', 'some', 'would', 'what', 'when', 'where', 'there', 'their', 'then', 'then', 'after', 'before', 'because', 'like', 'just', 'could', 'would', 'should', 'might', 'more', 'most', 'such', 'only', 'very', 'too', 'also', 'between', 'among', 'without', 'through', 'during', 'within', 'upon', 'towards', 'until', 'since', 'though', 'although', 'while']);
-  return words.filter(w => !stopWords.has(w));
-}
-
-function transliterateEnglishToHindi(englishText) {
-  const mapping = {
-    'eid': 'ईद',
-    'id': 'ईद',
-    'e': 'इ',
-    'i': 'इ',
-    'ee': 'ई',
-    'a': 'अ',
-    'aa': 'आ',
-    'u': 'उ',
-    'oo': 'ऊ',
-    'k': 'क',
-    'kh': 'ख',
-    'g': 'ग',
-    'gh': 'घ',
-    'ch': 'च',
-    'chh': 'छ',
-    'j': 'ज',
-    'jh': 'झ',
-    't': 'ट',
-    'th': 'ठ',
-    'd': 'ड',
-    'dh': 'ढ',
-    'n': 'न',
-    'p': 'प',
-    'ph': 'फ',
-    'b': 'ब',
-    'bh': 'भ',
-    'm': 'म',
-    'y': 'य',
-    'r': 'र',
-    'l': 'ल',
-    'v': 'व',
-    'sh': 'श',
-    's': 'स',
-    'h': 'ह',
-    'ng': 'ंग',
-    'ny': 'ञ',
-    'ksh': 'क्ष',
-    'tr': 'त्र',
-    'gya': 'ज्ञ'
-  };
-  let result = '';
-  let i = 0;
-  const text = englishText.toLowerCase();
-  while (i < text.length) {
-    let found = false;
-    for (let len = 5; len >= 1; len--) {
-      if (i + len <= text.length) {
-        const sub = text.substring(i, i + len);
-        if (mapping[sub]) {
-          result += mapping[sub];
-          i += len;
-          found = true;
-          break;
-        }
-      }
-    }
-    if (!found) {
-      result += text[i];
-      i++;
-    }
-  }
-  return result;
-}
-
-function calculateRelevanceScore(doc, query, variants) {
-  let score = 0;
-  const searchLower = query.toLowerCase();
-  const exactMatch = searchLower;
-  
-  // Check all text fields
-  const allTextFields = [
-    doc.title || '', doc.titleHindi || '', doc.titleRomanized || '',
-    doc.extractedText || '', doc.extractedTextHindi || '', doc.extractedTextRomanized || '',
-    doc.officialDocType || '', doc.paperType || '', doc.category || '',
-    doc.year || '', doc.semester || '', doc.branch || '', doc.session || ''
-  ];
-  
-  const allTextLower = allTextFields.join(' ').toLowerCase();
-  
-  // EXACT match gets highest priority
-  if (allTextLower.includes(exactMatch)) {
-    score += 200;
-  }
-  
-  // Title matches are very important
-  if ((doc.title || '').toLowerCase().includes(exactMatch)) score += 150;
-  if ((doc.titleHindi || '').toLowerCase().includes(exactMatch)) score += 150;
-  if ((doc.titleRomanized || '').toLowerCase().includes(exactMatch)) score += 120;
-  
-  // Check each variant
-  for (const variant of variants) {
-    const lowerVariant = variant.toLowerCase();
-    if (lowerVariant.length < 2) continue;
-    
-    if (allTextLower.includes(lowerVariant)) {
-      score += 50;
-      if ((doc.title || '').toLowerCase().includes(lowerVariant)) score += 80;
-      if ((doc.titleHindi || '').toLowerCase().includes(lowerVariant)) score += 80;
-      if ((doc.titleRomanized || '').toLowerCase().includes(lowerVariant)) score += 60;
-      if ((doc.extractedText || '').toLowerCase().includes(lowerVariant)) score += 30;
-      if ((doc.extractedTextHindi || '').toLowerCase().includes(lowerVariant)) score += 30;
-      if ((doc.extractedTextRomanized || '').toLowerCase().includes(lowerVariant)) score += 20;
-      if ((doc.officialDocType || '').toLowerCase().includes(lowerVariant)) score += 40;
-      if ((doc.paperType || '').toLowerCase().includes(lowerVariant)) score += 40;
-      if ((doc.category || '').toLowerCase().includes(lowerVariant)) score += 20;
-    }
-  }
-  
-  // Check keywords
-  const keywords = extractKeywordsForSearch(query);
-  for (const kw of keywords) {
-    if (kw.length < 2) continue;
-    if ((doc.keywords || []).some(k => k && k.toLowerCase().includes(kw))) score += 30;
-    if ((doc.keywordsHindi || []).some(k => k && k.toLowerCase().includes(kw))) score += 30;
-    if ((doc.keywordSynonyms || []).some(s => s && s.toLowerCase().includes(kw))) score += 15;
-    if ((doc.keywordSynonymsHindi || []).some(s => s && s.toLowerCase().includes(kw))) score += 15;
-  }
-  
-  // Boost score for documents with higher OCR confidence
-  if (doc.ocrConfidence && doc.ocrConfidence > 70) score += 10;
-  if (doc.ocrConfidence && doc.ocrConfidence > 85) score += 15;
-  
-  // Boost for more recent documents
-  const daysSinceUpload = (Date.now() - new Date(doc.createdAt || Date.now()).getTime()) / (1000 * 60 * 60 * 24);
-  if (daysSinceUpload < 7) score += 10;
-  else if (daysSinceUpload < 30) score += 5;
-  
-  return Math.round(score);
-}
-
-async function performHybridSearch(query, filter = {}) {
-  const isHindi = detectLanguage(query) === 'hi';
-  let variants = isHindi ? generateHindiSearchVariants(query) : generateEnglishSearchVariants(query);
-  
-  // If query is in English, also transliterate to Hindi
-  if (!isHindi) {
-    const hindiTransliteration = transliterateEnglishToHindi(query);
-    if (hindiTransliteration && hindiTransliteration !== query) {
-      const hindiVariants = generateHindiSearchVariants(hindiTransliteration);
-      for (const v of hindiVariants) {
-        if (!variants.includes(v)) variants.push(v);
-      }
-    }
-  }
-  
-  // If query is in Hindi, also transliterate to English
-  if (isHindi) {
-    const romanized = romanizeHindi(query);
-    if (romanized && romanized !== query) {
-      const englishVariants = generateEnglishSearchVariants(romanized);
-      for (const v of englishVariants) {
-        if (!variants.includes(v)) variants.push(v);
-      }
-    }
-  }
-  
-  // Add the original query and its lowercase version
-  variants.push(query.toLowerCase());
-  variants.push(query);
-  
-  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 0);
-  
-  const searchConditions = [];
-  
-  // Add conditions for each variant
-  for (const variant of variants) {
-    const escaped = variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    if (escaped.length > 0) {
-      searchConditions.push({ title: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ titleHindi: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ titleRomanized: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ extractedText: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ extractedTextHindi: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ extractedTextRomanized: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ officialDocType: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ paperType: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ category: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ year: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ semester: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ branch: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ session: { $regex: escaped, $options: "i" } });
-    }
-  }
-  
-  // Add conditions for each word in the query (partial matching)
-  for (const word of queryWords) {
-    if (word.length > 0) {
-      const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      searchConditions.push({ title: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ titleHindi: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ titleRomanized: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ extractedText: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ extractedTextHindi: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ extractedTextRomanized: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ officialDocType: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ paperType: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ category: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ year: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ semester: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ branch: { $regex: escaped, $options: "i" } });
-      searchConditions.push({ session: { $regex: escaped, $options: "i" } });
-    }
-  }
-  
-  let dbFilter = { ...filter };
-  if (filter.category) dbFilter.category = filter.category;
-  if (filter.branch) dbFilter.branch = filter.branch;
-  if (filter.semester) dbFilter.semester = filter.semester;
-  if (filter.year) dbFilter.year = filter.year;
-  
-  // Build the final query - use $or for search conditions
-  const finalQuery = searchConditions.length > 0 ? { $or: searchConditions, ...dbFilter } : dbFilter;
-  let docs = await Document.find(finalQuery).sort({ createdAt: -1 }).limit(100);
-  
-  // Also try text search for better matching
-  let textSearchDocs = [];
-  try {
-    textSearchDocs = await Document.find(
-      { $text: { $search: query }, ...dbFilter },
-      { score: { $meta: "textScore" } }
-    ).sort({ score: { $meta: "textScore" } }).limit(50);
-  } catch (e) {}
-  
-  // Combine results, avoiding duplicates
-  const docIds = new Set();
-  const allDocs = [];
-  
-  for (const doc of docs) {
-    if (!docIds.has(doc._id.toString())) {
-      docIds.add(doc._id.toString());
-      allDocs.push(doc);
-    }
-  }
-  
-  for (const doc of textSearchDocs) {
-    if (!docIds.has(doc._id.toString())) {
-      docIds.add(doc._id.toString());
-      allDocs.push(doc);
-    }
-  }
-  
-  let semanticResults = [];
-  try {
-    if (process.env.VECTOR_SEARCH_ENABLED === 'true' || process.env.SEMANTIC_SEARCH_ENABLED === 'true') {
-      semanticResults = await semanticSearch(query, dbFilter);
-    }
-  } catch (e) {}
-  
-  // Calculate relevance scores
-  const scoredDocs = allDocs.map(doc => {
-    const docObj = doc.toObject ? doc.toObject() : doc;
-    let score = calculateRelevanceScore(doc, query, variants);
-    
-    // Add semantic score if available
-    const semanticMatch = semanticResults.find(s => s._id.toString() === doc._id.toString());
-    if (semanticMatch && semanticMatch.score) {
-      score += Math.round(semanticMatch.score * 50);
-    }
-    
-    // Penalize low OCR confidence
-    if (doc.ocrConfidence && doc.ocrConfidence < 50) score -= 20;
-    if (doc.ocrApplied && doc.ocrConfidence < 60) score -= 10;
-    
-    docObj.relevanceScore = score;
-    return docObj;
-  });
-  
-  // Sort by relevance score (highest first)
-  scoredDocs.sort((a, b) => b.relevanceScore - a.relevanceScore);
-  
-  // Add semantic results that weren't found in the main search
-  const existingIds = new Set(scoredDocs.map(d => d._id.toString()));
-  for (const sem of semanticResults) {
-    if (!existingIds.has(sem._id.toString())) {
-      const doc = await Document.findById(sem._id);
-      if (doc) {
-        const docObj = doc.toObject();
-        docObj.relevanceScore = Math.round((sem.score || 0) * 50);
-        scoredDocs.push(docObj);
-      }
-    }
-  }
-  
-  // Final sort
-  scoredDocs.sort((a, b) => b.relevanceScore - a.relevanceScore);
-  
-  return scoredDocs.slice(0, parseInt(process.env.SEARCH_RESULTS_LIMIT) || 50);
 }
 
 async function generateRAGResponse(query, context) {

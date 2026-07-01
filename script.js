@@ -710,7 +710,13 @@ const searchBtn = document.getElementById('searchBtn');
 if (searchBtn && searchInput) {
   searchBtn.addEventListener('click', () => {
     const query = searchInput.value.trim();
-    fetchDocuments(query);
+    let processedQuery = query;
+    if (query.length <= 10 && query.split(/\s+/).length <= 2) {
+      if (/^[A-Za-z]+$/.test(query) && query.length >= 3) {
+        processedQuery = query + ' hostel notice announcement block building';
+      }
+    }
+    fetchDocuments(processedQuery);
     if (searchSuggestions) searchSuggestions.classList.add('hidden');
   });
 }
@@ -719,16 +725,31 @@ if (searchInput) {
   searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       const query = searchInput.value.trim();
-      fetchDocuments(query);
+      let processedQuery = query;
+      if (query.length <= 10 && query.split(/\s+/).length <= 2) {
+        if (/^[A-Za-z]+$/.test(query) && query.length >= 3) {
+          processedQuery = query + ' hostel notice announcement block building';
+        }
+      }
+      fetchDocuments(processedQuery);
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
     }
   });
+  
   searchInput.addEventListener('input', () => {
     const query = searchInput.value.trim().toLowerCase();
     if (!query || cachedDocuments.length === 0) {
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
       return;
     }
+    
+    let searchQuery = query;
+    if (query.length <= 10 && query.split(/\s+/).length <= 2) {
+      if (/^[a-z]+$/.test(query) && query.length >= 3) {
+        searchQuery = query + ' hostel notice announcement block building';
+      }
+    }
+    
     let filtered = cachedDocuments.filter(doc => {
       if (currentSelectedCategory === "recommended") {
         if (currentUserBranch) {
@@ -742,8 +763,9 @@ if (searchInput) {
       }
       return true;
     });
+    
     filtered = filtered.filter(doc => {
-      const searchLower = query;
+      const searchLower = searchQuery.toLowerCase();
       const titleLower = (doc.title || '').toLowerCase();
       const titleHindiLower = (doc.titleHindi || '').toLowerCase();
       const textLower = (doc.extractedText || '').toLowerCase();
@@ -755,22 +777,22 @@ if (searchInput) {
       const yearLower = (doc.year || '').toLowerCase();
       const semesterLower = (doc.semester || '').toLowerCase();
       const sessionLower = (doc.session || '').toLowerCase();
-      return titleLower.includes(searchLower) ||
-             titleHindiLower.includes(searchLower) ||
-             textLower.includes(searchLower) ||
-             textHindiLower.includes(searchLower) ||
-             officialTypeLower.includes(searchLower) ||
-             paperTypeLower.includes(searchLower) ||
-             categoryLower.includes(searchLower) ||
-             branchLower.includes(searchLower) ||
-             yearLower.includes(searchLower) ||
-             semesterLower.includes(searchLower) ||
-             sessionLower.includes(searchLower);
+      
+      const allText = `${titleLower} ${titleHindiLower} ${textLower} ${textHindiLower} ${officialTypeLower} ${paperTypeLower} ${categoryLower} ${branchLower} ${yearLower} ${semesterLower} ${sessionLower}`;
+      
+      return allText.includes(searchLower);
     });
-    if (filtered.length === 0) { if (searchSuggestions) searchSuggestions.classList.add('hidden'); return; }
+    
+    if (filtered.length === 0) {
+      if (searchSuggestions) searchSuggestions.classList.add('hidden');
+      return;
+    }
+    
     if (searchSuggestions) {
       searchSuggestions.innerHTML = '';
-      filtered.forEach(doc => {
+      const displayCount = Math.min(filtered.length, 10);
+      for (let i = 0; i < displayCount; i++) {
+        const doc = filtered[i];
         const row = document.createElement('div');
         row.className = 'suggestion-item';
         const hasContentMatch = (doc.extractedText || '').toLowerCase().includes(query) || (doc.extractedTextHindi || '').toLowerCase().includes(query);
@@ -795,10 +817,11 @@ if (searchInput) {
           searchSuggestions.classList.add('hidden');
         });
         searchSuggestions.appendChild(row);
-      });
+      }
       searchSuggestions.classList.remove('hidden');
     }
   });
+  
   document.addEventListener('click', (e) => {
     if (searchSuggestions && !e.target.closest('.search-container')) searchSuggestions.classList.add('hidden');
   });
