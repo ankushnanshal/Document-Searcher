@@ -409,6 +409,21 @@ function tokenize(text) {
   return text.toLowerCase().split(/[\s,.\-_\'\"()\[\]{}:;!?@#$%^&*+=/\\|<>~`]+/).filter(w => w.length > 0);
 }
 
+const STOP_WORDS = new Set([
+  'a','an','the','is','are','was','were','be','been','being','of','to','in','on','at','for','with',
+  'about','me','my','mine','i','you','your','yours','we','us','our','ours','he','she','it','its',
+  'they','them','their','this','that','these','those','and','or','but','if','then','than','so',
+  'give','giving','gave','show','showing','find','finding','want','wanting','need','needing',
+  'please','tell','telling','get','getting','can','could','would','should','do','does','did',
+  'from','by','as','all','any','some','any','have','has','had','will','shall','not','no','yes',
+  'there','here','what','which','who','whom','how','when','where','why'
+]);
+
+function filterStopWords(tokens) {
+  const filtered = tokens.filter(t => !STOP_WORDS.has(t));
+  return filtered.length > 0 ? filtered : tokens;
+}
+
 function normalizeUnicode(text) {
   if (!text) return '';
   return text.normalize('NFKC');
@@ -662,12 +677,14 @@ function transliterateEnglishToHindi(englishText) {
 
 async function performHybridSearch(query, filter = {}) {
   const processedQuery = preprocessQuery(query);
-  const searchTokens = tokenize(processedQuery);
+  const rawSearchTokens = tokenize(processedQuery);
   
-  if (searchTokens.length === 0) {
+  if (rawSearchTokens.length === 0) {
     const docs = await Document.find(filter).sort({ createdAt: -1 }).limit(50);
     return docs;
   }
+  
+  const searchTokens = filterStopWords(rawSearchTokens);
   
   const searchConditions = [];
   const escapedQuery = processedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1287,8 +1304,8 @@ app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single
   try {
     if (!req.file) return res.status(400).json({ message: "No file uploaded." });
     const { title, category, docDate, year, semester, branch, paperType, officialDocType, session } = req.body;
-    const finalTitle = title || req.file.originalname;
-    if (!finalTitle.trim()) return res.status(400).json({ message: "Missing title data." });
+    let finalTitle = (title && title.trim()) ? title.trim() : req.file.originalname;
+    if (!finalTitle.trim()) finalTitle = req.file.originalname;
     const fileUrl = `${req.protocol}://${req.get("host")}/uploads/documents/${req.file.filename}`;
     const filePath = req.file.path;
     const ext = path.extname(req.file.originalname).toLowerCase();

@@ -279,6 +279,8 @@ if (uploadDocBtn && universalDocumentInput) {
       const day = String(today.getDate()).padStart(2, '0');
       docDateInput.value = `${year}-${month}-${day}`;
     }
+    const docTitleInput = document.getElementById('docTitleInput');
+    if (docTitleInput) docTitleInput.value = '';
     universalDocumentInput.click();
   });
 }
@@ -307,6 +309,11 @@ if (universalDocumentInput) {
   universalDocumentInput.addEventListener('change', (e) => {
     if (!e.target.files[0]) return;
     pendingUploadFile = e.target.files[0];
+    const docTitleInput = document.getElementById('docTitleInput');
+    if (docTitleInput) {
+      const nameWithoutExt = pendingUploadFile.name.replace(/\.[^.]+$/, '');
+      docTitleInput.value = nameWithoutExt;
+    }
     if (uploadPopup) uploadPopup.classList.remove('hidden');
   });
 }
@@ -316,13 +323,19 @@ if (closeUploadPopupBtn) {
     if (uploadPopup) uploadPopup.classList.add('hidden');
     pendingUploadFile = null;
     if (universalDocumentInput) universalDocumentInput.value = "";
+    const docTitleInput = document.getElementById('docTitleInput');
+    if (docTitleInput) docTitleInput.value = '';
   });
 }
 
 if (confirmUploadBtn) {
   confirmUploadBtn.addEventListener('click', async () => {
-    if (!pendingUploadFile) return;
+    if (!pendingUploadFile) {
+      showNotification("No file selected.");
+      return;
+    }
     const categorySelect = document.getElementById('docCategorySelect');
+    const docTitleInput = document.getElementById('docTitleInput');
     const docDateInput = document.getElementById('docDateInput');
     const docSessionSelect = document.getElementById('docSessionSelect');
     const docTypeSelect = document.getElementById('docTypeSelect');
@@ -331,9 +344,15 @@ if (confirmUploadBtn) {
     const officialDocSessionSelect = document.getElementById('officialDocSessionSelect');
     const officialDocSemSelect = document.getElementById('officialDocSemSelect');
     const officialDocBranchSelect = document.getElementById('officialDocBranchSelect');
-    if (!categorySelect || !categorySelect.value) { showNotification("Please select a resource category."); return; }
+    
+    if (!categorySelect || !categorySelect.value) {
+      showNotification("Please select a resource category.");
+      return;
+    }
+    
     const category = categorySelect.value;
     let finalCategory = category === 'Official' ? 'Official Update' : 'University Paper';
+    
     let selectedDate = docDateInput ? docDateInput.value : "";
     if (!selectedDate) {
       const today = new Date();
@@ -342,11 +361,24 @@ if (confirmUploadBtn) {
       const day = String(today.getDate()).padStart(2, '0');
       selectedDate = `${year}-${month}-${day}`;
     }
+    
+    let customTitle = '';
+    if (docTitleInput) {
+      customTitle = docTitleInput.value.trim();
+    }
+    
     const formData = new FormData();
     formData.append('file', pendingUploadFile);
-    formData.append('title', pendingUploadFile.name);
+    
+    if (customTitle && customTitle.length > 0) {
+      formData.append('title', customTitle);
+    } else {
+      formData.append('title', pendingUploadFile.name);
+    }
+    
     formData.append('category', finalCategory);
     formData.append('docDate', selectedDate);
+    
     if (finalCategory === 'University Paper') {
       formData.append('year', docSessionSelect ? docSessionSelect.value : '2024-25');
       formData.append('semester', docSemSelect ? docSemSelect.value : '1');
@@ -359,23 +391,38 @@ if (confirmUploadBtn) {
       formData.append('semester', officialDocSemSelect ? officialDocSemSelect.value : '1');
       formData.append('branch', officialDocBranchSelect ? officialDocBranchSelect.value : 'All Branches');
     }
+    
     try {
       const response = await fetch(`${API_URL}/documents/upload`, {
         method: "POST",
-        headers: { "Authorization": `Bearer ${authToken}` },
+        headers: {
+          "Authorization": `Bearer ${authToken}`
+        },
         body: formData
       });
+      
       const data = await response.json();
+      
       if (response.ok) {
         showNotification("Document uploaded and indexed successfully!");
+        if (docTitleInput) {
+          docTitleInput.value = '';
+        }
         fetchDocuments(searchInput ? searchInput.value.trim() : "");
-        if (uploadPopup) uploadPopup.classList.add('hidden');
+        if (uploadPopup) {
+          uploadPopup.classList.add('hidden');
+        }
         pendingUploadFile = null;
-        if (universalDocumentInput) universalDocumentInput.value = "";
+        if (universalDocumentInput) {
+          universalDocumentInput.value = "";
+        }
       } else {
-        showNotification(data.message);
+        showNotification(data.message || "Upload failed.");
       }
-    } catch (err) { showNotification("Network error uploading document."); }
+    } catch (err) {
+      console.error("Upload error:", err);
+      showNotification("Network error uploading document.");
+    }
   });
 }
 
@@ -661,7 +708,9 @@ function openPreviewModal(title, fileUrl, docId) {
     return;
   }
   const lowerTitle = title.toLowerCase();
-  if (lowerTitle.endsWith('.pdf')) {
+  const fileExtension = fileUrl.split('.').pop().toLowerCase().split('?')[0];
+  
+  if (lowerTitle.endsWith('.pdf') || fileExtension === 'pdf') {
     const iframe = document.createElement('iframe');
     iframe.src = fileUrl;
     iframe.style.width = '100%';
@@ -670,7 +719,10 @@ function openPreviewModal(title, fileUrl, docId) {
     iframe.style.borderRadius = '8px';
     iframe.style.display = 'block';
     previewContainer.appendChild(iframe);
-  } else if (lowerTitle.endsWith('.png') || lowerTitle.endsWith('.jpg') || lowerTitle.endsWith('.jpeg') || lowerTitle.endsWith('.gif') || lowerTitle.endsWith('.webp') || lowerTitle.endsWith('.tiff')) {
+  } else if (lowerTitle.endsWith('.png') || lowerTitle.endsWith('.jpg') || lowerTitle.endsWith('.jpeg') || 
+             lowerTitle.endsWith('.gif') || lowerTitle.endsWith('.webp') || lowerTitle.endsWith('.tiff') ||
+             fileExtension === 'png' || fileExtension === 'jpg' || fileExtension === 'jpeg' || 
+             fileExtension === 'gif' || fileExtension === 'webp' || fileExtension === 'tiff') {
     const img = document.createElement('img');
     img.src = fileUrl;
     img.style.maxWidth = '100%';
@@ -679,7 +731,9 @@ function openPreviewModal(title, fileUrl, docId) {
     img.style.borderRadius = '8px';
     img.style.display = 'block';
     previewContainer.appendChild(img);
-  } else if (lowerTitle.endsWith('.txt') || lowerTitle.endsWith('.csv') || lowerTitle.endsWith('.json') || lowerTitle.endsWith('.md')) {
+  } else if (lowerTitle.endsWith('.txt') || lowerTitle.endsWith('.csv') || lowerTitle.endsWith('.json') || 
+             lowerTitle.endsWith('.md') || fileExtension === 'txt' || fileExtension === 'csv' || 
+             fileExtension === 'json' || fileExtension === 'md') {
     const iframe = document.createElement('iframe');
     iframe.src = fileUrl;
     iframe.style.width = '100%';
@@ -689,12 +743,98 @@ function openPreviewModal(title, fileUrl, docId) {
     iframe.style.backgroundColor = '#ffffff';
     iframe.style.display = 'block';
     previewContainer.appendChild(iframe);
+  } else if (lowerTitle.endsWith('.docx') || lowerTitle.endsWith('.doc') || 
+             fileExtension === 'docx' || fileExtension === 'doc') {
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.justifyContent = 'center';
+    wrapper.style.padding = '40px 20px';
+    wrapper.style.gap = '20px';
+    wrapper.style.color = '#e2e8f0';
+    wrapper.style.textAlign = 'center';
+    wrapper.innerHTML = `
+      <i class="fa-solid fa-file-word" style="font-size: 4rem; color: #2b5797;"></i>
+      <h3 style="color: #f1f5f9; font-weight: 600;">Microsoft Word Document</h3>
+      <p style="color: #94a3b8; max-width: 400px; margin: 0 auto;">Word documents cannot be previewed directly in the browser.</p>
+      <div style="display: flex; gap: 16px; margin-top: 12px;">
+        <a href="${fileUrl}" target="_blank" rel="noopener" style="background: var(--accent-gradient); color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-download"></i> Download
+        </a>
+        <a href="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}" target="_blank" rel="noopener" style="background: rgba(255,255,255,0.08); color: #e2e8f0; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-glass);">
+          <i class="fa-solid fa-eye"></i> View Online
+        </a>
+      </div>
+    `;
+    previewContainer.appendChild(wrapper);
+  } else if (lowerTitle.endsWith('.xlsx') || lowerTitle.endsWith('.xls') || 
+             fileExtension === 'xlsx' || fileExtension === 'xls') {
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.justifyContent = 'center';
+    wrapper.style.padding = '40px 20px';
+    wrapper.style.gap = '20px';
+    wrapper.style.color = '#e2e8f0';
+    wrapper.style.textAlign = 'center';
+    wrapper.innerHTML = `
+      <i class="fa-solid fa-file-excel" style="font-size: 4rem; color: #217346;"></i>
+      <h3 style="color: #f1f5f9; font-weight: 600;">Excel Spreadsheet</h3>
+      <p style="color: #94a3b8; max-width: 400px; margin: 0 auto;">Excel documents cannot be previewed directly in the browser.</p>
+      <div style="display: flex; gap: 16px; margin-top: 12px;">
+        <a href="${fileUrl}" target="_blank" rel="noopener" style="background: var(--accent-gradient); color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-download"></i> Download
+        </a>
+        <a href="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}" target="_blank" rel="noopener" style="background: rgba(255,255,255,0.08); color: #e2e8f0; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-glass);">
+          <i class="fa-solid fa-eye"></i> View Online
+        </a>
+      </div>
+    `;
+    previewContainer.appendChild(wrapper);
+  } else if (lowerTitle.endsWith('.pptx') || lowerTitle.endsWith('.ppt') || 
+             fileExtension === 'pptx' || fileExtension === 'ppt') {
+    const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.justifyContent = 'center';
+    wrapper.style.padding = '40px 20px';
+    wrapper.style.gap = '20px';
+    wrapper.style.color = '#e2e8f0';
+    wrapper.style.textAlign = 'center';
+    wrapper.innerHTML = `
+      <i class="fa-solid fa-file-powerpoint" style="font-size: 4rem; color: #d24726;"></i>
+      <h3 style="color: #f1f5f9; font-weight: 600;">PowerPoint Presentation</h3>
+      <p style="color: #94a3b8; max-width: 400px; margin: 0 auto;">PowerPoint documents cannot be previewed directly in the browser.</p>
+      <div style="display: flex; gap: 16px; margin-top: 12px;">
+        <a href="${fileUrl}" target="_blank" rel="noopener" style="background: var(--accent-gradient); color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
+          <i class="fa-solid fa-download"></i> Download
+        </a>
+        <a href="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}" target="_blank" rel="noopener" style="background: rgba(255,255,255,0.08); color: #e2e8f0; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-glass);">
+          <i class="fa-solid fa-eye"></i> View Online
+        </a>
+      </div>
+    `;
+    previewContainer.appendChild(wrapper);
   } else {
     const wrapper = document.createElement('div');
+    wrapper.style.display = 'flex';
+    wrapper.style.flexDirection = 'column';
+    wrapper.style.alignItems = 'center';
+    wrapper.style.justifyContent = 'center';
+    wrapper.style.padding = '40px 20px';
+    wrapper.style.gap = '16px';
     wrapper.style.color = '#94a3b8';
-    wrapper.style.padding = '24px';
     wrapper.style.textAlign = 'center';
-    wrapper.innerHTML = `Preview not supported for this file type.<br><a href="${fileUrl}" target="_blank" rel="noopener" style="color:#a5b4fc;">Open file in new tab</a>`;
+    wrapper.innerHTML = `
+      <i class="fa-solid fa-file" style="font-size: 3rem; color: #64748b;"></i>
+      <p style="color: #94a3b8; max-width: 400px;">Preview not supported for this file type.</p>
+      <a href="${fileUrl}" target="_blank" rel="noopener" style="background: var(--accent-gradient); color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; margin-top: 8px;">
+        <i class="fa-solid fa-arrow-up-right-from-square"></i> Open file in new tab
+      </a>
+    `;
     previewContainer.appendChild(wrapper);
   }
 }
@@ -710,13 +850,7 @@ const searchBtn = document.getElementById('searchBtn');
 if (searchBtn && searchInput) {
   searchBtn.addEventListener('click', () => {
     const query = searchInput.value.trim();
-    let processedQuery = query;
-    if (query.length <= 10 && query.split(/\s+/).length <= 2) {
-      if (/^[A-Za-z]+$/.test(query) && query.length >= 3) {
-        processedQuery = query + ' hostel notice announcement block building';
-      }
-    }
-    fetchDocuments(processedQuery);
+    fetchDocuments(query);
     if (searchSuggestions) searchSuggestions.classList.add('hidden');
   });
 }
@@ -725,13 +859,7 @@ if (searchInput) {
   searchInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       const query = searchInput.value.trim();
-      let processedQuery = query;
-      if (query.length <= 10 && query.split(/\s+/).length <= 2) {
-        if (/^[A-Za-z]+$/.test(query) && query.length >= 3) {
-          processedQuery = query + ' hostel notice announcement block building';
-        }
-      }
-      fetchDocuments(processedQuery);
+      fetchDocuments(query);
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
     }
   });
@@ -744,11 +872,6 @@ if (searchInput) {
     }
     
     let searchQuery = query;
-    if (query.length <= 10 && query.split(/\s+/).length <= 2) {
-      if (/^[a-z]+$/.test(query) && query.length >= 3) {
-        searchQuery = query + ' hostel notice announcement block building';
-      }
-    }
     
     let filtered = cachedDocuments.filter(doc => {
       if (currentSelectedCategory === "recommended") {
