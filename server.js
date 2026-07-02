@@ -26,6 +26,12 @@ const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/eduvault";
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "ankushadmin@gmail.com").split(",").map(e => e.toLowerCase().trim());
+const CHUNK_SIZE = parseInt(process.env.CHUNK_SIZE) || 500;
+const CHUNK_OVERLAP = parseInt(process.env.CHUNK_OVERLAP) || 100;
+const MIN_CHUNK_LENGTH = parseInt(process.env.MIN_CHUNK_LENGTH) || 100;
+const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "gemini-embedding-001";
+const EMBEDDING_DIMENSION = parseInt(process.env.EMBEDDING_DIMENSION) || 768;
+const SEARCH_RESULTS_LIMIT = parseInt(process.env.SEARCH_RESULTS_LIMIT) || 50;
 
 const uploadDir = path.join(__dirname, "uploads", "documents");
 const tessdataDir = path.join(__dirname, "tessdata");
@@ -40,13 +46,66 @@ let openai = null;
 try {
   if (process.env.GEMINI_API_KEY) {
     genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    console.log("Gemini AI initialized");
   }
   if (process.env.OPENAI_API_KEY) {
     openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    console.log("OpenAI initialized");
   }
-} catch (e) {}
+} catch (e) {
+  console.log("AI initialization warning:", e.message);
+}
 
-mongoose.connect(MONGO_URI).then(() => console.log("MongoDB connected")).catch(err => console.error("MongoDB error:", err.message));
+mongoose.connect(MONGO_URI).then(() => {
+  console.log("MongoDB connected");
+  createTextIndexes();
+}).catch(err => console.error("MongoDB error:", err.message));
+
+async function createTextIndexes() {
+  try {
+    const db = mongoose.connection.db;
+    const collection = db.collection('documents');
+    
+    const existingIndexes = await collection.indexes();
+    const textIndex = existingIndexes.find(idx => idx.key && idx.key._fts === "text");
+    
+    if (textIndex) {
+      console.log(`Dropping existing text index: ${textIndex.name}`);
+      await collection.dropIndex(textIndex.name);
+    }
+    
+    await collection.createIndex(
+      { 
+        title: "text", 
+        titleHindi: "text", 
+        titleRomanized: "text",
+        extractedText: "text", 
+        extractedTextHindi: "text",
+        extractedTextRomanized: "text",
+        textContent: "text",
+        textContentHindi: "text",
+        textContentRomanized: "text"
+      },
+      { 
+        weights: {
+          title: 10,
+          titleHindi: 10,
+          titleRomanized: 8,
+          extractedText: 5,
+          extractedTextHindi: 5,
+          extractedTextRomanized: 4,
+          textContent: 3,
+          textContentHindi: 3,
+          textContentRomanized: 2
+        },
+        name: "document_text_search_v2"
+      }
+    );
+    console.log("Text indexes created successfully");
+  } catch (e) {
+    console.log("Text index creation warning:", e.message);
+  }
+}
 
 const userSchema = new mongoose.Schema({
   name: { type: String, required: true },
@@ -99,40 +158,48 @@ const documentSchema = new mongoose.Schema({
   embedding: { type: [Number], default: [] },
   processingStatus: { type: String, enum: ["pending", "processing", "completed", "failed"], default: "pending" },
   processingError: { type: String, default: "" },
-  pageTexts: { type: [String], default: [] }
+  pageTexts: { type: [String], default: [] },
+  fullTextSearchScore: { type: Number, default: 0 }
 });
 
-documentSchema.index({
-  title: "text",
-  extractedText: "text",
-  textContent: "text",
-  titleHindi: "text",
-  extractedTextHindi: "text",
-  textContentHindi: "text",
-  titleRomanized: "text",
-  extractedTextRomanized: "text",
-  textContentRomanized: "text"
+const chunkSchema = new mongoose.Schema({
+  documentId: { type: mongoose.Schema.Types.ObjectId, ref: "Document", required: true },
+  chunkIndex: { type: Number, required: true },
+  text: { type: String, required: true },
+  textHindi: { type: String, default: "" },
+  textRomanized: { type: String, default: "" },
+  pageNumber: { type: Number, default: 0 },
+  startOffset: { type: Number, default: 0 },
+  endOffset: { type: Number, default: 0 },
+  embedding: { type: [Number], default: [] },
+  metadata: {
+    title: { type: String, default: "" },
+    category: { type: String, default: "" },
+    branch: { type: String, default: "" },
+    semester: { type: String, default: "" },
+    year: { type: String, default: "" },
+    session: { type: String, default: "" },
+    officialDocType: { type: String, default: "" },
+    paperType: { type: String, default: "" }
+  },
+  createdAt: { type: Date, default: Date.now }
 });
-documentSchema.index({ searchTerms: 1 });
-documentSchema.index({ searchTermsHindi: 1 });
-documentSchema.index({ searchTermsRomanized: 1 });
-documentSchema.index({ keywords: 1 });
-documentSchema.index({ keywordsHindi: 1 });
-documentSchema.index({ keywordsRomanized: 1 });
-documentSchema.index({ keywordSynonyms: 1 });
-documentSchema.index({ keywordSynonymsHindi: 1 });
-documentSchema.index({ category: 1, year: 1, semester: 1, branch: 1 });
-documentSchema.index({ processingStatus: 1 });
+
+chunkSchema.index({ documentId: 1, chunkIndex: 1 });
+chunkSchema.index({ text: "text" });
+chunkSchema.index({ "metadata.category": 1, "metadata.branch": 1 });
 
 const historySchema = new mongoose.Schema({
   email: { type: String, required: true, lowercase: true, trim: true },
   title: { type: String, required: true },
   documentId: { type: mongoose.Schema.Types.ObjectId, ref: "Document" },
+  chunkId: { type: mongoose.Schema.Types.ObjectId, ref: "Chunk" },
   timestamp: { type: Date, default: Date.now }
 });
 
 const User = mongoose.model("User", userSchema);
 const Document = mongoose.model("Document", documentSchema);
+const Chunk = mongoose.model("Chunk", chunkSchema);
 const History = mongoose.model("History", historySchema);
 
 function isAdminEmail(email) {
@@ -229,91 +296,101 @@ function getUniqueWords(text) {
   return unique;
 }
 
-function generateHindiSearchVariants(query) {
-  const variants = [];
-  const original = query.trim().toLowerCase();
-  if (!original) return variants;
-  variants.push(original);
-  const romanized = romanizeHindi(original);
-  if (romanized !== original) variants.push(romanized);
-  const words = original.split(/\s+/);
-  for (const word of words) {
-    if (word.length > 1) {
-      const wordRomanized = romanizeHindi(word);
-      if (wordRomanized !== word) variants.push(wordRomanized);
-      if (wordRomanized.length > 1) {
-        const variations = [
-          wordRomanized,
-          wordRomanized.replace(/aa/g, 'a'),
-          wordRomanized.replace(/ee/g, 'i'),
-          wordRomanized.replace(/oo/g, 'u'),
-          wordRomanized.replace(/sh/g, 's'),
-          wordRomanized.replace(/ch/g, 'c'),
-          wordRomanized.replace(/kh/g, 'k'),
-          wordRomanized.replace(/ph/g, 'p'),
-          wordRomanized.replace(/bh/g, 'b'),
-          wordRomanized.replace(/dh/g, 'd'),
-          wordRomanized.replace(/gh/g, 'g'),
-          wordRomanized.replace(/jh/g, 'j'),
-          wordRomanized.replace(/th/g, 't'),
-          wordRomanized.replace(/ng/g, 'n'),
-          wordRomanized.replace(/ny/g, 'n'),
-          wordRomanized.replace(/ksh/g, 'k')
-        ];
-        for (const v of variations) {
-          if (v !== wordRomanized && !variants.includes(v)) variants.push(v);
-        }
+async function generateEmbedding(text) {
+  if (!text || text.length < 5) {
+    return [];
+  }
+  try {
+    const cleanText = text.substring(0, 2000).trim();
+    if (genAI) {
+      const model = genAI.getGenerativeModel({ model: "embedding-001" });
+      const result = await model.embedContent(cleanText);
+      if (result && result.embedding && result.embedding.values) {
+        return result.embedding.values;
+      }
+      return [];
+    }
+    if (openai) {
+      const response = await openai.embeddings.create({
+        model: "text-embedding-ada-002",
+        input: cleanText
+      });
+      if (response && response.data && response.data.length > 0) {
+        return response.data[0].embedding || [];
+      }
+      return [];
+    }
+  } catch (e) {
+    console.error("Embedding generation error:", e.message);
+    return [];
+  }
+  return [];
+}
+
+function chunkText(text, chunkSize = CHUNK_SIZE, overlap = CHUNK_OVERLAP) {
+  if (!text || text.length < MIN_CHUNK_LENGTH) {
+    return text.length > 0 ? [{ text: text.substring(0, 500), index: 0 }] : [];
+  }
+  
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  const chunks = [];
+  let currentChunk = "";
+  let chunkIndex = 0;
+  
+  for (const sentence of sentences) {
+    if (currentChunk.length + sentence.length <= chunkSize) {
+      currentChunk += (currentChunk ? " " : "") + sentence;
+    } else {
+      if (currentChunk.length >= MIN_CHUNK_LENGTH) {
+        chunks.push({ text: currentChunk.trim(), index: chunkIndex++ });
+        const words = currentChunk.split(/\s+/);
+        const overlapWords = words.slice(-Math.floor(overlap / 5));
+        currentChunk = overlapWords.join(" ") + " " + sentence;
+      } else {
+        currentChunk += (currentChunk ? " " : "") + sentence;
       }
     }
   }
-  const unique = [];
-  const seen = new Set();
-  for (const v of variants) {
-    const normalized = v.toLowerCase().trim();
-    if (!seen.has(normalized) && normalized.length > 0) {
-      seen.add(normalized);
-      unique.push(v);
-    }
+  
+  if (currentChunk.length >= MIN_CHUNK_LENGTH) {
+    chunks.push({ text: currentChunk.trim(), index: chunkIndex });
+  } else if (chunks.length > 0 && currentChunk.length > 0) {
+    chunks[chunks.length - 1].text += " " + currentChunk;
   }
-  return unique.slice(0, 50);
+  
+  return chunks;
 }
 
-function generateEnglishSearchVariants(query) {
-  const variants = [];
-  const original = query.trim().toLowerCase();
-  if (!original) return variants;
-  variants.push(original);
-  const words = original.split(/\s+/);
-  for (const word of words) {
-    if (word.length > 1) {
-      variants.push(word);
-      if (word.endsWith('s') && word.length > 2) variants.push(word.slice(0, -1));
-      if (word.endsWith('es') && word.length > 3) variants.push(word.slice(0, -2));
-      if (word.endsWith('ed') && word.length > 3) variants.push(word.slice(0, -2));
-      if (word.endsWith('ing') && word.length > 4) variants.push(word.slice(0, -3));
-      if (word.endsWith('tion') && word.length > 5) variants.push(word.slice(0, -4) + 't');
-      if (word.endsWith('ly') && word.length > 3) variants.push(word.slice(0, -2));
-      if (word.endsWith('al') && word.length > 3) variants.push(word.slice(0, -2));
+async function embedDocumentChunks(document, chunks, metadata) {
+  const embeddedChunks = [];
+  for (const chunk of chunks) {
+    const textToEmbed = chunk.text;
+    const embedding = await generateEmbedding(textToEmbed);
+    if (embedding && embedding.length > 0) {
+      const hindiText = document.extractedTextHindi || "";
+      const romanizedText = romanizeHindi(textToEmbed);
+      embeddedChunks.push({
+        documentId: document._id,
+        chunkIndex: chunk.index,
+        text: textToEmbed,
+        textHindi: hindiText,
+        textRomanized: romanizedText,
+        pageNumber: metadata.pageNumber || 0,
+        embedding: embedding,
+        metadata: {
+          title: document.title || metadata.title || "",
+          category: document.category || metadata.category || "",
+          branch: document.branch || metadata.branch || "",
+          semester: document.semester || metadata.semester || "",
+          year: document.year || metadata.year || "",
+          session: document.session || metadata.session || "",
+          officialDocType: document.officialDocType || metadata.officialDocType || "",
+          paperType: document.paperType || metadata.paperType || ""
+        }
+      });
     }
   }
-  const romanized = romanizeHindi(original);
-  if (romanized !== original) {
-    variants.push(romanized);
-    const romanizedWords = romanized.split(/\s+/);
-    for (const rw of romanizedWords) {
-      if (rw.length > 1 && !variants.includes(rw)) variants.push(rw);
-    }
-  }
-  const unique = [];
-  const seen = new Set();
-  for (const v of variants) {
-    const normalized = v.toLowerCase().trim();
-    if (!seen.has(normalized) && normalized.length > 0) {
-      seen.add(normalized);
-      unique.push(v);
-    }
-  }
-  return unique.slice(0, 50);
+  return embeddedChunks;
 }
 
 function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedBy, category, docDate, year, semester, branch, paperType, officialDocType, session, storageName, pageTexts, ocrConfidence, ocrApplied, isScanned) {
@@ -516,89 +593,13 @@ function levenshteinDistance(a, b) {
   return matrix[b.length][a.length];
 }
 
-function calculateRelevanceScore(doc, query, searchTokens) {
-  const filename = path.basename(doc.fileUrl || '');
-  const filenameTokens = tokenize(filename);
-  const titleTokens = tokenize(doc.title || '');
-  const titleHindiTokens = tokenize(doc.titleHindi || '');
-  const titleRomanizedTokens = tokenize(doc.titleRomanized || '');
-  const textTokens = tokenize(doc.extractedText || '');
-  const textHindiTokens = tokenize(doc.extractedTextHindi || '');
-  const textRomanizedTokens = tokenize(doc.extractedTextRomanized || '');
-  const ocrTokens = tokenize(doc.textContent || '');
-  const metadataText = [doc.officialDocType || '', doc.paperType || '', doc.category || '', doc.year || '', doc.semester || '', doc.branch || '', doc.session || ''].join(' ');
-  const metadataTokens = tokenize(metadataText);
-  
-  const allTitleTokens = [...titleTokens, ...titleHindiTokens, ...titleRomanizedTokens];
-  const allTextTokens = [...textTokens, ...textHindiTokens, ...textRomanizedTokens, ...ocrTokens];
-  const allTokens = [...allTitleTokens, ...allTextTokens, ...metadataTokens, ...filenameTokens];
-  
-  const uniqueTokens = [...new Set(allTokens)];
-  
-  const exactTitleMatches = getWholeWordMatches(allTitleTokens, searchTokens);
-  const exactFilenameMatches = getWholeWordMatches(filenameTokens, searchTokens);
-  const exactContentMatches = getWholeWordMatches(allTextTokens, searchTokens);
-  const exactMatches = getWholeWordMatches(uniqueTokens, searchTokens);
-  
-  const synonymMatches = getSynonymMatches(uniqueTokens, searchTokens);
-  const romanizedMatches = getRomanizedMatches(uniqueTokens, searchTokens);
-  const fuzzyMatches = getFuzzyMatches(uniqueTokens, searchTokens);
-  
-  const exactMatchCount = exactMatches.length;
-  const titleMatchCount = exactTitleMatches.length;
-  const filenameMatchCount = exactFilenameMatches.length;
-  const contentMatchCount = exactContentMatches.length;
-  const synonymMatchCount = synonymMatches.length;
-  const romanizedMatchCount = romanizedMatches.length;
-  const fuzzyMatchCount = fuzzyMatches.length;
-  
-  let semanticMatches = 0;
-  if (doc.embedding && doc.embedding.length > 0) {
-    semanticMatches = Math.min(1, Math.floor((doc.ocrConfidence || 0) / 85));
-  }
-  
-  let score = 0;
-  score += exactMatchCount * 1000;
-  score += titleMatchCount * 800;
-  score += filenameMatchCount * 700;
-  score += contentMatchCount * 600;
-  score += synonymMatchCount * 500;
-  score += romanizedMatchCount * 400;
-  score += semanticMatches * 350;
-  score += fuzzyMatchCount * 200;
-  score += (doc.ocrConfidence || 0) * 0.5;
-  
-  let metadataScore = 0;
-  if (doc.category === query || doc.category === query.charAt(0).toUpperCase() + query.slice(1)) metadataScore += 20;
-  if (doc.officialDocType && doc.officialDocType.toLowerCase().includes(query.toLowerCase())) metadataScore += 15;
-  if (doc.paperType && doc.paperType.toLowerCase().includes(query.toLowerCase())) metadataScore += 10;
-  if (doc.branch && doc.branch.toLowerCase().includes(query.toLowerCase())) metadataScore += 5;
-  if (doc.semester && doc.semester === query) metadataScore += 5;
-  if (doc.year && doc.year.toLowerCase().includes(query.toLowerCase())) metadataScore += 5;
-  metadataScore = Math.min(metadataScore, 100);
-  score += metadataScore;
-  
-  const daysSinceUpload = (Date.now() - new Date(doc.createdAt || Date.now()).getTime()) / (1000 * 60 * 60 * 24);
-  if (daysSinceUpload < 7 && exactMatchCount > 0) score += 10;
-  else if (daysSinceUpload < 30 && exactMatchCount > 0) score += 5;
-  
-  if (exactMatchCount === 0 && synonymMatchCount === 0 && romanizedMatchCount === 0 && semanticMatches === 0 && fuzzyMatchCount === 0) {
-    score = Math.min(score, 50);
-  }
-  
-  return {
-    score: Math.round(score),
-    exactMatches: exactMatchCount,
-    titleMatches: titleMatchCount,
-    filenameMatches: filenameMatchCount,
-    contentMatches: contentMatchCount,
-    synonymMatches: synonymMatchCount,
-    romanizedMatches: romanizedMatchCount,
-    semanticMatches: semanticMatches,
-    fuzzyMatches: fuzzyMatchCount,
-    metadataScore: Math.round(metadataScore),
-    matchedTerms: exactMatches.slice(0, 10)
-  };
+function cosineSimilarity(vecA, vecB) {
+  if (!vecA || !vecB || vecA.length === 0 || vecB.length === 0) return 0;
+  const dotProduct = vecA.reduce((sum, val, i) => sum + val * (vecB[i] || 0), 0);
+  const normA = Math.sqrt(vecA.reduce((sum, val) => sum + val * val, 0));
+  const normB = Math.sqrt(vecB.reduce((sum, val) => sum + val * val, 0));
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (normA * normB);
 }
 
 function preprocessQuery(query) {
@@ -675,17 +676,289 @@ function transliterateEnglishToHindi(englishText) {
   return result;
 }
 
-async function performHybridSearch(query, filter = {}) {
-  const processedQuery = preprocessQuery(query);
-  const rawSearchTokens = tokenize(processedQuery);
+function generateHindiSearchVariants(query) {
+  const variants = [];
+  const original = query.trim().toLowerCase();
+  if (!original) return variants;
+  variants.push(original);
+  const romanized = romanizeHindi(original);
+  if (romanized !== original) variants.push(romanized);
+  const words = original.split(/\s+/);
+  for (const word of words) {
+    if (word.length > 1) {
+      const wordRomanized = romanizeHindi(word);
+      if (wordRomanized !== word) variants.push(wordRomanized);
+      if (wordRomanized.length > 1) {
+        const variations = [
+          wordRomanized,
+          wordRomanized.replace(/aa/g, 'a'),
+          wordRomanized.replace(/ee/g, 'i'),
+          wordRomanized.replace(/oo/g, 'u'),
+          wordRomanized.replace(/sh/g, 's'),
+          wordRomanized.replace(/ch/g, 'c'),
+          wordRomanized.replace(/kh/g, 'k'),
+          wordRomanized.replace(/ph/g, 'p'),
+          wordRomanized.replace(/bh/g, 'b'),
+          wordRomanized.replace(/dh/g, 'd'),
+          wordRomanized.replace(/gh/g, 'g'),
+          wordRomanized.replace(/jh/g, 'j'),
+          wordRomanized.replace(/th/g, 't'),
+          wordRomanized.replace(/ng/g, 'n'),
+          wordRomanized.replace(/ny/g, 'n'),
+          wordRomanized.replace(/ksh/g, 'k')
+        ];
+        for (const v of variations) {
+          if (v !== wordRomanized && !variants.includes(v)) variants.push(v);
+        }
+      }
+    }
+  }
+  const unique = [];
+  const seen = new Set();
+  for (const v of variants) {
+    const normalized = v.toLowerCase().trim();
+    if (!seen.has(normalized) && normalized.length > 0) {
+      seen.add(normalized);
+      unique.push(v);
+    }
+  }
+  return unique.slice(0, 50);
+}
+
+function generateEnglishSearchVariants(query) {
+  const variants = [];
+  const original = query.trim().toLowerCase();
+  if (!original) return variants;
+  variants.push(original);
+  const words = original.split(/\s+/);
+  for (const word of words) {
+    if (word.length > 1) {
+      variants.push(word);
+      if (word.endsWith('s') && word.length > 2) variants.push(word.slice(0, -1));
+      if (word.endsWith('es') && word.length > 3) variants.push(word.slice(0, -2));
+      if (word.endsWith('ed') && word.length > 3) variants.push(word.slice(0, -2));
+      if (word.endsWith('ing') && word.length > 4) variants.push(word.slice(0, -3));
+      if (word.endsWith('tion') && word.length > 5) variants.push(word.slice(0, -4) + 't');
+      if (word.endsWith('ly') && word.length > 3) variants.push(word.slice(0, -2));
+      if (word.endsWith('al') && word.length > 3) variants.push(word.slice(0, -2));
+    }
+  }
+  const romanized = romanizeHindi(original);
+  if (romanized !== original) {
+    variants.push(romanized);
+    const romanizedWords = romanized.split(/\s+/);
+    for (const rw of romanizedWords) {
+      if (rw.length > 1 && !variants.includes(rw)) variants.push(rw);
+    }
+  }
+  const unique = [];
+  const seen = new Set();
+  for (const v of variants) {
+    const normalized = v.toLowerCase().trim();
+    if (!seen.has(normalized) && normalized.length > 0) {
+      seen.add(normalized);
+      unique.push(v);
+    }
+  }
+  return unique.slice(0, 50);
+}
+
+function calculateMetadataScore(chunk, query) {
+  let score = 0;
+  const q = query.toLowerCase();
+  const metadata = chunk.metadata || {};
+  const fields = [
+    metadata.title, metadata.category, metadata.branch,
+    metadata.semester, metadata.year, metadata.session,
+    metadata.officialDocType, metadata.paperType
+  ];
+  for (const field of fields) {
+    if (field && field.toLowerCase().includes(q)) {
+      score += 0.2;
+    }
+  }
+  return Math.min(score, 1);
+}
+
+function calculateExactMatchScore(doc, query, processedQuery) {
+  let score = 0;
+  const queryLower = processedQuery.toLowerCase();
+  const titleLower = (doc.title || '').toLowerCase();
+  const titleHindiLower = (doc.titleHindi || '').toLowerCase();
+  const titleRomanizedLower = (doc.titleRomanized || '').toLowerCase();
+  const filenameLower = (doc.storageName || '').toLowerCase();
+  const originalQuery = query.toLowerCase().trim();
   
-  if (rawSearchTokens.length === 0) {
-    const docs = await Document.find(filter).sort({ createdAt: -1 }).limit(50);
+  if (titleLower === originalQuery) {
+    score += 5.0;
+  } else if (titleLower.includes(originalQuery)) {
+    score += 3.0;
+  } else if (titleLower.split(' ').some(word => word === originalQuery)) {
+    score += 2.5;
+  }
+  
+  if (titleHindiLower === originalQuery) {
+    score += 5.0;
+  } else if (titleHindiLower.includes(originalQuery)) {
+    score += 3.0;
+  }
+  
+  if (titleRomanizedLower === originalQuery) {
+    score += 4.0;
+  } else if (titleRomanizedLower.includes(originalQuery)) {
+    score += 2.5;
+  }
+  
+  if (filenameLower === originalQuery || filenameLower === originalQuery + '.pdf' || filenameLower === originalQuery + '.docx' || filenameLower === originalQuery + '.doc' || filenameLower === originalQuery + '.xlsx' || filenameLower === originalQuery + '.pptx' || filenameLower === originalQuery + '.txt') {
+    score += 4.0;
+  } else if (filenameLower.includes(originalQuery)) {
+    score += 2.0;
+  }
+  
+  if (doc.category && doc.category.toLowerCase().includes(originalQuery)) {
+    score += 1.0;
+  }
+  
+  if (doc.officialDocType && doc.officialDocType.toLowerCase().includes(originalQuery)) {
+    score += 1.0;
+  }
+  
+  if (doc.paperType && doc.paperType.toLowerCase().includes(originalQuery)) {
+    score += 1.0;
+  }
+  
+  if (doc.branch && doc.branch.toLowerCase().includes(originalQuery)) {
+    score += 0.5;
+  }
+  
+  if (doc.year && doc.year.toLowerCase().includes(originalQuery)) {
+    score += 0.5;
+  }
+  
+  if (doc.semester && doc.semester.toLowerCase().includes(originalQuery)) {
+    score += 0.5;
+  }
+  
+  const queryTokens = tokenize(processedQuery);
+  const titleTokens = tokenize(titleLower);
+  const matchedTokens = queryTokens.filter(t => titleTokens.includes(t));
+  if (matchedTokens.length > 0) {
+    score += matchedTokens.length * 0.5;
+  }
+  
+  return Math.min(score, 10);
+}
+
+function calculateKeywordScore(doc, queryTokens) {
+  if (!queryTokens || queryTokens.length === 0) return 0;
+  let score = 0;
+  const allText = `${doc.title || ''} ${doc.titleHindi || ''} ${doc.titleRomanized || ''} ${doc.extractedText || ''} ${doc.extractedTextHindi || ''} ${doc.extractedTextRomanized || ''} ${doc.keywords || []} ${doc.keywordsHindi || []} ${doc.searchTerms || []} ${doc.searchTermsHindi || []}`.toLowerCase();
+  const tokens = tokenize(allText);
+  const matched = queryTokens.filter(t => tokens.includes(t));
+  if (matched.length > 0) {
+    score = Math.min(matched.length / queryTokens.length, 1) * 1.5;
+  }
+  return score;
+}
+
+async function semanticSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
+  const processedQuery = preprocessQuery(query);
+  if (!processedQuery || processedQuery.length < 2) {
+    const docs = await Document.find(filter).sort({ createdAt: -1 }).limit(limit);
     return docs;
   }
   
-  const searchTokens = filterStopWords(rawSearchTokens);
+  const queryEmbedding = await generateEmbedding(processedQuery);
+  if (!queryEmbedding || queryEmbedding.length === 0) {
+    return [];
+  }
   
+  const filterQuery = {};
+  if (filter.category) filterQuery['metadata.category'] = filter.category;
+  if (filter.branch) filterQuery['metadata.branch'] = filter.branch;
+  if (filter.semester) filterQuery['metadata.semester'] = filter.semester;
+  if (filter.year) filterQuery['metadata.year'] = filter.year;
+  
+  let chunks = await Chunk.find(filterQuery).limit(200);
+  
+  if (chunks.length === 0) {
+    return [];
+  }
+  
+  const scoredChunks = chunks.map(chunk => {
+    const similarity = cosineSimilarity(queryEmbedding, chunk.embedding || []);
+    const textTokens = tokenize(chunk.text);
+    const queryTokens = tokenize(processedQuery);
+    const keywordScore = textTokens.filter(t => queryTokens.includes(t)).length / Math.max(queryTokens.length, 1);
+    const metadataScore = calculateMetadataScore(chunk, processedQuery);
+    const combinedScore = (similarity * 0.6) + (keywordScore * 0.3) + (metadataScore * 0.1);
+    return { chunk, similarity, keywordScore, metadataScore, combinedScore };
+  });
+  
+  scoredChunks.sort((a, b) => b.combinedScore - a.combinedScore);
+  
+  const topChunks = scoredChunks.slice(0, limit);
+  const documentIds = [...new Set(topChunks.map(sc => sc.chunk.documentId.toString()))];
+  const documents = await Document.find({ _id: { $in: documentIds } });
+  const docMap = {};
+  documents.forEach(doc => { docMap[doc._id.toString()] = doc; });
+  
+  return topChunks.map(sc => {
+    const doc = docMap[sc.chunk.documentId.toString()];
+    if (!doc) return null;
+    const docObj = doc.toObject ? doc.toObject() : doc;
+    docObj._ranking = {
+      score: Math.round(sc.combinedScore * 1000),
+      semanticScore: Math.round(sc.similarity * 1000),
+      keywordScore: Math.round(sc.keywordScore * 1000),
+      metadataScore: Math.round(sc.metadataScore * 1000),
+      matchedChunk: sc.chunk.text.substring(0, 300) + (sc.chunk.text.length > 300 ? '...' : ''),
+      chunkId: sc.chunk._id
+    };
+    docObj.relevanceScore = Math.round(sc.combinedScore * 1000);
+    docObj.semanticScore = sc.similarity;
+    return docObj;
+  }).filter(Boolean);
+}
+
+async function fullTextSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
+  const processedQuery = preprocessQuery(query);
+  if (!processedQuery || processedQuery.length < 2) {
+    return [];
+  }
+  
+  try {
+    const filterConditions = {};
+    if (filter.category) filterConditions.category = filter.category;
+    if (filter.branch) filterConditions.branch = filter.branch;
+    if (filter.semester) filterConditions.semester = filter.semester;
+    if (filter.year) filterConditions.year = filter.year;
+    
+    const textSearchQuery = { $text: { $search: processedQuery } };
+    const combinedQuery = Object.keys(filterConditions).length > 0 ? { $and: [textSearchQuery, filterConditions] } : textSearchQuery;
+    
+    const results = await Document.find(
+      combinedQuery,
+      { score: { $meta: "textScore" } }
+    )
+    .sort({ score: { $meta: "textScore" } })
+    .limit(limit);
+    
+    return results.map(doc => {
+      const docObj = doc.toObject ? doc.toObject() : doc;
+      docObj.fullTextScore = doc._doc ? doc._doc.score : 0;
+      docObj.relevanceScore = Math.round((doc._doc ? doc._doc.score : 0) * 100);
+      return docObj;
+    });
+  } catch (e) {
+    console.log("Full text search error:", e.message);
+    return [];
+  }
+}
+
+async function fallbackSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
+  const processedQuery = preprocessQuery(query);
+  const searchTokens = filterStopWords(tokenize(processedQuery));
   const searchConditions = [];
   const escapedQuery = processedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   
@@ -705,6 +978,10 @@ async function performHybridSearch(query, filter = {}) {
   searchConditions.push({ semester: { $regex: escapedQuery, $options: "i" } });
   searchConditions.push({ branch: { $regex: escapedQuery, $options: "i" } });
   searchConditions.push({ session: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ keywords: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ keywordsHindi: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ searchTerms: { $regex: escapedQuery, $options: "i" } });
+  searchConditions.push({ searchTermsHindi: { $regex: escapedQuery, $options: "i" } });
   
   for (const token of searchTokens) {
     if (token.length < 2) continue;
@@ -743,97 +1020,103 @@ async function performHybridSearch(query, filter = {}) {
   if (filter.year) dbFilter.year = filter.year;
   
   const finalQuery = searchConditions.length > 0 ? { $or: searchConditions, ...dbFilter } : dbFilter;
-  let docs = await Document.find(finalQuery).limit(200);
+  let docs = await Document.find(finalQuery).limit(limit);
   
-  let textSearchDocs = [];
-  try {
-    textSearchDocs = await Document.find(
-      { $text: { $search: processedQuery }, ...dbFilter },
-      { score: { $meta: "textScore" } }
-    ).sort({ score: { $meta: "textScore" } }).limit(100);
-  } catch (e) {}
-  
-  const docIds = new Set();
-  const allDocs = [];
-  
-  for (const doc of docs) {
-    if (!docIds.has(doc._id.toString())) {
-      docIds.add(doc._id.toString());
-      allDocs.push(doc);
+  if (docs.length === 0 && processedQuery.length > 2) {
+    const chunkMatch = await Chunk.find({
+      $text: { $search: processedQuery },
+      ...(filter.category ? { 'metadata.category': filter.category } : {}),
+      ...(filter.branch ? { 'metadata.branch': filter.branch } : {})
+    }).limit(limit);
+    
+    if (chunkMatch.length > 0) {
+      const docIds = [...new Set(chunkMatch.map(c => c.documentId.toString()))];
+      docs = await Document.find({ _id: { $in: docIds } });
     }
   }
   
-  for (const doc of textSearchDocs) {
-    if (!docIds.has(doc._id.toString())) {
-      docIds.add(doc._id.toString());
-      allDocs.push(doc);
-    }
+  return docs.slice(0, limit);
+}
+
+async function hybridSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
+  const processedQuery = preprocessQuery(query);
+  const queryTokens = filterStopWords(tokenize(processedQuery));
+  
+  if (!processedQuery || processedQuery.length < 2) {
+    const docs = await Document.find(filter).sort({ createdAt: -1 }).limit(limit);
+    return docs;
   }
   
-  let semanticResults = [];
-  try {
-    if (process.env.VECTOR_SEARCH_ENABLED === 'true' || process.env.SEMANTIC_SEARCH_ENABLED === 'true') {
-      const embedding = await generateEmbedding(processedQuery);
-      if (embedding && embedding.length > 0) {
-        semanticResults = await Document.aggregate([
-          {
-            $vectorSearch: {
-              index: "default",
-              path: "embedding",
-              queryVector: embedding,
-              numCandidates: 100,
-              limit: 50,
-              filter: dbFilter
-            }
-          },
-          {
-            $project: {
-              _id: 1,
-              score: { $meta: "vectorSearchScore" }
-            }
-          }
-        ]);
+  const [semanticResults, fullTextResults, fallbackResults] = await Promise.all([
+    semanticSearch(query, filter, limit * 2),
+    fullTextSearch(query, filter, limit * 2),
+    fallbackSearch(query, filter, limit * 2)
+  ]);
+  
+  const resultMap = new Map();
+  const scoreMap = new Map();
+  const detailMap = new Map();
+  
+  for (const doc of semanticResults) {
+    const id = doc._id.toString();
+    const semanticScore = doc.semanticScore || 0;
+    const semanticWeight = 2.0;
+    resultMap.set(id, doc);
+    scoreMap.set(id, (scoreMap.get(id) || 0) + semanticScore * semanticWeight);
+    detailMap.set(id, { semanticScore: semanticScore * semanticWeight });
+  }
+  
+  for (const doc of fullTextResults) {
+    const id = doc._id.toString();
+    const textScore = doc.fullTextScore || 0;
+    const textWeight = 2.0;
+    if (!resultMap.has(id)) {
+      resultMap.set(id, doc);
+    }
+    scoreMap.set(id, (scoreMap.get(id) || 0) + textScore * textWeight);
+    const details = detailMap.get(id) || {};
+    details.textScore = textScore * textWeight;
+    detailMap.set(id, details);
+  }
+  
+  for (const doc of fallbackResults) {
+    const id = doc._id.toString();
+    if (resultMap.has(id)) {
+      const existing = resultMap.get(id);
+      if (existing.relevanceScore && doc.relevanceScore && doc.relevanceScore > existing.relevanceScore) {
+        resultMap.set(id, doc);
       }
+    } else {
+      resultMap.set(id, doc);
     }
-  } catch (e) {}
+    const fallbackScore = doc.relevanceScore || 0;
+    const fallbackWeight = 1.0;
+    scoreMap.set(id, (scoreMap.get(id) || 0) + fallbackScore * fallbackWeight);
+    const details = detailMap.get(id) || {};
+    details.fallbackScore = fallbackScore * fallbackWeight;
+    detailMap.set(id, details);
+  }
   
-  const scoredDocs = allDocs.map(doc => {
-    const docObj = doc.toObject ? doc.toObject() : doc;
-    const result = calculateRelevanceScore(doc, processedQuery, searchTokens);
-    const semanticMatch = semanticResults.find(s => s._id.toString() === doc._id.toString());
-    if (semanticMatch && semanticMatch.score) {
-      result.semanticMatches = Math.max(result.semanticMatches, Math.round(semanticMatch.score * 2));
-      result.score += Math.round(semanticMatch.score * 200);
-    }
-    docObj._ranking = result;
-    docObj.relevanceScore = result.score;
-    return docObj;
+  const finalResults = Array.from(resultMap.values()).map(doc => {
+    const id = doc._id.toString();
+    const currentScore = scoreMap.get(id) || 0;
+    const exactMatchScore = calculateExactMatchScore(doc, query, processedQuery);
+    const keywordScore = calculateKeywordScore(doc, queryTokens);
+    const totalScore = currentScore + (exactMatchScore * 100) + (keywordScore * 50);
+    doc.relevanceScore = Math.round(totalScore);
+    const details = detailMap.get(id) || {};
+    doc._rankingDetails = {
+      ...details,
+      exactMatchScore: exactMatchScore * 100,
+      keywordScore: keywordScore * 50,
+      totalScore: totalScore
+    };
+    return doc;
   });
   
-  scoredDocs.sort((a, b) => {
-    const aScore = a._ranking.score || 0;
-    const bScore = b._ranking.score || 0;
-    if (aScore !== bScore) return bScore - aScore;
-    if (a._ranking.exactMatches !== b._ranking.exactMatches) return b._ranking.exactMatches - a._ranking.exactMatches;
-    if (a._ranking.titleMatches !== b._ranking.titleMatches) return b._ranking.titleMatches - a._ranking.titleMatches;
-    if (a._ranking.semanticMatches !== b._ranking.semanticMatches) return b._ranking.semanticMatches - a._ranking.semanticMatches;
-    return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-  });
+  finalResults.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
   
-  const filteredDocs = scoredDocs.filter(doc => {
-    const rank = doc._ranking;
-    const hasRelevance = rank.exactMatches > 0 || rank.synonymMatches > 0 || 
-                         rank.romanizedMatches > 0 || rank.semanticMatches > 0 || 
-                         rank.fuzzyMatches > 0 || rank.titleMatches > 0 || 
-                         rank.filenameMatches > 0 || rank.contentMatches > 0;
-    if (!hasRelevance && rank.score < 100) {
-      return false;
-    }
-    return true;
-  });
-  
-  const limit = parseInt(process.env.SEARCH_RESULTS_LIMIT) || 50;
-  return filteredDocs.slice(0, limit);
+  return finalResults.slice(0, limit);
 }
 
 function preprocessImage(imagePath) {
@@ -1157,24 +1440,6 @@ async function extractFileContent(filePath, mimeType) {
   return result;
 }
 
-async function generateEmbedding(text) {
-  try {
-    if (genAI) {
-      const model = genAI.getGenerativeModel({ model: "embedding-001" });
-      const result = await model.embedContent(text.substring(0, 2000));
-      return result.embedding.values || [];
-    }
-    if (openai) {
-      const response = await openai.embeddings.create({
-        model: "text-embedding-ada-002",
-        input: text.substring(0, 2000)
-      });
-      return response.data[0].embedding || [];
-    }
-  } catch (e) {}
-  return [];
-}
-
 async function generateRAGResponse(query, context) {
   try {
     if (genAI) {
@@ -1335,6 +1600,29 @@ app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single
     docData.pageCount = extractionResult.totalPages || 0;
     const newDoc = new Document(docData);
     await newDoc.save();
+    
+    const textToChunk = (extractedText || docData.textContent || finalTitle);
+    const textChunks = chunkText(textToChunk);
+    
+    if (textChunks.length > 0) {
+      const metadata = {
+        pageNumber: 0,
+        title: finalTitle,
+        category: category || "General",
+        branch: branch || "",
+        semester: semester || "",
+        year: year || "",
+        session: session || "",
+        officialDocType: officialDocType || "",
+        paperType: paperType || ""
+      };
+      const embeddedChunks = await embedDocumentChunks(newDoc, textChunks, metadata);
+      if (embeddedChunks.length > 0) {
+        await Chunk.insertMany(embeddedChunks);
+        console.log(`Created ${embeddedChunks.length} chunks with embeddings for ${finalTitle}`);
+      }
+    }
+    
     try {
       if (extractedText && extractedText.length > 100) {
         const embedding = await generateEmbedding(extractedText.substring(0, 2000));
@@ -1343,7 +1631,9 @@ app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single
           await newDoc.save();
         }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Document embedding error:", e.message);
+    }
     res.status(201).json({
       message: "Document uploaded and indexed successfully.",
       id: newDoc._id,
@@ -1356,7 +1646,8 @@ app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single
       ocrConfidence: extractionResult.ocrConfidence || 0,
       isScanned: extractionResult.isScanned || false,
       contentPreview: extractedText.substring(0, 300) + (extractedText.length > 300 ? '...' : ''),
-      keywords: docData.keywords.slice(0, 10)
+      keywords: docData.keywords.slice(0, 10),
+      chunksCreated: textChunks.length
     });
   } catch (error) {
     if (req.file && req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
@@ -1373,11 +1664,18 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
     if (branch) filter.branch = branch;
     if (semester) filter.semester = semester;
     if (year) filter.year = year;
+    const resultLimit = parseInt(limit) || SEARCH_RESULTS_LIMIT;
     if (!q || q.trim() === '') {
-      const docs = await Document.find(filter).sort({ createdAt: -1 }).limit(50);
+      const docs = await Document.find(filter).sort({ createdAt: -1 }).limit(resultLimit);
       return res.status(200).json(docs);
     }
-    const results = await performHybridSearch(q.trim(), filter);
+    const useSemantic = process.env.SEMANTIC_SEARCH_ENABLED === 'true';
+    let results;
+    if (useSemantic) {
+      results = await hybridSearch(q.trim(), filter, resultLimit);
+    } else {
+      results = await fallbackSearch(q.trim(), filter, resultLimit);
+    }
     res.status(200).json(results);
   } catch (error) {
     console.error("Search error:", error);
@@ -1425,6 +1723,26 @@ app.put("/api/documents/:id", authenticateToken, requireAdmin, async (req, res) 
     doc.searchTerms = getUniqueWords(`${doc.title} ${doc.extractedText || ''} ${metaBlob}`).slice(0, 1000);
     doc.textContent = `${doc.title} ${doc.extractedText || ''} ${metaBlob}`.trim();
     await doc.save();
+    
+    await Chunk.deleteMany({ documentId: doc._id });
+    const textChunks = chunkText(doc.extractedText || doc.textContent || doc.title);
+    if (textChunks.length > 0) {
+      const metadata = {
+        pageNumber: 0,
+        title: doc.title,
+        category: doc.category,
+        branch: doc.branch,
+        semester: doc.semester,
+        year: doc.year,
+        session: doc.session,
+        officialDocType: doc.officialDocType,
+        paperType: doc.paperType
+      };
+      const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
+      if (embeddedChunks.length > 0) {
+        await Chunk.insertMany(embeddedChunks);
+      }
+    }
     res.status(200).json({ message: "Document updated successfully.", doc });
   } catch (error) {
     res.status(500).json({ message: "Server error while updating document." });
@@ -1439,6 +1757,7 @@ app.delete("/api/documents/:id", authenticateToken, requireAdmin, async (req, re
       const filePath = path.join(uploadDir, doc.storageName);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
+    await Chunk.deleteMany({ documentId: doc._id });
     await Document.findByIdAndDelete(req.params.id);
     res.status(200).json({ message: "Resource removed successfully." });
   } catch (error) {
@@ -1448,9 +1767,9 @@ app.delete("/api/documents/:id", authenticateToken, requireAdmin, async (req, re
 
 app.post("/api/history", authenticateToken, async (req, res) => {
   try {
-    const { title, documentId } = req.body;
+    const { title, documentId, chunkId } = req.body;
     if (!title) return res.status(400).json({ message: "Missing history details." });
-    const newHistory = new History({ email: req.user.email, title, documentId });
+    const newHistory = new History({ email: req.user.email, title, documentId, chunkId });
     await newHistory.save();
     res.status(201).json({ message: "History logged successfully." });
   } catch (error) {
@@ -1484,19 +1803,39 @@ app.post("/api/chat", authenticateToken, async (req, res) => {
   try {
     const { question } = req.body;
     if (!question) return res.status(400).json({ message: "Question is required." });
-    const searchResults = await performHybridSearch(question, {});
-    const topDocs = searchResults.slice(0, 5);
-    if (topDocs.length === 0) {
+    const queryEmbedding = await generateEmbedding(question);
+    let context = '';
+    let sources = [];
+    if (queryEmbedding && queryEmbedding.length > 0) {
+      const chunks = await Chunk.find().limit(100);
+      const scored = chunks.map(chunk => ({
+        chunk,
+        similarity: cosineSimilarity(queryEmbedding, chunk.embedding || [])
+      }));
+      scored.sort((a, b) => b.similarity - a.similarity);
+      const topChunks = scored.slice(0, 5);
+      for (const sc of topChunks) {
+        if (sc.similarity > 0.3) {
+          context += `\n--- ${sc.chunk.metadata.title || 'Document'} ---\n${sc.chunk.text.substring(0, 1500)}\n`;
+          sources.push({ title: sc.chunk.metadata.title || 'Document', chunkId: sc.chunk._id });
+        }
+      }
+    }
+    if (!context) {
+      const searchResults = await fallbackSearch(question, {});
+      const topDocs = searchResults.slice(0, 3);
+      for (const doc of topDocs) {
+        const text = doc.extractedText || doc.textContent || '';
+        context += `\n--- Document: ${doc.title} (${doc.category || 'General'}) ---\n`;
+        context += text.substring(0, 1500) + '\n';
+        sources.push({ title: doc.title, id: doc._id });
+      }
+    }
+    if (!context) {
       return res.status(200).json({ answer: "I don't have information about that in the uploaded documents." });
     }
-    let context = '';
-    for (const doc of topDocs) {
-      const text = doc.extractedText || doc.textContent || '';
-      context += `\n--- Document: ${doc.title} (${doc.category || 'General'}) ---\n`;
-      context += text.substring(0, 1500) + '\n';
-    }
     const answer = await generateRAGResponse(question, context);
-    res.status(200).json({ answer, sources: topDocs.map(d => ({ title: d.title, id: d._id })) });
+    res.status(200).json({ answer, sources });
   } catch (error) {
     res.status(500).json({ message: "Chat error", error: error.message });
   }
@@ -1506,7 +1845,9 @@ app.post("/api/documents/reindex", authenticateToken, requireAdmin, async (req, 
   try {
     const docs = await Document.find({});
     let reindexedCount = 0;
+    let chunkCount = 0;
     let errors = [];
+    await Chunk.deleteMany({});
     for (const doc of docs) {
       if (doc.storageName) {
         const filePath = path.join(uploadDir, doc.storageName);
@@ -1527,6 +1868,25 @@ app.post("/api/documents/reindex", authenticateToken, requireAdmin, async (req, 
               doc.processingStatus = "completed";
               await doc.save();
               reindexedCount++;
+              const textChunks = chunkText(result.text || doc.textContent || doc.title);
+              if (textChunks.length > 0) {
+                const metadata = {
+                  pageNumber: 0,
+                  title: doc.title,
+                  category: doc.category,
+                  branch: doc.branch,
+                  semester: doc.semester,
+                  year: doc.year,
+                  session: doc.session,
+                  officialDocType: doc.officialDocType,
+                  paperType: doc.paperType
+                };
+                const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
+                if (embeddedChunks.length > 0) {
+                  await Chunk.insertMany(embeddedChunks);
+                  chunkCount += embeddedChunks.length;
+                }
+              }
             }
           } catch (err) {
             errors.push({ id: doc._id, error: err.message });
@@ -1534,7 +1894,7 @@ app.post("/api/documents/reindex", authenticateToken, requireAdmin, async (req, 
         }
       }
     }
-    res.status(200).json({ message: `Re-indexed ${reindexedCount} documents successfully.`, total: docs.length, reindexed: reindexedCount, errors });
+    res.status(200).json({ message: `Re-indexed ${reindexedCount} documents and ${chunkCount} chunks successfully.`, total: docs.length, reindexed: reindexedCount, chunks: chunkCount, errors });
   } catch (error) {
     res.status(500).json({ message: "Server error during re-indexing." });
   }
@@ -1543,9 +1903,12 @@ app.post("/api/documents/reindex", authenticateToken, requireAdmin, async (req, 
 app.get("/api/documents/debug", authenticateToken, async (req, res) => {
   try {
     const total = await Document.countDocuments();
+    const chunks = await Chunk.countDocuments();
     const sample = await Document.find().limit(5);
+    const chunkSample = await Chunk.find().limit(5);
     res.json({
       totalDocuments: total,
+      totalChunks: chunks,
       sample: sample.map(d => ({
         title: d.title, titleHindi: d.titleHindi, titleRomanized: d.titleRomanized,
         hasExtractedText: !!d.extractedText, hasExtractedTextHindi: !!d.extractedTextHindi,
@@ -1558,6 +1921,13 @@ app.get("/api/documents/debug", authenticateToken, async (req, res) => {
         isScanned: d.isScanned, processingStatus: d.processingStatus,
         keywordsCount: d.keywords ? d.keywords.length : 0,
         hasEmbedding: d.embedding && d.embedding.length > 0
+      })),
+      chunkSample: chunkSample.map(c => ({
+        documentId: c.documentId,
+        chunkIndex: c.chunkIndex,
+        textLength: c.text ? c.text.length : 0,
+        hasEmbedding: c.embedding && c.embedding.length > 0,
+        metadata: c.metadata
       }))
     });
   } catch (error) {
@@ -1565,7 +1935,9 @@ app.get("/api/documents/debug", authenticateToken, async (req, res) => {
   }
 });
 
-app.get("/api/status", (req, res) => {
+app.get("/api/status", async (req, res) => {
+  const docCount = await Document.countDocuments().catch(() => 0);
+  const chunkCount = await Chunk.countDocuments().catch(() => 0);
   res.json({
     status: "online",
     version: "2.0.0",
@@ -1573,10 +1945,19 @@ app.get("/api/status", (req, res) => {
       ocr: true,
       semanticSearch: process.env.SEMANTIC_SEARCH_ENABLED === 'true',
       vectorSearch: process.env.VECTOR_SEARCH_ENABLED === 'true',
+      chunking: true,
+      embeddingModel: EMBEDDING_MODEL,
+      embeddingDimension: EMBEDDING_DIMENSION,
+      chunkSize: CHUNK_SIZE,
+      chunkOverlap: CHUNK_OVERLAP,
       chatbot: !!(genAI || openai)
     },
     storage: "local",
-    adminEmails: ADMIN_EMAILS
+    adminEmails: ADMIN_EMAILS,
+    stats: {
+      documents: docCount,
+      chunks: chunkCount
+    }
   });
 });
 
@@ -1587,9 +1968,15 @@ app.use((error, req, res, next) => {
   res.status(500).json({ message: error.message || "Server error." });
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Storage mode: local`);
   console.log(`OCR DPI: 300`);
   console.log(`AI services: ${genAI || openai ? 'Enabled' : 'Disabled'}`);
+  console.log(`Semantic search: ${process.env.SEMANTIC_SEARCH_ENABLED === 'true' ? 'Enabled' : 'Disabled'}`);
+  console.log(`Embedding model: ${EMBEDDING_MODEL}`);
+  console.log(`Chunk size: ${CHUNK_SIZE}, Overlap: ${CHUNK_OVERLAP}`);
+  const docCount = await Document.countDocuments().catch(() => 0);
+  const chunkCount = await Chunk.countDocuments().catch(() => 0);
+  console.log(`Existing documents: ${docCount}, chunks: ${chunkCount}`);
 });
