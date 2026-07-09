@@ -65,15 +65,12 @@ async function createTextIndexes() {
   try {
     const db = mongoose.connection.db;
     const collection = db.collection('documents');
-    
     const existingIndexes = await collection.indexes();
     const textIndex = existingIndexes.find(idx => idx.key && idx.key._fts === "text");
-    
     if (textIndex) {
       console.log(`Dropping existing text index: ${textIndex.name}`);
       await collection.dropIndex(textIndex.name);
     }
-    
     await collection.createIndex(
       { 
         title: "text", 
@@ -84,24 +81,36 @@ async function createTextIndexes() {
         extractedTextRomanized: "text",
         textContent: "text",
         textContentHindi: "text",
-        textContentRomanized: "text"
+        textContentRomanized: "text",
+        officialDocType: "text",
+        paperType: "text",
+        branch: "text",
+        year: "text",
+        semester: "text",
+        session: "text"
       },
       { 
         weights: {
-          title: 10,
-          titleHindi: 10,
-          titleRomanized: 8,
+          title: 15,
+          titleHindi: 15,
+          titleRomanized: 12,
+          officialDocType: 10,
+          paperType: 8,
           extractedText: 5,
           extractedTextHindi: 5,
           extractedTextRomanized: 4,
           textContent: 3,
           textContentHindi: 3,
-          textContentRomanized: 2
+          textContentRomanized: 2,
+          branch: 5,
+          year: 4,
+          semester: 4,
+          session: 3
         },
-        name: "document_text_search_v2"
+        name: "document_text_search_v3"
       }
     );
-    console.log("Text indexes created successfully");
+    console.log("Enhanced text indexes created successfully");
   } catch (e) {
     console.log("Text index creation warning:", e.message);
   }
@@ -331,12 +340,10 @@ function chunkText(text, chunkSize = CHUNK_SIZE, overlap = CHUNK_OVERLAP) {
   if (!text || text.length < MIN_CHUNK_LENGTH) {
     return text.length > 0 ? [{ text: text.substring(0, 500), index: 0 }] : [];
   }
-  
   const sentences = text.split(/(?<=[.!?])\s+/);
   const chunks = [];
   let currentChunk = "";
   let chunkIndex = 0;
-  
   for (const sentence of sentences) {
     if (currentChunk.length + sentence.length <= chunkSize) {
       currentChunk += (currentChunk ? " " : "") + sentence;
@@ -351,13 +358,11 @@ function chunkText(text, chunkSize = CHUNK_SIZE, overlap = CHUNK_OVERLAP) {
       }
     }
   }
-  
   if (currentChunk.length >= MIN_CHUNK_LENGTH) {
     chunks.push({ text: currentChunk.trim(), index: chunkIndex });
   } else if (chunks.length > 0 && currentChunk.length > 0) {
     chunks[chunks.length - 1].text += " " + currentChunk;
   }
-  
   return chunks;
 }
 
@@ -861,6 +866,221 @@ function calculateKeywordScore(doc, queryTokens) {
   return score;
 }
 
+function calculateEnhancedExactMatchScore(doc, query, processedQuery) {
+  let score = 0;
+  const queryLower = processedQuery.toLowerCase();
+  const originalQuery = query.toLowerCase().trim();
+  const queryWords = originalQuery.split(/\s+/).filter(w => w.length > 1);
+  
+  const titleLower = (doc.title || '').toLowerCase();
+  const titleHindiLower = (doc.titleHindi || '').toLowerCase();
+  const titleRomanizedLower = (doc.titleRomanized || '').toLowerCase();
+  
+  if (titleLower === originalQuery || titleLower.includes(originalQuery)) {
+    score += 10.0;
+  }
+  if (titleHindiLower.includes(originalQuery)) {
+    score += 8.0;
+  }
+  if (titleRomanizedLower.includes(originalQuery)) {
+    score += 6.0;
+  }
+  
+  let allWordsInTitle = true;
+  let matchedCount = 0;
+  for (const word of queryWords) {
+    if (titleLower.includes(word) || titleHindiLower.includes(word) || titleRomanizedLower.includes(word)) {
+      matchedCount++;
+    } else {
+      allWordsInTitle = false;
+    }
+  }
+  if (allWordsInTitle && queryWords.length > 0) {
+    score += 5.0 * (matchedCount / queryWords.length);
+  } else if (matchedCount > 0) {
+    score += 2.0 * (matchedCount / queryWords.length);
+  }
+  
+  const metadataFields = [
+    doc.officialDocType, doc.paperType, doc.category, 
+    doc.branch, doc.year, doc.semester, doc.session
+  ];
+  
+  let metadataMatches = 0;
+  for (const field of metadataFields) {
+    if (field && field.toLowerCase().includes(originalQuery)) {
+      metadataMatches++;
+      score += 3.0;
+    } else if (field) {
+      const fieldLower = field.toLowerCase();
+      for (const word of queryWords) {
+        if (fieldLower.includes(word)) {
+          metadataMatches++;
+          score += 1.5;
+          break;
+        }
+      }
+    }
+  }
+  
+  const filenameLower = (doc.storageName || '').toLowerCase();
+  if (filenameLower === originalQuery || filenameLower === originalQuery + '.pdf' || 
+      filenameLower === originalQuery + '.docx' || filenameLower === originalQuery + '.doc') {
+    score += 6.0;
+  } else if (filenameLower.includes(originalQuery)) {
+    score += 3.0;
+  }
+  
+  const contentLower = (doc.extractedText || '').toLowerCase();
+  const contentHindiLower = (doc.extractedTextHindi || '').toLowerCase();
+  
+  if (contentLower.includes(originalQuery)) {
+    score += 4.0;
+  }
+  if (contentHindiLower.includes(originalQuery)) {
+    score += 3.0;
+  }
+  
+  if (originalQuery.includes('elective') || queryWords.some(w => w === 'elective')) {
+    const docText = (doc.extractedText || '') + (doc.title || '');
+    const hasElective = docText.toLowerCase().includes('elective') || docText.toLowerCase().includes('elective');
+    if (hasElective) {
+      score += 8.0;
+    }
+    if (doc.title.toLowerCase().includes('syllabus') || 
+        doc.titleHindi.toLowerCase().includes('पाठ्यक्रम') ||
+        doc.officialDocType === 'Syllabus') {
+      score += 10.0;
+    }
+  }
+  
+  if (originalQuery.includes('syllabus') || queryWords.some(w => w === 'syllabus')) {
+    if (doc.title.toLowerCase().includes('syllabus') || 
+        doc.titleHindi.toLowerCase().includes('पाठ्यक्रम') ||
+        doc.officialDocType === 'Syllabus') {
+      score += 10.0;
+    }
+  }
+  
+  const yearPattern = /(\d+)(?:st|nd|rd|th)?\s*year/i;
+  const yearMatch = originalQuery.match(yearPattern);
+  if (yearMatch) {
+    const yearNum = yearMatch[1];
+    if (doc.year && doc.year.includes(yearNum)) {
+      score += 3.0;
+    }
+  }
+  
+  const semPattern = /(\d+)(?:st|nd|rd|th)?\s*semester/i;
+  const semMatch = originalQuery.match(semPattern);
+  if (semMatch) {
+    const semNum = semMatch[1];
+    if (doc.semester && doc.semester.includes(semNum)) {
+      score += 3.0;
+    }
+  }
+  
+  return Math.min(score, 30);
+}
+
+function calculateEnhancedKeywordScore(doc, queryTokens, processedQuery) {
+  if (!queryTokens || queryTokens.length === 0) return 0;
+  
+  let score = 0;
+  const allText = `${doc.title || ''} ${doc.titleHindi || ''} ${doc.titleRomanized || ''} ${doc.extractedText || ''} ${doc.extractedTextHindi || ''} ${doc.extractedTextRomanized || ''} ${doc.keywords || []} ${doc.keywordsHindi || []} ${doc.searchTerms || []} ${doc.searchTermsHindi || []}`.toLowerCase();
+  const tokens = tokenize(allText);
+  const tokenSet = new Set(tokens);
+  
+  let matchedCount = 0;
+  const importantTerms = ['elective', 'syllabus', 'course', 'curriculum', '1st', '2nd', '3rd', '4th', 'year', 'semester'];
+  
+  for (const token of queryTokens) {
+    if (tokenSet.has(token)) {
+      matchedCount++;
+      if (importantTerms.some(term => token.includes(term) || term.includes(token))) {
+        matchedCount += 0.5;
+      }
+    }
+  }
+  
+  if (matchedCount > 0) {
+    score = Math.min(matchedCount / queryTokens.length, 1) * 2.0;
+  }
+  
+  const synonymMatches = getSynonymMatches(tokens, queryTokens);
+  if (synonymMatches.length > 0) {
+    score += Math.min(synonymMatches.length * 0.3, 1.0);
+  }
+  
+  return Math.min(score, 3);
+}
+
+function calculatePhraseMatchBonus(doc, query) {
+  let bonus = 0;
+  const queryLower = query.toLowerCase().trim();
+  const titleLower = (doc.title || '').toLowerCase();
+  
+  if (titleLower.includes(queryLower)) {
+    bonus += 5.0;
+  }
+  
+  const queryWords = queryLower.split(/\s+/).filter(w => w.length > 1);
+  if (queryWords.length >= 2) {
+    let foundSequence = 0;
+    let lastIndex = -1;
+    for (const word of queryWords) {
+      const idx = titleLower.indexOf(word, lastIndex + 1);
+      if (idx !== -1 && idx > lastIndex) {
+        foundSequence++;
+        lastIndex = idx;
+      }
+    }
+    if (foundSequence === queryWords.length) {
+      bonus += 3.0;
+    } else if (foundSequence >= 2) {
+      bonus += 1.5;
+    }
+  }
+  
+  return bonus;
+}
+
+function calculateKeywordBoost(doc, query) {
+  let boost = 0;
+  const queryLower = query.toLowerCase();
+  const docText = (doc.extractedText || '') + (doc.title || '');
+  const docLower = docText.toLowerCase();
+  
+  if (queryLower.includes('elective') && queryLower.includes('syllabus')) {
+    if (doc.officialDocType === 'Syllabus' && docLower.includes('elective')) {
+      boost += 15.0;
+    }
+    if (doc.officialDocType === 'Syllabus' && doc.category === 'Official Update') {
+      boost += 5.0;
+    }
+  }
+  
+  const yearMatch = queryLower.match(/(\d+)(?:st|nd|rd|th)?\s*year/);
+  const semMatch = queryLower.match(/(\d+)(?:st|nd|rd|th)?\s*semester/);
+  
+  if (yearMatch && semMatch) {
+    const year = yearMatch[1];
+    const sem = semMatch[1];
+    if (doc.year && doc.year.includes(year) && doc.semester && doc.semester.includes(sem)) {
+      boost += 8.0;
+    }
+  }
+  
+  const branches = ['cse', 'cs', 'computer', 'ece', 'ee', 'me', 'ce', 'chemical', 'aai', 'ai'];
+  for (const branch of branches) {
+    if (queryLower.includes(branch) && doc.branch && doc.branch.toLowerCase().includes(branch)) {
+      boost += 3.0;
+    }
+  }
+  
+  return boost;
+}
+
 async function semanticSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
   const processedQuery = preprocessQuery(query);
   if (!processedQuery || processedQuery.length < 2) {
@@ -1038,7 +1258,7 @@ async function fallbackSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) 
   return docs.slice(0, limit);
 }
 
-async function hybridSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
+async function enhancedHybridSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
   const processedQuery = preprocessQuery(query);
   const queryTokens = filterStopWords(tokenize(processedQuery));
   
@@ -1048,28 +1268,30 @@ async function hybridSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
   }
   
   const [semanticResults, fullTextResults, fallbackResults] = await Promise.all([
-    semanticSearch(query, filter, limit * 2),
-    fullTextSearch(query, filter, limit * 2),
-    fallbackSearch(query, filter, limit * 2)
+    semanticSearch(query, filter, limit * 3),
+    fullTextSearch(query, filter, limit * 3),
+    fallbackSearch(query, filter, limit * 3)
   ]);
   
   const resultMap = new Map();
   const scoreMap = new Map();
   const detailMap = new Map();
+  const allDocs = [];
   
   for (const doc of semanticResults) {
     const id = doc._id.toString();
     const semanticScore = doc.semanticScore || 0;
-    const semanticWeight = 2.0;
+    const semanticWeight = 3.0;
     resultMap.set(id, doc);
     scoreMap.set(id, (scoreMap.get(id) || 0) + semanticScore * semanticWeight);
     detailMap.set(id, { semanticScore: semanticScore * semanticWeight });
+    allDocs.push(id);
   }
   
   for (const doc of fullTextResults) {
     const id = doc._id.toString();
     const textScore = doc.fullTextScore || 0;
-    const textWeight = 2.0;
+    const textWeight = 3.0;
     if (!resultMap.has(id)) {
       resultMap.set(id, doc);
     }
@@ -1077,6 +1299,7 @@ async function hybridSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
     const details = detailMap.get(id) || {};
     details.textScore = textScore * textWeight;
     detailMap.set(id, details);
+    if (!allDocs.includes(id)) allDocs.push(id);
   }
   
   for (const doc of fallbackResults) {
@@ -1090,25 +1313,29 @@ async function hybridSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
       resultMap.set(id, doc);
     }
     const fallbackScore = doc.relevanceScore || 0;
-    const fallbackWeight = 1.0;
+    const fallbackWeight = 0.8;
     scoreMap.set(id, (scoreMap.get(id) || 0) + fallbackScore * fallbackWeight);
     const details = detailMap.get(id) || {};
     details.fallbackScore = fallbackScore * fallbackWeight;
     detailMap.set(id, details);
+    if (!allDocs.includes(id)) allDocs.push(id);
   }
   
   const finalResults = Array.from(resultMap.values()).map(doc => {
     const id = doc._id.toString();
-    const currentScore = scoreMap.get(id) || 0;
-    const exactMatchScore = calculateExactMatchScore(doc, query, processedQuery);
-    const keywordScore = calculateKeywordScore(doc, queryTokens);
-    const totalScore = currentScore + (exactMatchScore * 100) + (keywordScore * 50);
+    let currentScore = scoreMap.get(id) || 0;
+    const exactMatchScore = calculateEnhancedExactMatchScore(doc, query, processedQuery);
+    const keywordScore = calculateEnhancedKeywordScore(doc, queryTokens, processedQuery);
+    const phraseBonus = calculatePhraseMatchBonus(doc, query);
+    const keywordBoost = calculateKeywordBoost(doc, query);
+    const totalScore = currentScore + (exactMatchScore * 150) + (keywordScore * 75) + phraseBonus + keywordBoost;
     doc.relevanceScore = Math.round(totalScore);
-    const details = detailMap.get(id) || {};
     doc._rankingDetails = {
-      ...details,
-      exactMatchScore: exactMatchScore * 100,
-      keywordScore: keywordScore * 50,
+      ...detailMap.get(id),
+      exactMatchScore: exactMatchScore * 150,
+      keywordScore: keywordScore * 75,
+      phraseBonus: phraseBonus,
+      keywordBoost: keywordBoost,
       totalScore: totalScore
     };
     return doc;
@@ -1669,13 +1896,7 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
       const docs = await Document.find(filter).sort({ createdAt: -1 }).limit(resultLimit);
       return res.status(200).json(docs);
     }
-    const useSemantic = process.env.SEMANTIC_SEARCH_ENABLED === 'true';
-    let results;
-    if (useSemantic) {
-      results = await hybridSearch(q.trim(), filter, resultLimit);
-    } else {
-      results = await fallbackSearch(q.trim(), filter, resultLimit);
-    }
+    const results = await enhancedHybridSearch(q.trim(), filter, resultLimit);
     res.status(200).json(results);
   } catch (error) {
     console.error("Search error:", error);
