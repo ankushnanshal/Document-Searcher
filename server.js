@@ -168,7 +168,10 @@ const documentSchema = new mongoose.Schema({
   processingStatus: { type: String, enum: ["pending", "processing", "completed", "failed"], default: "pending" },
   processingError: { type: String, default: "" },
   pageTexts: { type: [String], default: [] },
-  fullTextSearchScore: { type: Number, default: 0 }
+  fullTextSearchScore: { type: Number, default: 0 },
+  status: { type: String, enum: ["draft", "published"], default: "published" },
+  draftCreatedAt: { type: Date, default: null },
+  publishedAt: { type: Date, default: null }
 });
 
 const chunkSchema = new mongoose.Schema({
@@ -398,7 +401,7 @@ async function embedDocumentChunks(document, chunks, metadata) {
   return embeddedChunks;
 }
 
-function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedBy, category, docDate, year, semester, branch, paperType, officialDocType, session, storageName, pageTexts, ocrConfidence, ocrApplied, isScanned) {
+function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedBy, category, docDate, year, semester, branch, paperType, officialDocType, session, storageName, pageTexts, ocrConfidence, ocrApplied, isScanned, status) {
   const finalTitle = title || '';
   const titleLang = detectLanguage(finalTitle);
   const textLang = detectLanguage(extractedText);
@@ -452,7 +455,8 @@ function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedB
     pageTexts: pageTexts || [],
     ocrConfidence: ocrConfidence || 0,
     ocrApplied: ocrApplied || false,
-    isScanned: isScanned || false
+    isScanned: isScanned || false,
+    status: status || "published"
   };
 }
 
@@ -1098,6 +1102,7 @@ async function semanticSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) 
   if (filter.branch) filterQuery['metadata.branch'] = filter.branch;
   if (filter.semester) filterQuery['metadata.semester'] = filter.semester;
   if (filter.year) filterQuery['metadata.year'] = filter.year;
+  if (filter.status) filterQuery['metadata.status'] = filter.status;
   
   let chunks = await Chunk.find(filterQuery).limit(200);
   
@@ -1153,6 +1158,7 @@ async function fullTextSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) 
     if (filter.branch) filterConditions.branch = filter.branch;
     if (filter.semester) filterConditions.semester = filter.semester;
     if (filter.year) filterConditions.year = filter.year;
+    if (filter.status) filterConditions.status = filter.status;
     
     const textSearchQuery = { $text: { $search: processedQuery } };
     const combinedQuery = Object.keys(filterConditions).length > 0 ? { $and: [textSearchQuery, filterConditions] } : textSearchQuery;
@@ -1238,6 +1244,7 @@ async function fallbackSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) 
   if (filter.branch) dbFilter.branch = filter.branch;
   if (filter.semester) dbFilter.semester = filter.semester;
   if (filter.year) dbFilter.year = filter.year;
+  if (filter.status) dbFilter.status = filter.status;
   
   const finalQuery = searchConditions.length > 0 ? { $or: searchConditions, ...dbFilter } : dbFilter;
   let docs = await Document.find(finalQuery).limit(limit);
@@ -1795,7 +1802,8 @@ app.put("/api/auth/update-avatar", authenticateToken, async (req, res) => {
 app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: "No file uploaded." });
-    const { title, category, docDate, year, semester, branch, paperType, officialDocType, session } = req.body;
+    const { title, category, docDate, year, semester, branch, paperType, officialDocType, session, status } = req.body;
+    const docStatus = status === "draft" ? "draft" : "published";
     let finalTitle = (title && title.trim()) ? title.trim() : req.file.originalname;
     if (!finalTitle.trim()) finalTitle = req.file.originalname;
     const fileUrl = `${req.protocol}://${req.get("host")}/uploads/documents/${req.file.filename}`;
@@ -1821,10 +1829,16 @@ app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single
       req.file.filename, extractionResult.pageTexts || [],
       extractionResult.ocrConfidence || 0,
       extractionResult.ocrApplied || false,
-      extractionResult.isScanned || false
+      extractionResult.isScanned || false,
+      docStatus
     );
     docData.processingStatus = "completed";
     docData.pageCount = extractionResult.totalPages || 0;
+    if (docStatus === "draft") {
+      docData.draftCreatedAt = new Date();
+    } else {
+      docData.publishedAt = new Date();
+    }
     const newDoc = new Document(docData);
     await newDoc.save();
     
@@ -1861,10 +1875,12 @@ app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single
     } catch (e) {
       console.error("Document embedding error:", e.message);
     }
+    
     res.status(201).json({
-      message: "Document uploaded and indexed successfully.",
+      message: docStatus === "draft" ? "Document saved as draft successfully." : "Document uploaded and indexed successfully.",
       id: newDoc._id,
       fileUrl,
+      status: docStatus,
       language: docData.language,
       extractedTextLength: extractedText.length,
       hasHindiText: !!(docData.extractedTextHindi || docData.titleHindi),
@@ -1883,6 +1899,153 @@ app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single
   }
 });
 
+app.get("/api/documents/drafts", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const drafts = await Document.find({ status: "draft" }).sort({ draftCreatedAt: -1 });
+    res.status(200).json(drafts);
+  } catch (error) {
+    res.status(500).json({ message: "Server error while fetching drafts." });
+  }
+});
+
+app.post("/api/documents/publish/:id", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: "Document not found." });
+    if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
+    doc.status = "published";
+    doc.draftCreatedAt = null;
+    doc.publishedAt = new Date();
+    await doc.save();
+    
+    const textToChunk = (doc.extractedText || doc.textContent || doc.title);
+    const textChunks = chunkText(textToChunk);
+    
+    if (textChunks.length > 0) {
+      const metadata = {
+        pageNumber: 0,
+        title: doc.title,
+        category: doc.category,
+        branch: doc.branch,
+        semester: doc.semester,
+        year: doc.year,
+        session: doc.session,
+        officialDocType: doc.officialDocType,
+        paperType: doc.paperType
+      };
+      const existingChunks = await Chunk.find({ documentId: doc._id });
+      if (existingChunks.length === 0) {
+        const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
+        if (embeddedChunks.length > 0) {
+          await Chunk.insertMany(embeddedChunks);
+          console.log(`Created ${embeddedChunks.length} chunks for published draft ${doc.title}`);
+        }
+      }
+    }
+    
+    try {
+      if (doc.extractedText && doc.extractedText.length > 100 && (!doc.embedding || doc.embedding.length === 0)) {
+        const embedding = await generateEmbedding(doc.extractedText.substring(0, 2000));
+        if (embedding && embedding.length > 0) {
+          doc.embedding = embedding;
+          await doc.save();
+        }
+      }
+    } catch (e) {
+      console.error("Document embedding error during publish:", e.message);
+    }
+    
+    res.status(200).json({ message: "Draft published successfully.", document: doc });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while publishing draft." });
+  }
+});
+
+app.delete("/api/documents/draft/:id", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: "Draft not found." });
+    if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
+    if (doc.storageName) {
+      const filePath = path.join(uploadDir, doc.storageName);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+    await Chunk.deleteMany({ documentId: doc._id });
+    await Document.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: "Draft deleted successfully." });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while deleting draft." });
+  }
+});
+
+app.get("/api/documents/draft/:id", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: "Draft not found." });
+    if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
+    res.status(200).json(doc);
+  } catch (error) {
+    res.status(500).json({ message: "Server error while fetching draft." });
+  }
+});
+
+app.put("/api/documents/draft/:id", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { title, category, docDate, year, semester, branch, paperType, officialDocType, session } = req.body;
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: "Draft not found." });
+    if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
+    if (title !== undefined && title !== doc.title) {
+      doc.title = title;
+      const lang = detectLanguage(title);
+      if (lang === 'hi') doc.titleHindi = title;
+      doc.titleRomanized = romanizeHindi(title);
+    }
+    if (category !== undefined) doc.category = category;
+    if (docDate !== undefined) doc.docDate = docDate;
+    if (year !== undefined) doc.year = year;
+    if (semester !== undefined) doc.semester = semester;
+    if (branch !== undefined) doc.branch = branch;
+    if (paperType !== undefined) doc.paperType = paperType;
+    if (officialDocType !== undefined) doc.officialDocType = officialDocType;
+    if (session !== undefined) doc.session = session;
+    const metaBlob = [doc.title, doc.officialDocType, doc.paperType, doc.category, doc.storageName, doc.year, doc.semester, doc.branch, doc.session].filter(Boolean).join(' ');
+    if (doc.extractedText) {
+      doc.extractedTextRomanized = romanizeHindi(doc.extractedText);
+      doc.textContentRomanized = `${doc.titleRomanized} ${doc.extractedTextRomanized} ${romanizeHindi(metaBlob)}`.trim();
+      doc.searchTermsRomanized = getUniqueWords(`${doc.extractedTextRomanized} ${romanizeHindi(metaBlob)}`).slice(0, 1000);
+      doc.keywords = getUniqueWords(`${doc.extractedText} ${metaBlob}`).slice(0, 200);
+      doc.keywordSynonyms = generateEnglishSearchVariants(`${doc.extractedText} ${metaBlob}`);
+    }
+    doc.searchTerms = getUniqueWords(`${doc.title} ${doc.extractedText || ''} ${metaBlob}`).slice(0, 1000);
+    doc.textContent = `${doc.title} ${doc.extractedText || ''} ${metaBlob}`.trim();
+    await doc.save();
+    
+    await Chunk.deleteMany({ documentId: doc._id });
+    const textChunks = chunkText(doc.extractedText || doc.textContent || doc.title);
+    if (textChunks.length > 0) {
+      const metadata = {
+        pageNumber: 0,
+        title: doc.title,
+        category: doc.category,
+        branch: doc.branch,
+        semester: doc.semester,
+        year: doc.year,
+        session: doc.session,
+        officialDocType: doc.officialDocType,
+        paperType: doc.paperType
+      };
+      const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
+      if (embeddedChunks.length > 0) {
+        await Chunk.insertMany(embeddedChunks);
+      }
+    }
+    res.status(200).json({ message: "Draft updated successfully.", doc });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while updating draft." });
+  }
+});
+
 app.get("/api/documents/search", authenticateToken, async (req, res) => {
   try {
     const { q, category, branch, semester, year, limit } = req.query;
@@ -1891,6 +2054,10 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
     if (branch) filter.branch = branch;
     if (semester) filter.semester = semester;
     if (year) filter.year = year;
+    const isAdmin = req.user && req.user.role === 'admin';
+    if (!isAdmin) {
+      filter.status = "published";
+    }
     const resultLimit = parseInt(limit) || SEARCH_RESULTS_LIMIT;
     if (!q || q.trim() === '') {
       const docs = await Document.find(filter).sort({ createdAt: -1 }).limit(resultLimit);
@@ -1908,6 +2075,12 @@ app.get("/api/documents/:id", authenticateToken, async (req, res) => {
   try {
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
+    if (doc.status === "draft") {
+      const isAdmin = req.user && req.user.role === 'admin';
+      if (!isAdmin) {
+        return res.status(403).json({ message: "Access denied." });
+      }
+    }
     res.status(200).json(doc);
   } catch (error) {
     res.status(500).json({ message: "Server error while fetching document." });
@@ -2043,7 +2216,7 @@ app.post("/api/chat", authenticateToken, async (req, res) => {
       }
     }
     if (!context) {
-      const searchResults = await fallbackSearch(question, {});
+      const searchResults = await fallbackSearch(question, { status: "published" });
       const topDocs = searchResults.slice(0, 3);
       for (const doc of topDocs) {
         const text = doc.extractedText || doc.textContent || '';
@@ -2082,7 +2255,8 @@ app.post("/api/documents/reindex", authenticateToken, requireAdmin, async (req, 
                 doc.year, doc.semester, doc.branch, doc.paperType,
                 doc.officialDocType, doc.session, doc.storageName,
                 result.pageTexts || [], result.ocrConfidence || 0,
-                result.ocrApplied || false, result.isScanned || false
+                result.ocrApplied || false, result.isScanned || false,
+                doc.status || "published"
               );
               Object.assign(doc, docData);
               doc.pageCount = result.totalPages || 0;
@@ -2141,7 +2315,8 @@ app.get("/api/documents/debug", authenticateToken, async (req, res) => {
         ocrApplied: d.ocrApplied, ocrConfidence: d.ocrConfidence,
         isScanned: d.isScanned, processingStatus: d.processingStatus,
         keywordsCount: d.keywords ? d.keywords.length : 0,
-        hasEmbedding: d.embedding && d.embedding.length > 0
+        hasEmbedding: d.embedding && d.embedding.length > 0,
+        status: d.status || "published"
       })),
       chunkSample: chunkSample.map(c => ({
         documentId: c.documentId,
@@ -2171,7 +2346,8 @@ app.get("/api/status", async (req, res) => {
       embeddingDimension: EMBEDDING_DIMENSION,
       chunkSize: CHUNK_SIZE,
       chunkOverlap: CHUNK_OVERLAP,
-      chatbot: !!(genAI || openai)
+      chatbot: !!(genAI || openai),
+      drafts: true
     },
     storage: "local",
     adminEmails: ADMIN_EMAILS,
@@ -2197,6 +2373,7 @@ app.listen(PORT, async () => {
   console.log(`Semantic search: ${process.env.SEMANTIC_SEARCH_ENABLED === 'true' ? 'Enabled' : 'Disabled'}`);
   console.log(`Embedding model: ${EMBEDDING_MODEL}`);
   console.log(`Chunk size: ${CHUNK_SIZE}, Overlap: ${CHUNK_OVERLAP}`);
+  console.log(`Drafts feature: Enabled`);
   const docCount = await Document.countDocuments().catch(() => 0);
   const chunkCount = await Chunk.countDocuments().catch(() => 0);
   console.log(`Existing documents: ${docCount}, chunks: ${chunkCount}`);

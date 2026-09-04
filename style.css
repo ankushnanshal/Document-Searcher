@@ -608,6 +608,158 @@ body {
   font-size: 0.9rem;
 }
 
+.drafts-page-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: fadeIn 0.3s ease;
+}
+
+.drafts-header-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.drafts-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.drafts-subtitle {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.drafts-card-wrapper {
+  background: var(--card-glass);
+  border: 1px solid var(--border-glass);
+  border-radius: 20px;
+  padding: 24px;
+}
+
+.drafts-meta-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-glass);
+}
+
+.drafts-count {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.refresh-drafts-btn {
+  background: rgba(99, 102, 241, 0.1);
+  color: #a5b4fc;
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  padding: 8px 16px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.refresh-drafts-btn:hover {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.draft-item-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+.draft-item-card:hover {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.draft-info h4 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.draft-info p {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin: 2px 0;
+}
+
+.draft-status-badge {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  display: inline-block;
+}
+
+.draft-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.draft-action-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+
+.draft-action-open {
+  background: rgba(99, 102, 241, 0.1);
+  color: #a5b4fc;
+  border-color: rgba(99, 102, 241, 0.2);
+}
+
+.draft-action-open:hover {
+  background: rgba(99, 102, 241, 0.2);
+}
+
+.draft-action-publish {
+  background: rgba(74, 222, 128, 0.1);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.2);
+}
+
+.draft-action-publish:hover {
+  background: rgba(74, 222, 128, 0.2);
+}
+
+.draft-action-delete {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.draft-action-delete:hover {
+  background: rgba(239, 68, 68, 0.2);
+}
+
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -908,6 +1060,15 @@ body {
   .resources-stack {
     flex-direction: column;
     align-items: center;
+  }
+  .draft-item-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .draft-actions {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 
@@ -1657,4 +1818,45 @@ body {
     bottom: 16px;
     max-height: 500px;
   }
+}
+
+.filter-tab[data-category="drafts"] {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
+.filter-tab[data-category="drafts"]:hover {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.filter-tab[data-category="drafts"].active {
+  background: rgba(245, 158, 11, 0.2);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.publish-btn:hover {
+  background: rgba(74, 222, 128, 0.2) !important;
+  transform: translateY(-1px);
+}
+
+.delete-draft-btn:hover {
+  background: rgba(239, 68, 68, 0.2) !important;
+  transform: translateY(-1px);
+}
+
+#saveDraftBtn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.draft-status-badge {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  display: inline-block;
 }

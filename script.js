@@ -11,6 +11,7 @@ const searchSuggestions = document.getElementById('searchSuggestions');
 const updateProfileBtn = document.getElementById('updateProfileBtn');
 const logoutBtn = document.getElementById('logoutBtn');
 const uploadDocBtn = document.getElementById('mainUploadBtn');
+const draftManagerBtn = document.getElementById('draftManagerBtn');
 const profileImageInput = document.getElementById('profileImageInput');
 const universalDocumentInput = document.getElementById('universalDocumentInput');
 const avatarContainer = document.getElementById('avatarContainer');
@@ -55,6 +56,11 @@ const docBranchSelect = document.getElementById('docBranchSelect');
 const allBranchesOpt = document.getElementById('allBranchesOpt');
 const mainDashboardView = document.getElementById('mainDashboardView');
 const historyPageView = document.getElementById('historyPageView');
+const draftsPageView = document.getElementById('draftsPageView');
+const backFromDraftsBtn = document.getElementById('backFromDraftsBtn');
+const refreshDraftsBtn = document.getElementById('refreshDraftsBtn');
+const draftsContainer = document.getElementById('draftsContainer');
+const draftsCountText = document.getElementById('draftsCountText');
 const viewFullHistoryBtn = document.getElementById('viewFullHistoryBtn');
 const backToHomeBtn = document.getElementById('backToHomeBtn');
 const clearHistoryBtn = document.getElementById('clearHistoryBtn');
@@ -86,6 +92,7 @@ let cachedDocuments = [];
 let authToken = localStorage.getItem('token') || null;
 let isUserLoggedIn = false;
 let isLoading = false;
+let draftCount = 0;
 
 function showNotification(message) {
   if (!notificationContainer) { alert(message); return; }
@@ -243,6 +250,7 @@ if (logoutBtn) {
     if (workspaceName) workspaceName.textContent = 'My Workspace';
     if (authorizedActionsBlock) authorizedActionsBlock.classList.add('hidden');
     if (uploadDocBtn) uploadDocBtn.classList.add('hidden');
+    if (draftManagerBtn) draftManagerBtn.classList.add('hidden');
     if (recommendedTab) recommendedTab.classList.add('hidden');
     if (searchSuggestions) searchSuggestions.classList.add('hidden');
     setDefaultAvatar(avatarContainer);
@@ -255,6 +263,7 @@ if (logoutBtn) {
     currentSelectedCategory = "all";
     if (mainDashboardView) mainDashboardView.classList.remove('hidden');
     if (historyPageView) historyPageView.classList.add('hidden');
+    if (draftsPageView) draftsPageView.classList.add('hidden');
     if (academicActionBtn) academicActionBtn.classList.add('hidden');
     if (resultsMeta) resultsMeta.classList.remove('hidden');
     const academicCards = resultsGrid.querySelectorAll('.classroom-card');
@@ -282,6 +291,35 @@ if (uploadDocBtn && universalDocumentInput) {
     const docTitleInput = document.getElementById('docTitleInput');
     if (docTitleInput) docTitleInput.value = '';
     universalDocumentInput.click();
+  });
+}
+
+if (draftManagerBtn) {
+  draftManagerBtn.addEventListener('click', () => {
+    if (currentUserRole !== 'admin') {
+      showNotification("Access denied. Admin only.");
+      return;
+    }
+    if (draftsPageView) {
+      mainDashboardView.classList.add('hidden');
+      historyPageView.classList.add('hidden');
+      draftsPageView.classList.remove('hidden');
+      fetchDrafts();
+    }
+  });
+}
+
+if (backFromDraftsBtn) {
+  backFromDraftsBtn.addEventListener('click', () => {
+    if (draftsPageView) draftsPageView.classList.add('hidden');
+    if (mainDashboardView) mainDashboardView.classList.remove('hidden');
+  });
+}
+
+if (refreshDraftsBtn) {
+  refreshDraftsBtn.addEventListener('click', () => {
+    fetchDrafts();
+    showNotification("Drafts refreshed.");
   });
 }
 
@@ -328,69 +366,78 @@ if (closeUploadPopupBtn) {
   });
 }
 
+function getFormDataForUpload(status) {
+  const categorySelect = document.getElementById('docCategorySelect');
+  const docTitleInput = document.getElementById('docTitleInput');
+  const docDateInput = document.getElementById('docDateInput');
+  const docSessionSelect = document.getElementById('docSessionSelect');
+  const docTypeSelect = document.getElementById('docTypeSelect');
+  const officialDocTypeSelect = document.getElementById('officialDocTypeSelect');
+  const officialDocYearSelect = document.getElementById('officialDocYearSelect');
+  const officialDocSessionSelect = document.getElementById('officialDocSessionSelect');
+  const officialDocSemSelect = document.getElementById('officialDocSemSelect');
+  const officialDocBranchSelect = document.getElementById('officialDocBranchSelect');
+  
+  if (!categorySelect || !categorySelect.value) {
+    showNotification("Please select a resource category.");
+    return null;
+  }
+  
+  const category = categorySelect.value;
+  let finalCategory = category === 'Official' ? 'Official Update' : 'University Paper';
+  
+  let selectedDate = docDateInput ? docDateInput.value : "";
+  if (!selectedDate) {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    selectedDate = `${year}-${month}-${day}`;
+  }
+  
+  let customTitle = '';
+  if (docTitleInput) {
+    customTitle = docTitleInput.value.trim();
+  }
+  
+  const formData = new FormData();
+  formData.append('file', pendingUploadFile);
+  
+  if (customTitle && customTitle.length > 0) {
+    formData.append('title', customTitle);
+  } else {
+    formData.append('title', pendingUploadFile.name);
+  }
+  
+  formData.append('category', finalCategory);
+  formData.append('docDate', selectedDate);
+  formData.append('status', status || 'published');
+  
+  if (finalCategory === 'University Paper') {
+    formData.append('year', docSessionSelect ? docSessionSelect.value : '2024-25');
+    formData.append('semester', docSemSelect ? docSemSelect.value : '1');
+    formData.append('branch', docBranchSelect ? docBranchSelect.value : 'All Branches');
+    formData.append('paperType', docTypeSelect ? docTypeSelect.value : 'End Sem');
+  } else {
+    formData.append('officialDocType', officialDocTypeSelect ? officialDocTypeSelect.value : 'Notice');
+    formData.append('year', officialDocYearSelect ? officialDocYearSelect.value : 'All Years');
+    formData.append('session', officialDocSessionSelect ? officialDocSessionSelect.value : '2024-25');
+    formData.append('semester', officialDocSemSelect ? officialDocSemSelect.value : '1');
+    formData.append('branch', officialDocBranchSelect ? officialDocBranchSelect.value : 'All Branches');
+  }
+  
+  return formData;
+}
+
 if (confirmUploadBtn) {
   confirmUploadBtn.addEventListener('click', async () => {
     if (!pendingUploadFile) {
       showNotification("No file selected.");
       return;
     }
-    const categorySelect = document.getElementById('docCategorySelect');
-    const docTitleInput = document.getElementById('docTitleInput');
-    const docDateInput = document.getElementById('docDateInput');
-    const docSessionSelect = document.getElementById('docSessionSelect');
-    const docTypeSelect = document.getElementById('docTypeSelect');
-    const officialDocTypeSelect = document.getElementById('officialDocTypeSelect');
-    const officialDocYearSelect = document.getElementById('officialDocYearSelect');
-    const officialDocSessionSelect = document.getElementById('officialDocSessionSelect');
-    const officialDocSemSelect = document.getElementById('officialDocSemSelect');
-    const officialDocBranchSelect = document.getElementById('officialDocBranchSelect');
     
-    if (!categorySelect || !categorySelect.value) {
-      showNotification("Please select a resource category.");
-      return;
-    }
-    
-    const category = categorySelect.value;
-    let finalCategory = category === 'Official' ? 'Official Update' : 'University Paper';
-    
-    let selectedDate = docDateInput ? docDateInput.value : "";
-    if (!selectedDate) {
-      const today = new Date();
-      const year = today.getFullYear();
-      const month = String(today.getMonth() + 1).padStart(2, '0');
-      const day = String(today.getDate()).padStart(2, '0');
-      selectedDate = `${year}-${month}-${day}`;
-    }
-    
-    let customTitle = '';
-    if (docTitleInput) {
-      customTitle = docTitleInput.value.trim();
-    }
-    
-    const formData = new FormData();
-    formData.append('file', pendingUploadFile);
-    
-    if (customTitle && customTitle.length > 0) {
-      formData.append('title', customTitle);
-    } else {
-      formData.append('title', pendingUploadFile.name);
-    }
-    
-    formData.append('category', finalCategory);
-    formData.append('docDate', selectedDate);
-    
-    if (finalCategory === 'University Paper') {
-      formData.append('year', docSessionSelect ? docSessionSelect.value : '2024-25');
-      formData.append('semester', docSemSelect ? docSemSelect.value : '1');
-      formData.append('branch', docBranchSelect ? docBranchSelect.value : 'All Branches');
-      formData.append('paperType', docTypeSelect ? docTypeSelect.value : 'End Sem');
-    } else {
-      formData.append('officialDocType', officialDocTypeSelect ? officialDocTypeSelect.value : 'Notice');
-      formData.append('year', officialDocYearSelect ? officialDocYearSelect.value : 'All Years');
-      formData.append('session', officialDocSessionSelect ? officialDocSessionSelect.value : '2024-25');
-      formData.append('semester', officialDocSemSelect ? officialDocSemSelect.value : '1');
-      formData.append('branch', officialDocBranchSelect ? officialDocBranchSelect.value : 'All Branches');
-    }
+    const formData = getFormDataForUpload('published');
+    if (!formData) return;
     
     try {
       const response = await fetch(`${API_URL}/documents/upload`, {
@@ -405,6 +452,7 @@ if (confirmUploadBtn) {
       
       if (response.ok) {
         showNotification("Document uploaded and indexed successfully!");
+        const docTitleInput = document.getElementById('docTitleInput');
         if (docTitleInput) {
           docTitleInput.value = '';
         }
@@ -416,6 +464,7 @@ if (confirmUploadBtn) {
         if (universalDocumentInput) {
           universalDocumentInput.value = "";
         }
+        fetchDrafts();
       } else {
         showNotification(data.message || "Upload failed.");
       }
@@ -423,6 +472,228 @@ if (confirmUploadBtn) {
       console.error("Upload error:", err);
       showNotification("Network error uploading document.");
     }
+  });
+}
+
+async function saveAsDraft() {
+  if (!pendingUploadFile) {
+    showNotification("No file selected.");
+    return;
+  }
+  
+  const formData = getFormDataForUpload('draft');
+  if (!formData) return;
+  
+  try {
+    const response = await fetch(`${API_URL}/documents/upload`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: formData
+    });
+    
+    const data = await response.json();
+    
+    if (response.ok) {
+      showNotification("Document saved as draft successfully!");
+      const docTitleInput = document.getElementById('docTitleInput');
+      if (docTitleInput) {
+        docTitleInput.value = '';
+      }
+      if (uploadPopup) {
+        uploadPopup.classList.add('hidden');
+      }
+      pendingUploadFile = null;
+      if (universalDocumentInput) {
+        universalDocumentInput.value = "";
+      }
+      fetchDrafts();
+      if (currentSelectedCategory === 'drafts') {
+        fetchDocuments(searchInput ? searchInput.value.trim() : "");
+      }
+    } else {
+      showNotification(data.message || "Failed to save draft.");
+    }
+  } catch (err) {
+    console.error("Draft save error:", err);
+    showNotification("Network error saving draft.");
+  }
+}
+
+function addDraftButtons() {
+  const uploadPopupActions = document.querySelector('#uploadPopup .modal-form');
+  if (!uploadPopupActions) return;
+  
+  const existingDraftBtn = document.getElementById('saveDraftBtn');
+  const existingUploadBtn = document.getElementById('confirmUploadBtn');
+  
+  if (existingDraftBtn && existingUploadBtn) {
+    existingDraftBtn.removeEventListener('click', saveAsDraft);
+    existingUploadBtn.removeEventListener('click', null);
+  }
+  
+  const parent = uploadPopupActions;
+  const existingButtons = parent.querySelectorAll('button');
+  existingButtons.forEach(btn => btn.remove());
+  
+  const buttonContainer = document.createElement('div');
+  buttonContainer.style.cssText = 'display: flex; gap: 12px; margin-top: 8px;';
+  
+  const uploadBtn = document.createElement('button');
+  uploadBtn.id = 'confirmUploadBtn';
+  uploadBtn.className = 'form-action-trigger';
+  uploadBtn.textContent = 'Upload / Publish';
+  uploadBtn.style.flex = '1';
+  
+  const draftBtn = document.createElement('button');
+  draftBtn.id = 'saveDraftBtn';
+  draftBtn.className = 'form-action-trigger';
+  draftBtn.textContent = 'Save as Draft';
+  draftBtn.style.flex = '1';
+  draftBtn.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
+  
+  buttonContainer.appendChild(uploadBtn);
+  buttonContainer.appendChild(draftBtn);
+  parent.appendChild(buttonContainer);
+  
+  document.getElementById('saveDraftBtn').addEventListener('click', saveAsDraft);
+  document.getElementById('confirmUploadBtn').addEventListener('click', async () => {
+    if (!pendingUploadFile) {
+      showNotification("No file selected.");
+      return;
+    }
+    
+    const formData = getFormDataForUpload('published');
+    if (!formData) return;
+    
+    try {
+      const response = await fetch(`${API_URL}/documents/upload`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${authToken}`
+        },
+        body: formData
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        showNotification("Document uploaded and indexed successfully!");
+        const docTitleInput = document.getElementById('docTitleInput');
+        if (docTitleInput) {
+          docTitleInput.value = '';
+        }
+        fetchDocuments(searchInput ? searchInput.value.trim() : "");
+        if (uploadPopup) {
+          uploadPopup.classList.add('hidden');
+        }
+        pendingUploadFile = null;
+        if (universalDocumentInput) {
+          universalDocumentInput.value = "";
+        }
+        fetchDrafts();
+      } else {
+        showNotification(data.message || "Upload failed.");
+      }
+    } catch (err) {
+      console.error("Upload error:", err);
+      showNotification("Network error uploading document.");
+    }
+  });
+}
+
+async function fetchDrafts() {
+  if (!authToken || currentUserRole !== 'admin') {
+    if (draftsContainer) {
+      draftsContainer.innerHTML = '<span class="history-empty-state">Please login as admin to view drafts.</span>';
+    }
+    return;
+  }
+  try {
+    const response = await fetch(`${API_URL}/documents/drafts`, {
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    if (response.ok) {
+      const drafts = await response.json();
+      draftCount = drafts ? drafts.length : 0;
+      renderDrafts(drafts);
+      renderDraftList(drafts);
+    } else {
+      console.error("Failed to fetch drafts:", response.status);
+    }
+  } catch (err) {
+    console.error("Error fetching drafts:", err);
+    if (draftsContainer) {
+      draftsContainer.innerHTML = '<span class="history-empty-state">Error loading drafts. Please try again.</span>';
+    }
+  }
+}
+
+function renderDrafts(drafts) {
+  const draftTab = document.querySelector('.filter-tab[data-category="drafts"]');
+  if (!draftTab) return;
+  const count = drafts ? drafts.length : 0;
+  draftCount = count;
+  if (count > 0) {
+    draftTab.classList.remove('hidden');
+    draftTab.innerHTML = `<i class="fa-solid fa-file-pen"></i> Drafts (${count})`;
+  } else {
+    draftTab.classList.add('hidden');
+    draftTab.innerHTML = `<i class="fa-solid fa-file-pen"></i> Drafts (0)`;
+  }
+}
+
+function renderDraftList(drafts) {
+  if (!draftsContainer) return;
+  draftsContainer.innerHTML = '';
+  if (!drafts || drafts.length === 0) {
+    draftsContainer.innerHTML = '<span class="history-empty-state">No drafts found. Create a draft by uploading a file and selecting "Save as Draft".</span>';
+    if (draftsCountText) draftsCountText.textContent = '0 drafts';
+    return;
+  }
+  if (draftsCountText) draftsCountText.textContent = `${drafts.length} draft${drafts.length !== 1 ? 's' : ''}`;
+  drafts.forEach((draft) => {
+    const card = document.createElement('div');
+    card.className = 'draft-item-card';
+    const fileType = draft.fileType || draft.storageName ? draft.storageName.split('.').pop().toUpperCase() : 'Unknown';
+    const createdAt = draft.draftCreatedAt ? new Date(draft.draftCreatedAt).toLocaleDateString() : new Date(draft.createdAt).toLocaleDateString();
+    card.innerHTML = `
+      <div class="draft-info">
+        <h4>${draft.title}</h4>
+        <p>${draft.category || 'Uncategorized'} • ${fileType} • Uploaded: ${createdAt}</p>
+        <span class="draft-status-badge">Draft</span>
+      </div>
+      <div class="draft-actions">
+        <button class="draft-action-btn draft-action-open" data-id="${draft._id}"><i class="fa-solid fa-pen"></i> Open</button>
+        <button class="draft-action-btn draft-action-publish" data-id="${draft._id}"><i class="fa-solid fa-check"></i> Publish</button>
+        <button class="draft-action-btn draft-action-delete" data-id="${draft._id}"><i class="fa-solid fa-trash"></i> Delete</button>
+      </div>
+    `;
+    draftsContainer.appendChild(card);
+    
+    card.querySelector('.draft-action-open').addEventListener('click', () => openEditDocumentModal(draft));
+    card.querySelector('.draft-action-publish').addEventListener('click', () => publishDraft(draft._id));
+    card.querySelector('.draft-action-delete').addEventListener('click', () => deleteDraft(draft._id));
+  });
+}
+
+function addDraftTab() {
+  const filterContainer = document.querySelector('.category-filter-table');
+  if (!filterContainer) return;
+  const existingDraftTab = document.querySelector('.filter-tab[data-category="drafts"]');
+  if (existingDraftTab) return;
+  const draftTab = document.createElement('div');
+  draftTab.className = 'filter-tab hidden';
+  draftTab.setAttribute('data-category', 'drafts');
+  draftTab.innerHTML = `<i class="fa-solid fa-file-pen"></i> Drafts (0)`;
+  filterContainer.appendChild(draftTab);
+  draftTab.addEventListener('click', () => {
+    filterTabs.forEach(t => t.classList.remove('active'));
+    draftTab.classList.add('active');
+    currentSelectedCategory = 'drafts';
+    fetchDocuments(searchInput ? searchInput.value.trim() : "");
+    if (searchSuggestions) searchSuggestions.classList.add('hidden');
   });
 }
 
@@ -502,8 +773,9 @@ if (confirmEditBtn) {
       payload.paperType = '';
     }
     if (!payload.title) { showNotification("Title cannot be empty."); return; }
+    const url = `${API_URL}/documents/${editingDocId}`;
     try {
-      const response = await fetch(`${API_URL}/documents/${editingDocId}`, {
+      const response = await fetch(url, {
         method: "PUT",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${authToken}` },
         body: JSON.stringify(payload)
@@ -514,6 +786,7 @@ if (confirmEditBtn) {
         if (editPopup) editPopup.classList.add('hidden');
         editingDocId = null;
         fetchDocuments(searchInput ? searchInput.value.trim() : "");
+        fetchDrafts();
       } else {
         showNotification(data.message || "Update failed.");
       }
@@ -582,8 +855,16 @@ function handleUserSession(user) {
   if (signInBtn) signInBtn.classList.add('hidden');
   if (signUpBtn) signUpBtn.classList.add('hidden');
   if (uploadDocBtn) {
-    if (user.role === 'admin') uploadDocBtn.classList.remove('hidden');
-    else uploadDocBtn.classList.add('hidden');
+    if (user.role === 'admin') {
+      uploadDocBtn.classList.remove('hidden');
+      if (draftManagerBtn) draftManagerBtn.classList.remove('hidden');
+      addDraftTab();
+      addDraftButtons();
+      fetchDrafts();
+    } else {
+      uploadDocBtn.classList.add('hidden');
+      if (draftManagerBtn) draftManagerBtn.classList.add('hidden');
+    }
   }
   const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
   if (academicActionBtn) {
@@ -675,6 +956,7 @@ if (viewFullHistoryBtn) {
   viewFullHistoryBtn.addEventListener('click', () => {
     if (mainDashboardView) mainDashboardView.classList.add('hidden');
     if (historyPageView) historyPageView.classList.remove('hidden');
+    if (draftsPageView) draftsPageView.classList.add('hidden');
     authDropdown.classList.add('hidden');
   });
 }
@@ -689,6 +971,7 @@ if (backToHomeBtn) {
 if (navBrandHome) {
   navBrandHome.addEventListener('click', () => {
     if (historyPageView) historyPageView.classList.add('hidden');
+    if (draftsPageView) draftsPageView.classList.add('hidden');
     if (mainDashboardView) mainDashboardView.classList.remove('hidden');
   });
 }
@@ -874,6 +1157,9 @@ if (searchInput) {
     let searchQuery = query;
     
     let filtered = cachedDocuments.filter(doc => {
+      if (currentSelectedCategory === "drafts") {
+        return doc.status === 'draft';
+      }
       if (currentSelectedCategory === "recommended") {
         if (currentUserBranch) {
           const matchesBranch = doc.branch === currentUserBranch || doc.branch === "All Branches";
@@ -881,7 +1167,7 @@ if (searchInput) {
           return doc.category === "University Paper" && matchesBranch && matchesSem;
         }
         return false;
-      } else if (currentSelectedCategory !== "all") {
+      } else if (currentSelectedCategory !== "all" && currentSelectedCategory !== "drafts") {
         return doc.category === currentSelectedCategory;
       }
       return true;
@@ -918,11 +1204,13 @@ if (searchInput) {
         const doc = filtered[i];
         const row = document.createElement('div');
         row.className = 'suggestion-item';
+        const isDraft = doc.status === 'draft';
+        const draftBadge = isDraft ? '<span style="background: #f59e0b; color: #000; padding: 1px 6px; border-radius: 3px; font-size: 0.6rem; font-weight: 700; margin-left: 4px;">DRAFT</span>' : '';
         const hasContentMatch = (doc.extractedText || '').toLowerCase().includes(query) || (doc.extractedTextHindi || '').toLowerCase().includes(query);
         row.innerHTML = `
           <div class="suggestion-info">
-            <span class="suggestion-title">${doc.title} ${hasContentMatch ? '📄' : ''}</span>
-            <span class="suggestion-meta">${doc.category} ${doc.branch ? `• ${doc.branch}` : ''}</span>
+            <span class="suggestion-title">${doc.title} ${draftBadge} ${hasContentMatch ? '📄' : ''}</span>
+            <span class="suggestion-meta">${doc.category} ${doc.branch ? `• ${doc.branch}` : ''} ${isDraft ? '• Draft' : ''}</span>
           </div>
           <div class="suggestion-actions">
             <button class="suggestion-view-btn" style="background:none; border:none; color:#a5b4fc; cursor:pointer; margin-right:8px;"><i class="fa-solid fa-eye"></i></button>
@@ -956,7 +1244,11 @@ filterTabs.forEach(tab => {
     tab.classList.add('active');
     currentSelectedCategory = tab.getAttribute('data-category');
     const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
-    if (currentSelectedCategory === "Academic Resource" && isAdminEmail && isUserLoggedIn) {
+    if (currentSelectedCategory === "drafts" && isUserLoggedIn && isAdminEmail) {
+      if (academicActionBtn) academicActionBtn.classList.add('hidden');
+      if (resultsMeta) resultsMeta.classList.remove('hidden');
+      fetchDrafts();
+    } else if (currentSelectedCategory === "Academic Resource" && isAdminEmail && isUserLoggedIn) {
       if (academicActionBtn) academicActionBtn.classList.remove('hidden');
       if (resultsMeta) resultsMeta.classList.add('hidden');
     } else {
@@ -976,9 +1268,48 @@ async function deleteDocument(id) {
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${authToken}` }
     });
     const data = await response.json();
-    if (response.ok) { showNotification("Removed successfully"); fetchDocuments(searchInput ? searchInput.value.trim() : ""); }
+    if (response.ok) { showNotification("Removed successfully"); fetchDocuments(searchInput ? searchInput.value.trim() : ""); fetchDrafts(); }
     else { showNotification(data.message); }
   } catch (err) { showNotification("Failed to send drop request."); }
+}
+
+async function publishDraft(id) {
+  try {
+    const response = await fetch(`${API_URL}/documents/publish/${id}`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    const data = await response.json();
+    if (response.ok) { 
+      showNotification("Draft published successfully!"); 
+      fetchDocuments(searchInput ? searchInput.value.trim() : ""); 
+      fetchDrafts();
+      if (currentSelectedCategory === 'drafts') {
+        fetchDocuments(searchInput ? searchInput.value.trim() : "");
+      }
+    } else { 
+      showNotification(data.message || "Failed to publish draft."); 
+    }
+  } catch (err) { showNotification("Network error publishing draft."); }
+}
+
+async function deleteDraft(id) {
+  try {
+    const response = await fetch(`${API_URL}/documents/draft/${id}`, {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${authToken}` }
+    });
+    const data = await response.json();
+    if (response.ok) { 
+      showNotification("Draft deleted successfully."); 
+      fetchDrafts();
+      if (currentSelectedCategory === 'drafts') {
+        fetchDocuments(searchInput ? searchInput.value.trim() : "");
+      }
+    } else { 
+      showNotification(data.message || "Failed to delete draft."); 
+    }
+  } catch (err) { showNotification("Network error deleting draft."); }
 }
 
 function viewAcademicCard(cardData) {
@@ -1184,6 +1515,8 @@ async function fetchDocuments(query = "") {
   if (isLoading) return;
   isLoading = true;
   const shouldRenderAcademic = isUserLoggedIn && currentSelectedCategory === "Academic Resource";
+  const isDraftView = currentSelectedCategory === "drafts";
+  
   if (!activeUserEmail || !authToken) {
     if (resultCount) resultCount.textContent = `0 items ready`;
     if (resultsGrid) {
@@ -1202,9 +1535,10 @@ async function fetchDocuments(query = "") {
     isLoading = false;
     return;
   }
+  
   try {
     let url = `${API_URL}/documents/search?q=${encodeURIComponent(query)}`;
-    if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended") {
+    if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended" && currentSelectedCategory !== "drafts") {
       url += `&category=${encodeURIComponent(currentSelectedCategory)}`;
     }
     if (currentSelectedCategory === "recommended" && currentUserBranch) {
@@ -1227,16 +1561,19 @@ async function fetchDocuments(query = "") {
     let docs = await response.json();
     if (!Array.isArray(docs)) docs = docs.docs || [];
     if (query === "") cachedDocuments = docs;
-    if (currentSelectedCategory === "recommended" && currentUserBranch) {
+    
+    if (isDraftView) {
+      docs = docs.filter(doc => doc.status === 'draft');
+    } else if (currentSelectedCategory === "recommended" && currentUserBranch) {
       docs = docs.filter(doc => {
         const matchesBranch = doc.branch === currentUserBranch || doc.branch === "All Branches";
         const matchesSem = !currentUserSemester || String(doc.semester) === String(currentUserSemester);
         return doc.category === "University Paper" && matchesBranch && matchesSem;
       });
-    }
-    if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended") {
+    } else if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended" && currentSelectedCategory !== "drafts") {
       docs = docs.filter(doc => doc.category === currentSelectedCategory);
     }
+    
     if (resultCount) {
       const count = docs.length;
       resultCount.textContent = `${count} item${count !== 1 ? 's' : ''} ready`;
@@ -1244,7 +1581,7 @@ async function fetchDocuments(query = "") {
     if (!resultsGrid) { isLoading = false; return; }
     const documentCards = resultsGrid.querySelectorAll('.document-row-card');
     documentCards.forEach(card => card.remove());
-    if (!shouldRenderAcademic) {
+    if (!shouldRenderAcademic && !isDraftView) {
       const academicCards = resultsGrid.querySelectorAll('.classroom-card');
       academicCards.forEach(card => card.remove());
     }
@@ -1252,13 +1589,17 @@ async function fetchDocuments(query = "") {
     if (docs.length === 0 && !shouldRenderAcademic) {
       const emptyMsg = document.createElement('span');
       emptyMsg.className = 'history-empty-state';
-      emptyMsg.textContent = query ? `No documents found matching "${query}"` : 'No documents available.';
+      emptyMsg.textContent = isDraftView ? 'No drafts saved.' : (query ? `No documents found matching "${query}"` : 'No documents available.');
       resultsGrid.appendChild(emptyMsg);
     }
     docs.forEach((doc) => {
       const card = document.createElement('div');
       card.className = 'document-row-card';
+      const isDraft = doc.status === 'draft';
       let pillsHtml = `<span style="background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.category || 'University Paper'}</span>`;
+      if (isDraft) {
+        pillsHtml += `<span style="background: #f59e0b; color: #000; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">DRAFT</span>`;
+      }
       if (doc.category === 'University Paper') {
         if (doc.branch) pillsHtml += `<span style="background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.branch}</span>`;
         if (doc.semester) pillsHtml += `<span style="background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Semester ${doc.semester}</span>`;
@@ -1288,7 +1629,7 @@ async function fetchDocuments(query = "") {
       }
       card.innerHTML = `
         <div class="doc-body-details">
-          <h3>${doc.title} ${relevanceInfo}</h3>
+          <h3>${doc.title} ${relevanceInfo} ${isDraft ? '<span style="background: #f59e0b; color: #000; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; margin-left: 4px;">DRAFT</span>' : ''}</h3>
           <p>Category: ${doc.category} ${doc.pageCount ? `• ${doc.pageCount} pages` : ''}</p>
           ${doc.category === 'University Paper' && doc.year ? `<p>Session: ${doc.year}</p>` : ''}
           ${doc.category === 'University Paper' && doc.semester ? `<p>Semester: ${doc.semester}</p>` : ''}
@@ -1308,8 +1649,10 @@ async function fetchDocuments(query = "") {
         <div class="doc-action-zone" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           <button class="action-btn-link view-btn" style="background: rgba(99,102,241,0.1); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem;">View</button>
           ${hasFile ? `<a href="${doc.fileUrl}" target="_blank" rel="noopener" download class="action-btn-link get-btn" style="display: inline-flex; align-items: center; justify-content: center; background: var(--accent-gradient); color: #ffffff; padding: 6px 14px; border-radius: 6px; font-weight: 500; text-decoration: none; font-size: 0.9rem;">Get</a>` : `<button class="action-btn-link" disabled style="background: rgba(148,163,184,0.1); color: #64748b; border: 1px solid rgba(148,163,184,0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: not-allowed; font-size: 0.9rem;">Get</button>`}
-          ${isAdmin ? `<button class="action-btn-link edit-btn" title="Edit" style="background: rgba(234,179,8,0.1); color: #fde047; border: 1px solid rgba(234,179,8,0.2); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;"><i class="fa-solid fa-pen"></i></button>` : ''}
-          ${isAdmin ? `<button class="action-btn-link delete-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete</button>` : ''}
+          ${isAdmin && isDraft ? `<button class="action-btn-link publish-btn" style="background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Publish</button>` : ''}
+          ${isAdmin && isDraft ? `<button class="action-btn-link delete-draft-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete Draft</button>` : ''}
+          ${isAdmin && !isDraft ? `<button class="action-btn-link edit-btn" title="Edit" style="background: rgba(234,179,8,0.1); color: #fde047; border: 1px solid rgba(234,179,8,0.2); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;"><i class="fa-solid fa-pen"></i></button>` : ''}
+          ${isAdmin && !isDraft ? `<button class="action-btn-link delete-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete</button>` : ''}
         </div>
       `;
       card.querySelector('.view-btn').addEventListener('click', () => openPreviewModal(doc.title, doc.fileUrl, doc._id));
@@ -1319,6 +1662,10 @@ async function fetchDocuments(query = "") {
       if (editBtn) editBtn.addEventListener('click', () => openEditDocumentModal(doc));
       const deleteBtn = card.querySelector('.delete-btn');
       if (deleteBtn) deleteBtn.addEventListener('click', () => deleteDocument(doc._id));
+      const publishBtn = card.querySelector('.publish-btn');
+      if (publishBtn) publishBtn.addEventListener('click', () => publishDraft(doc._id));
+      const deleteDraftBtn = card.querySelector('.delete-draft-btn');
+      if (deleteDraftBtn) deleteDraftBtn.addEventListener('click', () => deleteDraft(doc._id));
       resultsGrid.appendChild(card);
     });
     const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
@@ -1362,6 +1709,8 @@ function renderActionButtons() {
 
 window.addEventListener('DOMContentLoaded', async () => {
   renderActionButtons();
+  addDraftTab();
+  addDraftButtons();
   if (authToken) {
     try {
       const base64Url = authToken.split('.')[1];
@@ -1378,6 +1727,9 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (response.ok) {
         const user = await response.json();
         handleUserSession(user);
+        if (user.role === 'admin') {
+          fetchDrafts();
+        }
       } else {
         localStorage.removeItem('token');
         authToken = null;
