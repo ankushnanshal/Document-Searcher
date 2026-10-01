@@ -1,3 +1,34 @@
+const API_URL = "http://localhost:5000/api";
+
+let currentMode = 'signin';
+let activeUserEmail = null;
+let currentUserRole = 'assistant_professor';
+let currentUserDepartment = null;
+let currentUserPermissions = [];
+let currentUserYear = null;
+let currentUserSemester = null;
+let currentUserBranch = null;
+let tempSignupAvatarBase64 = "";
+let pendingUploadFile = null;
+let currentSelectedCategory = "all";
+let cachedDocuments = [];
+let authToken = localStorage.getItem('token') || null;
+let isUserLoggedIn = false;
+let isLoading = false;
+let draftCount = 0;
+let pendingDeleteData = null;
+
+const ROLES = {
+  ADMIN: 'admin',
+  DIRECTOR: 'director',
+  DEAN: 'dean',
+  HOD: 'hod',
+  PROFESSOR: 'professor',
+  ASSISTANT_PROFESSOR: 'assistant_professor'
+};
+
+const COLLEGE_WIDE_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN];
+
 const profileMenuBtn = document.getElementById('profileMenuBtn');
 const authDropdown = document.getElementById('authDropdown');
 const authModal = document.getElementById('authModal');
@@ -77,22 +108,6 @@ const deleteConfirmModal = document.getElementById('deleteConfirmModal');
 const closeDeleteConfirmBtn = document.getElementById('closeDeleteConfirmBtn');
 const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
 const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
-let pendingDeleteData = null;
-const API_URL = "http://localhost:5000/api";
-let currentMode = 'signin';
-let activeUserEmail = null;
-let currentUserRole = 'student';
-let currentUserYear = null;
-let currentUserSemester = null;
-let currentUserBranch = null;
-let tempSignupAvatarBase64 = "";
-let pendingUploadFile = null;
-let currentSelectedCategory = "all";
-let cachedDocuments = [];
-let authToken = localStorage.getItem('token') || null;
-let isUserLoggedIn = false;
-let isLoading = false;
-let draftCount = 0;
 
 function showNotification(message) {
   if (!notificationContainer) { alert(message); return; }
@@ -104,18 +119,41 @@ function showNotification(message) {
 }
 
 function setDefaultAvatar(container) {
-  if (container) container.innerHTML = `<i class="fa-solid fa-user"></i>`;
+  if (container) container.innerHTML = '<i class="fa-solid fa-user"></i>';
 }
 
 function setAvatarImage(container, base64Str) {
   if (container) container.innerHTML = `<img src="${base64Str}" alt="Profile">`;
 }
 
+function isCollegeWideRole() {
+  return COLLEGE_WIDE_ROLES.includes(currentUserRole);
+}
+
+function canManageDocuments() {
+  return currentUserPermissions.includes('create_document') ||
+         currentUserPermissions.includes('delete_document') ||
+         currentUserPermissions.includes('approve_document');
+}
+
+function canApproveDocuments() {
+  return currentUserPermissions.includes('approve_document');
+}
+
+function canManageUsers() {
+  return currentUserRole === ROLES.ADMIN;
+}
+
 function showDeleteConfirmModal(subject, index) {
   pendingDeleteData = { subject, index };
   deleteConfirmModal.classList.remove('hidden');
   const card = deleteConfirmModal.querySelector('.delete-confirm-card');
-  if (card) { card.style.animation = 'none'; requestAnimationFrame(() => { card.style.animation = 'scaleUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)'; }); }
+  if (card) {
+    card.style.animation = 'none';
+    requestAnimationFrame(() => {
+      card.style.animation = 'scaleUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)';
+    });
+  }
 }
 
 function closeDeleteConfirmModal() {
@@ -124,12 +162,17 @@ function closeDeleteConfirmModal() {
 }
 
 if (deleteConfirmModal) {
-  deleteConfirmModal.addEventListener('click', function(e) { if (e.target === this) closeDeleteConfirmModal(); });
+  deleteConfirmModal.addEventListener('click', function(e) {
+    if (e.target === this) closeDeleteConfirmModal();
+  });
   if (closeDeleteConfirmBtn) closeDeleteConfirmBtn.addEventListener('click', closeDeleteConfirmModal);
   if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteConfirmModal);
   if (confirmDeleteBtn) {
     confirmDeleteBtn.addEventListener('click', function() {
-      if (pendingDeleteData) { deleteAnnouncement(pendingDeleteData.subject, pendingDeleteData.index); closeDeleteConfirmModal(); }
+      if (pendingDeleteData) {
+        deleteAnnouncement(pendingDeleteData.subject, pendingDeleteData.index);
+        closeDeleteConfirmModal();
+      }
     });
   }
 }
@@ -158,6 +201,7 @@ function handleSemesterBranchLogic() {
     if (docBranchSelect.value === "All Branches") docBranchSelect.value = "CSE-(R)";
   }
 }
+
 if (docSemSelect) docSemSelect.addEventListener('change', handleSemesterBranchLogic);
 
 if (docCategorySelect && universityFields && officialFields) {
@@ -239,7 +283,9 @@ if (updateProfileBtn && profileImageInput) {
 if (logoutBtn) {
   logoutBtn.addEventListener('click', () => {
     activeUserEmail = null;
-    currentUserRole = 'student';
+    currentUserRole = 'assistant_professor';
+    currentUserDepartment = null;
+    currentUserPermissions = [];
     currentUserYear = null;
     currentUserSemester = null;
     currentUserBranch = null;
@@ -275,6 +321,10 @@ if (logoutBtn) {
 
 if (uploadDocBtn && universalDocumentInput) {
   uploadDocBtn.addEventListener('click', () => {
+    if (!canManageDocuments()) {
+      showNotification("Access denied. You don't have permission to upload documents.");
+      return;
+    }
     if (docCategorySelect) docCategorySelect.value = "";
     if (universityFields) universityFields.style.display = 'none';
     if (officialFields) officialFields.style.display = 'none';
@@ -296,8 +346,8 @@ if (uploadDocBtn && universalDocumentInput) {
 
 if (draftManagerBtn) {
   draftManagerBtn.addEventListener('click', () => {
-    if (currentUserRole !== 'admin') {
-      showNotification("Access denied. Admin only.");
+    if (!canManageDocuments()) {
+      showNotification("Access denied. You don't have permission to manage drafts.");
       return;
     }
     if (draftsPageView) {
@@ -331,13 +381,22 @@ if (profileImageInput) {
       try {
         const response = await fetch(`${API_URL}/auth/update-avatar`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${authToken}` },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${authToken}`
+          },
           body: JSON.stringify({ avatar: event.target.result })
         });
         const data = await response.json();
-        if (response.ok) { setAvatarImage(avatarContainer, data.avatar); showNotification(data.message); }
-        else { showNotification(data.message); }
-      } catch (err) { showNotification("Network error processing avatar update."); }
+        if (response.ok) {
+          setAvatarImage(avatarContainer, data.avatar);
+          showNotification(data.message);
+        } else {
+          showNotification(data.message);
+        }
+      } catch (err) {
+        showNotification("Network error processing avatar update.");
+      }
     };
     reader.readAsDataURL(e.target.files[0]);
   });
@@ -377,15 +436,15 @@ function getFormDataForUpload(status) {
   const officialDocSessionSelect = document.getElementById('officialDocSessionSelect');
   const officialDocSemSelect = document.getElementById('officialDocSemSelect');
   const officialDocBranchSelect = document.getElementById('officialDocBranchSelect');
-  
+
   if (!categorySelect || !categorySelect.value) {
     showNotification("Please select a resource category.");
     return null;
   }
-  
+
   const category = categorySelect.value;
   let finalCategory = category === 'Official' ? 'Official Update' : 'University Paper';
-  
+
   let selectedDate = docDateInput ? docDateInput.value : "";
   if (!selectedDate) {
     const today = new Date();
@@ -394,25 +453,26 @@ function getFormDataForUpload(status) {
     const day = String(today.getDate()).padStart(2, '0');
     selectedDate = `${year}-${month}-${day}`;
   }
-  
+
   let customTitle = '';
   if (docTitleInput) {
     customTitle = docTitleInput.value.trim();
   }
-  
+
   const formData = new FormData();
   formData.append('file', pendingUploadFile);
-  
+
   if (customTitle && customTitle.length > 0) {
     formData.append('title', customTitle);
   } else {
     formData.append('title', pendingUploadFile.name);
   }
-  
+
   formData.append('category', finalCategory);
   formData.append('docDate', selectedDate);
   formData.append('status', status || 'published');
-  
+  formData.append('department', currentUserDepartment || '');
+
   if (finalCategory === 'University Paper') {
     formData.append('year', docSessionSelect ? docSessionSelect.value : '2024-25');
     formData.append('semester', docSemSelect ? docSemSelect.value : '1');
@@ -425,7 +485,7 @@ function getFormDataForUpload(status) {
     formData.append('semester', officialDocSemSelect ? officialDocSemSelect.value : '1');
     formData.append('branch', officialDocBranchSelect ? officialDocBranchSelect.value : 'All Branches');
   }
-  
+
   return formData;
 }
 
@@ -435,10 +495,10 @@ if (confirmUploadBtn) {
       showNotification("No file selected.");
       return;
     }
-    
+
     const formData = getFormDataForUpload('published');
     if (!formData) return;
-    
+
     try {
       const response = await fetch(`${API_URL}/documents/upload`, {
         method: "POST",
@@ -447,11 +507,11 @@ if (confirmUploadBtn) {
         },
         body: formData
       });
-      
+
       const data = await response.json();
-      
+
       if (response.ok) {
-        showNotification("Document uploaded and indexed successfully!");
+        showNotification(data.message || "Document uploaded successfully!");
         const docTitleInput = document.getElementById('docTitleInput');
         if (docTitleInput) {
           docTitleInput.value = '';
@@ -480,10 +540,10 @@ async function saveAsDraft() {
     showNotification("No file selected.");
     return;
   }
-  
+
   const formData = getFormDataForUpload('draft');
   if (!formData) return;
-  
+
   try {
     const response = await fetch(`${API_URL}/documents/upload`, {
       method: "POST",
@@ -492,9 +552,9 @@ async function saveAsDraft() {
       },
       body: formData
     });
-    
+
     const data = await response.json();
-    
+
     if (response.ok) {
       showNotification("Document saved as draft successfully!");
       const docTitleInput = document.getElementById('docTitleInput');
@@ -524,49 +584,49 @@ async function saveAsDraft() {
 function addDraftButtons() {
   const uploadPopupActions = document.querySelector('#uploadPopup .modal-form');
   if (!uploadPopupActions) return;
-  
+
   const existingDraftBtn = document.getElementById('saveDraftBtn');
   const existingUploadBtn = document.getElementById('confirmUploadBtn');
-  
+
   if (existingDraftBtn && existingUploadBtn) {
     existingDraftBtn.removeEventListener('click', saveAsDraft);
     existingUploadBtn.removeEventListener('click', null);
   }
-  
+
   const parent = uploadPopupActions;
   const existingButtons = parent.querySelectorAll('button');
   existingButtons.forEach(btn => btn.remove());
-  
+
   const buttonContainer = document.createElement('div');
   buttonContainer.style.cssText = 'display: flex; gap: 12px; margin-top: 8px;';
-  
+
   const uploadBtn = document.createElement('button');
   uploadBtn.id = 'confirmUploadBtn';
   uploadBtn.className = 'form-action-trigger';
   uploadBtn.textContent = 'Upload / Publish';
   uploadBtn.style.flex = '1';
-  
+
   const draftBtn = document.createElement('button');
   draftBtn.id = 'saveDraftBtn';
   draftBtn.className = 'form-action-trigger';
   draftBtn.textContent = 'Save as Draft';
   draftBtn.style.flex = '1';
   draftBtn.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
-  
+
   buttonContainer.appendChild(uploadBtn);
   buttonContainer.appendChild(draftBtn);
   parent.appendChild(buttonContainer);
-  
+
   document.getElementById('saveDraftBtn').addEventListener('click', saveAsDraft);
   document.getElementById('confirmUploadBtn').addEventListener('click', async () => {
     if (!pendingUploadFile) {
       showNotification("No file selected.");
       return;
     }
-    
+
     const formData = getFormDataForUpload('published');
     if (!formData) return;
-    
+
     try {
       const response = await fetch(`${API_URL}/documents/upload`, {
         method: "POST",
@@ -575,11 +635,11 @@ function addDraftButtons() {
         },
         body: formData
       });
-      
+
       const data = await response.json();
-      
+
       if (response.ok) {
-        showNotification("Document uploaded and indexed successfully!");
+        showNotification(data.message || "Document uploaded successfully!");
         const docTitleInput = document.getElementById('docTitleInput');
         if (docTitleInput) {
           docTitleInput.value = '';
@@ -604,9 +664,9 @@ function addDraftButtons() {
 }
 
 async function fetchDrafts() {
-  if (!authToken || currentUserRole !== 'admin') {
+  if (!authToken || !canManageDocuments()) {
     if (draftsContainer) {
-      draftsContainer.innerHTML = '<span class="history-empty-state">Please login as admin to view drafts.</span>';
+      draftsContainer.innerHTML = '<span class="history-empty-state">No permission to view drafts.</span>';
     }
     return;
   }
@@ -671,7 +731,7 @@ function renderDraftList(drafts) {
       </div>
     `;
     draftsContainer.appendChild(card);
-    
+
     card.querySelector('.draft-action-open').addEventListener('click', () => openEditDocumentModal(draft));
     card.querySelector('.draft-action-publish').addEventListener('click', () => publishDraft(draft._id));
     card.querySelector('.draft-action-delete').addEventListener('click', () => deleteDraft(draft._id));
@@ -777,7 +837,10 @@ if (confirmEditBtn) {
     try {
       const response = await fetch(url, {
         method: "PUT",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${authToken}` },
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${authToken}`
+        },
         body: JSON.stringify(payload)
       });
       const data = await response.json();
@@ -790,7 +853,9 @@ if (confirmEditBtn) {
       } else {
         showNotification(data.message || "Update failed.");
       }
-    } catch (err) { showNotification("Network error updating document."); }
+    } catch (err) {
+      showNotification("Network error updating document.");
+    }
   });
 }
 
@@ -829,14 +894,19 @@ if (authForm) {
       });
       const data = await response.json();
       if (response.ok) {
-        if (data.token) { authToken = data.token; localStorage.setItem('token', data.token); }
+        if (data.token) {
+          authToken = data.token;
+          localStorage.setItem('token', data.token);
+        }
         handleUserSession(data);
         if (authModal) authModal.classList.add('hidden');
         authForm.reset();
       } else {
         showNotification(data.message || "Authentication failed.");
       }
-    } catch (err) { showNotification("Connection error. Is the backend server running?"); }
+    } catch (err) {
+      showNotification("Connection error. Is the backend server running?");
+    }
   });
 }
 
@@ -845,19 +915,34 @@ function handleUserSession(user) {
   isUserLoggedIn = true;
   activeUserEmail = user.email;
   currentUserRole = user.role;
+  currentUserDepartment = user.department;
+  currentUserPermissions = user.permissions || [];
   currentUserYear = user.year;
   currentUserSemester = user.semester;
   currentUserBranch = user.branch;
-  if (workspaceName) workspaceName.textContent = user.name;
+
+  if (workspaceName) {
+    const displayName = currentUserDepartment
+      ? `${user.name} (${currentUserDepartment})`
+      : user.name;
+    workspaceName.textContent = displayName;
+  }
+
   if (authorizedActionsBlock) authorizedActionsBlock.classList.remove('hidden');
+
   const signInBtn = document.getElementById('goSignInBtn');
   const signUpBtn = document.getElementById('goSignUpBtn');
   if (signInBtn) signInBtn.classList.add('hidden');
   if (signUpBtn) signUpBtn.classList.add('hidden');
+
   if (uploadDocBtn) {
-    if (user.role === 'admin') {
+    if (canManageDocuments()) {
       uploadDocBtn.classList.remove('hidden');
-      if (draftManagerBtn) draftManagerBtn.classList.remove('hidden');
+      if (draftManagerBtn && currentUserRole !== ROLES.ASSISTANT_PROFESSOR) {
+        draftManagerBtn.classList.remove('hidden');
+      } else if (draftManagerBtn) {
+        draftManagerBtn.classList.add('hidden');
+      }
       addDraftTab();
       addDraftButtons();
       fetchDrafts();
@@ -866,13 +951,15 @@ function handleUserSession(user) {
       if (draftManagerBtn) draftManagerBtn.classList.add('hidden');
     }
   }
+
   const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
   if (academicActionBtn) {
     if (isAdminEmail && currentSelectedCategory === "Academic Resource") academicActionBtn.classList.remove('hidden');
     else academicActionBtn.classList.add('hidden');
   }
+
   if (recommendedTab) {
-    if (user.role === 'student' && user.branch) {
+    if (currentUserRole === ROLES.ASSISTANT_PROFESSOR && currentUserBranch) {
       recommendedTab.classList.remove('hidden');
       filterTabs.forEach(t => t.classList.remove('active'));
       recommendedTab.classList.add('active');
@@ -884,7 +971,9 @@ function handleUserSession(user) {
       currentSelectedCategory = "all";
     }
   }
+
   if (user.avatar) setAvatarImage(avatarContainer, user.avatar);
+
   fetchDocuments();
   fetchHistory();
   renderActionButtons();
@@ -895,11 +984,16 @@ async function logHistory(title, documentId) {
   try {
     await fetch(`${API_URL}/history`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${authToken}` },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
       body: JSON.stringify({ title, documentId })
     });
     fetchHistory();
-  } catch (err) { console.error(err); }
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 async function fetchHistory() {
@@ -909,6 +1003,7 @@ async function fetchHistory() {
       headers: { "Authorization": `Bearer ${authToken}` }
     });
     const data = await response.json();
+
     if (recentActivityList) {
       recentActivityList.innerHTML = '';
       const recent = data.slice(0, 5);
@@ -926,9 +1021,13 @@ async function fetchHistory() {
         });
       }
     }
+
     if (historyCountText) historyCountText.textContent = `${data.length} items recorded`;
+
     if (fullHistoryContainer) {
-      fullHistoryContainer.innerHTML = data.length === 0 ? '<span class="history-empty-state">No download or viewing history found.</span>' : '';
+      fullHistoryContainer.innerHTML = data.length === 0
+        ? '<span class="history-empty-state">No download or viewing history found.</span>'
+        : '';
       data.forEach(item => {
         const row = document.createElement('div');
         row.className = 'document-row-card';
@@ -936,7 +1035,9 @@ async function fetchHistory() {
         fullHistoryContainer.appendChild(row);
       });
     }
-  } catch (err) { console.error(err); }
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 if (clearHistoryBtn) {
@@ -947,8 +1048,13 @@ if (clearHistoryBtn) {
         method: "DELETE",
         headers: { "Authorization": `Bearer ${authToken}` }
       });
-      if (response.ok) { showNotification("History cleared"); fetchHistory(); }
-    } catch (err) { showNotification("Failed to clear history"); }
+      if (response.ok) {
+        showNotification("History cleared");
+        fetchHistory();
+      }
+    } catch (err) {
+      showNotification("Failed to clear history");
+    }
   });
 }
 
@@ -982,6 +1088,7 @@ function openPreviewModal(title, fileUrl, docId) {
   previewModalTitle.textContent = title;
   previewContainer.innerHTML = '';
   previewModal.classList.remove('hidden');
+
   if (!fileUrl) {
     const pre = document.createElement('pre');
     pre.textContent = "Preview unavailable for this asset.";
@@ -990,9 +1097,10 @@ function openPreviewModal(title, fileUrl, docId) {
     previewContainer.appendChild(pre);
     return;
   }
+
   const lowerTitle = title.toLowerCase();
   const fileExtension = fileUrl.split('.').pop().toLowerCase().split('?')[0];
-  
+
   if (lowerTitle.endsWith('.pdf') || fileExtension === 'pdf') {
     const iframe = document.createElement('iframe');
     iframe.src = fileUrl;
@@ -1002,9 +1110,9 @@ function openPreviewModal(title, fileUrl, docId) {
     iframe.style.borderRadius = '8px';
     iframe.style.display = 'block';
     previewContainer.appendChild(iframe);
-  } else if (lowerTitle.endsWith('.png') || lowerTitle.endsWith('.jpg') || lowerTitle.endsWith('.jpeg') || 
+  } else if (lowerTitle.endsWith('.png') || lowerTitle.endsWith('.jpg') || lowerTitle.endsWith('.jpeg') ||
              lowerTitle.endsWith('.gif') || lowerTitle.endsWith('.webp') || lowerTitle.endsWith('.tiff') ||
-             fileExtension === 'png' || fileExtension === 'jpg' || fileExtension === 'jpeg' || 
+             fileExtension === 'png' || fileExtension === 'jpg' || fileExtension === 'jpeg' ||
              fileExtension === 'gif' || fileExtension === 'webp' || fileExtension === 'tiff') {
     const img = document.createElement('img');
     img.src = fileUrl;
@@ -1014,8 +1122,8 @@ function openPreviewModal(title, fileUrl, docId) {
     img.style.borderRadius = '8px';
     img.style.display = 'block';
     previewContainer.appendChild(img);
-  } else if (lowerTitle.endsWith('.txt') || lowerTitle.endsWith('.csv') || lowerTitle.endsWith('.json') || 
-             lowerTitle.endsWith('.md') || fileExtension === 'txt' || fileExtension === 'csv' || 
+  } else if (lowerTitle.endsWith('.txt') || lowerTitle.endsWith('.csv') || lowerTitle.endsWith('.json') ||
+             lowerTitle.endsWith('.md') || fileExtension === 'txt' || fileExtension === 'csv' ||
              fileExtension === 'json' || fileExtension === 'md') {
     const iframe = document.createElement('iframe');
     iframe.src = fileUrl;
@@ -1026,7 +1134,7 @@ function openPreviewModal(title, fileUrl, docId) {
     iframe.style.backgroundColor = '#ffffff';
     iframe.style.display = 'block';
     previewContainer.appendChild(iframe);
-  } else if (lowerTitle.endsWith('.docx') || lowerTitle.endsWith('.doc') || 
+  } else if (lowerTitle.endsWith('.docx') || lowerTitle.endsWith('.doc') ||
              fileExtension === 'docx' || fileExtension === 'doc') {
     const wrapper = document.createElement('div');
     wrapper.style.display = 'flex';
@@ -1051,7 +1159,7 @@ function openPreviewModal(title, fileUrl, docId) {
       </div>
     `;
     previewContainer.appendChild(wrapper);
-  } else if (lowerTitle.endsWith('.xlsx') || lowerTitle.endsWith('.xls') || 
+  } else if (lowerTitle.endsWith('.xlsx') || lowerTitle.endsWith('.xls') ||
              fileExtension === 'xlsx' || fileExtension === 'xls') {
     const wrapper = document.createElement('div');
     wrapper.style.display = 'flex';
@@ -1076,7 +1184,7 @@ function openPreviewModal(title, fileUrl, docId) {
       </div>
     `;
     previewContainer.appendChild(wrapper);
-  } else if (lowerTitle.endsWith('.pptx') || lowerTitle.endsWith('.ppt') || 
+  } else if (lowerTitle.endsWith('.pptx') || lowerTitle.endsWith('.ppt') ||
              fileExtension === 'pptx' || fileExtension === 'ppt') {
     const wrapper = document.createElement('div');
     wrapper.style.display = 'flex';
@@ -1146,16 +1254,16 @@ if (searchInput) {
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
     }
   });
-  
+
   searchInput.addEventListener('input', () => {
     const query = searchInput.value.trim().toLowerCase();
     if (!query || cachedDocuments.length === 0) {
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
       return;
     }
-    
+
     let searchQuery = query;
-    
+
     let filtered = cachedDocuments.filter(doc => {
       if (currentSelectedCategory === "drafts") {
         return doc.status === 'draft';
@@ -1172,7 +1280,7 @@ if (searchInput) {
       }
       return true;
     });
-    
+
     filtered = filtered.filter(doc => {
       const searchLower = searchQuery.toLowerCase();
       const titleLower = (doc.title || '').toLowerCase();
@@ -1186,17 +1294,17 @@ if (searchInput) {
       const yearLower = (doc.year || '').toLowerCase();
       const semesterLower = (doc.semester || '').toLowerCase();
       const sessionLower = (doc.session || '').toLowerCase();
-      
+
       const allText = `${titleLower} ${titleHindiLower} ${textLower} ${textHindiLower} ${officialTypeLower} ${paperTypeLower} ${categoryLower} ${branchLower} ${yearLower} ${semesterLower} ${sessionLower}`;
-      
+
       return allText.includes(searchLower);
     });
-    
+
     if (filtered.length === 0) {
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
       return;
     }
-    
+
     if (searchSuggestions) {
       searchSuggestions.innerHTML = '';
       const displayCount = Math.min(filtered.length, 10);
@@ -1210,7 +1318,7 @@ if (searchInput) {
         row.innerHTML = `
           <div class="suggestion-info">
             <span class="suggestion-title">${doc.title} ${draftBadge} ${hasContentMatch ? '📄' : ''}</span>
-            <span class="suggestion-meta">${doc.category} ${doc.branch ? `• ${doc.branch}` : ''} ${isDraft ? '• Draft' : ''}</span>
+            <span class="suggestion-meta">${doc.category} ${doc.department ? `• ${doc.department}` : ''} ${isDraft ? '• Draft' : ''}</span>
           </div>
           <div class="suggestion-actions">
             <button class="suggestion-view-btn" style="background:none; border:none; color:#a5b4fc; cursor:pointer; margin-right:8px;"><i class="fa-solid fa-eye"></i></button>
@@ -1232,7 +1340,7 @@ if (searchInput) {
       searchSuggestions.classList.remove('hidden');
     }
   });
-  
+
   document.addEventListener('click', (e) => {
     if (searchSuggestions && !e.target.closest('.search-container')) searchSuggestions.classList.add('hidden');
   });
@@ -1244,7 +1352,7 @@ filterTabs.forEach(tab => {
     tab.classList.add('active');
     currentSelectedCategory = tab.getAttribute('data-category');
     const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
-    if (currentSelectedCategory === "drafts" && isUserLoggedIn && isAdminEmail) {
+    if (currentSelectedCategory === "drafts" && isUserLoggedIn && canManageDocuments()) {
       if (academicActionBtn) academicActionBtn.classList.add('hidden');
       if (resultsMeta) resultsMeta.classList.remove('hidden');
       fetchDrafts();
@@ -1265,12 +1373,22 @@ async function deleteDocument(id) {
   try {
     const response = await fetch(`${API_URL}/documents/${id}`, {
       method: "DELETE",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${authToken}` }
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      }
     });
     const data = await response.json();
-    if (response.ok) { showNotification("Removed successfully"); fetchDocuments(searchInput ? searchInput.value.trim() : ""); fetchDrafts(); }
-    else { showNotification(data.message); }
-  } catch (err) { showNotification("Failed to send drop request."); }
+    if (response.ok) {
+      showNotification("Removed successfully");
+      fetchDocuments(searchInput ? searchInput.value.trim() : "");
+      fetchDrafts();
+    } else {
+      showNotification(data.message);
+    }
+  } catch (err) {
+    showNotification("Failed to send drop request.");
+  }
 }
 
 async function publishDraft(id) {
@@ -1280,17 +1398,19 @@ async function publishDraft(id) {
       headers: { "Authorization": `Bearer ${authToken}` }
     });
     const data = await response.json();
-    if (response.ok) { 
-      showNotification("Draft published successfully!"); 
-      fetchDocuments(searchInput ? searchInput.value.trim() : ""); 
+    if (response.ok) {
+      showNotification("Draft published successfully!");
+      fetchDocuments(searchInput ? searchInput.value.trim() : "");
       fetchDrafts();
       if (currentSelectedCategory === 'drafts') {
         fetchDocuments(searchInput ? searchInput.value.trim() : "");
       }
-    } else { 
-      showNotification(data.message || "Failed to publish draft."); 
+    } else {
+      showNotification(data.message || "Failed to publish draft.");
     }
-  } catch (err) { showNotification("Network error publishing draft."); }
+  } catch (err) {
+    showNotification("Network error publishing draft.");
+  }
 }
 
 async function deleteDraft(id) {
@@ -1300,16 +1420,18 @@ async function deleteDraft(id) {
       headers: { "Authorization": `Bearer ${authToken}` }
     });
     const data = await response.json();
-    if (response.ok) { 
-      showNotification("Draft deleted successfully."); 
+    if (response.ok) {
+      showNotification("Draft deleted successfully.");
       fetchDrafts();
       if (currentSelectedCategory === 'drafts') {
         fetchDocuments(searchInput ? searchInput.value.trim() : "");
       }
-    } else { 
-      showNotification(data.message || "Failed to delete draft."); 
+    } else {
+      showNotification(data.message || "Failed to delete draft.");
     }
-  } catch (err) { showNotification("Network error deleting draft."); }
+  } catch (err) {
+    showNotification("Network error deleting draft.");
+  }
 }
 
 function viewAcademicCard(cardData) {
@@ -1516,7 +1638,7 @@ async function fetchDocuments(query = "") {
   isLoading = true;
   const shouldRenderAcademic = isUserLoggedIn && currentSelectedCategory === "Academic Resource";
   const isDraftView = currentSelectedCategory === "drafts";
-  
+
   if (!activeUserEmail || !authToken) {
     if (resultCount) resultCount.textContent = `0 items ready`;
     if (resultsGrid) {
@@ -1535,7 +1657,7 @@ async function fetchDocuments(query = "") {
     isLoading = false;
     return;
   }
-  
+
   try {
     let url = `${API_URL}/documents/search?q=${encodeURIComponent(query)}`;
     if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended" && currentSelectedCategory !== "drafts") {
@@ -1561,7 +1683,7 @@ async function fetchDocuments(query = "") {
     let docs = await response.json();
     if (!Array.isArray(docs)) docs = docs.docs || [];
     if (query === "") cachedDocuments = docs;
-    
+
     if (isDraftView) {
       docs = docs.filter(doc => doc.status === 'draft');
     } else if (currentSelectedCategory === "recommended" && currentUserBranch) {
@@ -1573,7 +1695,7 @@ async function fetchDocuments(query = "") {
     } else if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended" && currentSelectedCategory !== "drafts") {
       docs = docs.filter(doc => doc.category === currentSelectedCategory);
     }
-    
+
     if (resultCount) {
       const count = docs.length;
       resultCount.textContent = `${count} item${count !== 1 ? 's' : ''} ready`;
@@ -1585,7 +1707,7 @@ async function fetchDocuments(query = "") {
       const academicCards = resultsGrid.querySelectorAll('.classroom-card');
       academicCards.forEach(card => card.remove());
     }
-    const isAdmin = currentUserRole === 'admin';
+    const isAdmin = currentUserRole === ROLES.ADMIN;
     if (docs.length === 0 && !shouldRenderAcademic) {
       const emptyMsg = document.createElement('span');
       emptyMsg.className = 'history-empty-state';
@@ -1596,9 +1718,16 @@ async function fetchDocuments(query = "") {
       const card = document.createElement('div');
       card.className = 'document-row-card';
       const isDraft = doc.status === 'draft';
+      const isPending = doc.status === 'pending_approval';
       let pillsHtml = `<span style="background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.category || 'University Paper'}</span>`;
       if (isDraft) {
         pillsHtml += `<span style="background: #f59e0b; color: #000; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">DRAFT</span>`;
+      }
+      if (isPending) {
+        pillsHtml += `<span style="background: #3b82f6; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">PENDING</span>`;
+      }
+      if (doc.department) {
+        pillsHtml += `<span style="background: rgba(74,222,128,0.15); color: #4ade80; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.department}</span>`;
       }
       if (doc.category === 'University Paper') {
         if (doc.branch) pillsHtml += `<span style="background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.branch}</span>`;
@@ -1629,7 +1758,7 @@ async function fetchDocuments(query = "") {
       }
       card.innerHTML = `
         <div class="doc-body-details">
-          <h3>${doc.title} ${relevanceInfo} ${isDraft ? '<span style="background: #f59e0b; color: #000; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; margin-left: 4px;">DRAFT</span>' : ''}</h3>
+          <h3>${doc.title} ${relevanceInfo} ${isDraft ? '<span style="background: #f59e0b; color: #000; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; margin-left: 4px;">DRAFT</span>' : ''} ${isPending ? '<span style="background: #3b82f6; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; margin-left: 4px;">PENDING</span>' : ''}</h3>
           <p>Category: ${doc.category} ${doc.pageCount ? `• ${doc.pageCount} pages` : ''}</p>
           ${doc.category === 'University Paper' && doc.year ? `<p>Session: ${doc.year}</p>` : ''}
           ${doc.category === 'University Paper' && doc.semester ? `<p>Semester: ${doc.semester}</p>` : ''}
@@ -1640,6 +1769,7 @@ async function fetchDocuments(query = "") {
           ${doc.category === 'Official Update' && doc.session ? `<p>Session: ${doc.session}</p>` : ''}
           ${doc.category === 'Official Update' && doc.semester && doc.semester !== 'All Semesters' ? `<p>Semester: ${doc.semester}</p>` : ''}
           ${doc.category === 'Official Update' && doc.branch && doc.branch !== 'All Branches' ? `<p>Branch: ${doc.branch}</p>` : ''}
+          ${doc.department ? `<p>Department: ${doc.department}</p>` : ''}
           ${doc.docDate ? `<p>Date: ${doc.docDate}</p>` : ''}
           ${!hasFile ? `<p style="color:#ef4444; font-size:0.8rem;">File missing on storage — re-upload required.</p>` : ''}
           ${query && doc.extractedText ? `<p style="color: #94a3b8; font-size: 0.75rem; margin-top: 4px;">📄 Content: ${doc.extractedText.substring(0, 150)}${doc.extractedText.length > 150 ? '...' : ''}</p>` : ''}
@@ -1649,10 +1779,10 @@ async function fetchDocuments(query = "") {
         <div class="doc-action-zone" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           <button class="action-btn-link view-btn" style="background: rgba(99,102,241,0.1); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem;">View</button>
           ${hasFile ? `<a href="${doc.fileUrl}" target="_blank" rel="noopener" download class="action-btn-link get-btn" style="display: inline-flex; align-items: center; justify-content: center; background: var(--accent-gradient); color: #ffffff; padding: 6px 14px; border-radius: 6px; font-weight: 500; text-decoration: none; font-size: 0.9rem;">Get</a>` : `<button class="action-btn-link" disabled style="background: rgba(148,163,184,0.1); color: #64748b; border: 1px solid rgba(148,163,184,0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: not-allowed; font-size: 0.9rem;">Get</button>`}
-          ${isAdmin && isDraft ? `<button class="action-btn-link publish-btn" style="background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Publish</button>` : ''}
-          ${isAdmin && isDraft ? `<button class="action-btn-link delete-draft-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete Draft</button>` : ''}
-          ${isAdmin && !isDraft ? `<button class="action-btn-link edit-btn" title="Edit" style="background: rgba(234,179,8,0.1); color: #fde047; border: 1px solid rgba(234,179,8,0.2); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;"><i class="fa-solid fa-pen"></i></button>` : ''}
-          ${isAdmin && !isDraft ? `<button class="action-btn-link delete-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete</button>` : ''}
+          ${canManageDocuments() && isDraft ? `<button class="action-btn-link publish-btn" style="background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Publish</button>` : ''}
+          ${canManageDocuments() && isDraft ? `<button class="action-btn-link delete-draft-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete Draft</button>` : ''}
+          ${canManageDocuments() && !isDraft ? `<button class="action-btn-link edit-btn" title="Edit" style="background: rgba(234,179,8,0.1); color: #fde047; border: 1px solid rgba(234,179,8,0.2); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;"><i class="fa-solid fa-pen"></i></button>` : ''}
+          ${currentUserRole === ROLES.ADMIN && !isDraft ? `<button class="action-btn-link delete-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete</button>` : ''}
         </div>
       `;
       card.querySelector('.view-btn').addEventListener('click', () => openPreviewModal(doc.title, doc.fileUrl, doc._id));
@@ -1703,7 +1833,7 @@ async function fetchDocuments(query = "") {
 
 function renderActionButtons() {
   const adminButtons = document.querySelectorAll('.admin-only');
-  if (currentUserRole === 'admin') adminButtons.forEach(button => button.classList.remove('hidden'));
+  if (currentUserRole === ROLES.ADMIN) adminButtons.forEach(button => button.classList.remove('hidden'));
   else adminButtons.forEach(button => button.classList.add('hidden'));
 }
 
@@ -1727,7 +1857,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (response.ok) {
         const user = await response.json();
         handleUserSession(user);
-        if (user.role === 'admin') {
+        if (canManageDocuments()) {
           fetchDrafts();
         }
       } else {
@@ -1752,6 +1882,10 @@ window.addEventListener('DOMContentLoaded', async () => {
 if (academicActionBtn) {
   academicActionBtn.addEventListener('click', (e) => {
     e.stopPropagation();
+    if (currentUserRole !== ROLES.ADMIN) {
+      showNotification("Access denied. Admin only.");
+      return;
+    }
     academicModal.classList.remove('hidden');
   });
 }
@@ -2032,6 +2166,10 @@ window.addEventListener('load', function() {
 if (submitAcademicDetailsBtn) {
   submitAcademicDetailsBtn.addEventListener('click', (e) => {
     e.preventDefault();
+    if (currentUserRole !== ROLES.ADMIN) {
+      showNotification("Access denied. Admin only.");
+      return;
+    }
     const subjectInput = document.getElementById('academicSubjectInput');
     const branchSelect = document.getElementById('academicBranchSelect');
     const semesterSelect = document.getElementById('academicSemesterSelect');

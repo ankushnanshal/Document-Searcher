@@ -15,6 +15,536 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 const OpenAI = require('openai');
 require('dotenv').config();
 
+const ROLES = {
+  ADMIN: 'admin',
+  DIRECTOR: 'director',
+  DEAN: 'dean',
+  HOD: 'hod',
+  PROFESSOR: 'professor',
+  ASSISTANT_PROFESSOR: 'assistant_professor'
+};
+
+const DEPARTMENTS = {
+  CSE: 'CSE',
+  ECE: 'ECE',
+  ME: 'ME',
+  CE: 'CE',
+  EE: 'EE',
+  CHE: 'CHE',
+  IT: 'IT',
+  MBA: 'MBA'
+};
+
+const PERMISSIONS = {
+  CREATE_DOCUMENT: 'create_document',
+  EDIT_DOCUMENT: 'edit_document',
+  DELETE_DOCUMENT: 'delete_document',
+  VIEW_DOCUMENTS: 'view_documents',
+  APPROVE_DOCUMENT: 'approve_document',
+  MANAGE_USERS: 'manage_users',
+  MANAGE_DEPARTMENT: 'manage_department',
+  SUBMIT_DOCUMENT: 'submit_document'
+};
+
+const ROLE_PERMISSIONS = {
+  [ROLES.ADMIN]: [
+    PERMISSIONS.CREATE_DOCUMENT,
+    PERMISSIONS.EDIT_DOCUMENT,
+    PERMISSIONS.DELETE_DOCUMENT,
+    PERMISSIONS.VIEW_DOCUMENTS,
+    PERMISSIONS.APPROVE_DOCUMENT,
+    PERMISSIONS.MANAGE_USERS,
+    PERMISSIONS.MANAGE_DEPARTMENT,
+    PERMISSIONS.SUBMIT_DOCUMENT
+  ],
+  [ROLES.DIRECTOR]: [
+    PERMISSIONS.CREATE_DOCUMENT,
+    PERMISSIONS.EDIT_DOCUMENT,
+    PERMISSIONS.DELETE_DOCUMENT,
+    PERMISSIONS.VIEW_DOCUMENTS,
+    PERMISSIONS.APPROVE_DOCUMENT,
+    PERMISSIONS.MANAGE_DEPARTMENT,
+    PERMISSIONS.SUBMIT_DOCUMENT
+  ],
+  [ROLES.DEAN]: [
+    PERMISSIONS.CREATE_DOCUMENT,
+    PERMISSIONS.EDIT_DOCUMENT,
+    PERMISSIONS.DELETE_DOCUMENT,
+    PERMISSIONS.VIEW_DOCUMENTS,
+    PERMISSIONS.APPROVE_DOCUMENT,
+    PERMISSIONS.MANAGE_DEPARTMENT,
+    PERMISSIONS.SUBMIT_DOCUMENT
+  ],
+  [ROLES.HOD]: [
+    PERMISSIONS.CREATE_DOCUMENT,
+    PERMISSIONS.EDIT_DOCUMENT,
+    PERMISSIONS.DELETE_DOCUMENT,
+    PERMISSIONS.VIEW_DOCUMENTS,
+    PERMISSIONS.APPROVE_DOCUMENT,
+    PERMISSIONS.MANAGE_DEPARTMENT,
+    PERMISSIONS.SUBMIT_DOCUMENT
+  ],
+  [ROLES.PROFESSOR]: [
+    PERMISSIONS.CREATE_DOCUMENT,
+    PERMISSIONS.EDIT_DOCUMENT,
+    PERMISSIONS.DELETE_DOCUMENT,
+    PERMISSIONS.VIEW_DOCUMENTS,
+    PERMISSIONS.APPROVE_DOCUMENT,
+    PERMISSIONS.MANAGE_DEPARTMENT,
+    PERMISSIONS.SUBMIT_DOCUMENT
+  ],
+  [ROLES.ASSISTANT_PROFESSOR]: [
+    PERMISSIONS.CREATE_DOCUMENT,
+    PERMISSIONS.EDIT_DOCUMENT,
+    PERMISSIONS.DELETE_DOCUMENT,
+    PERMISSIONS.VIEW_DOCUMENTS,
+    PERMISSIONS.SUBMIT_DOCUMENT
+  ]
+};
+
+const COLLEGE_WIDE_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN, ROLES.HOD, ROLES.PROFESSOR, ROLES.ASSISTANT_PROFESSOR];
+
+const DEMO_USERS = [
+  // --- GLOBAL ADMINISTRATIVE ACCOUNTS ---
+  {
+    name: 'Admin User',
+    email: 'ankushadmin@gmail.com',
+    password: '817167',
+    role: ROLES.ADMIN,
+    department: null,
+    permissions: ROLE_PERMISSIONS[ROLES.ADMIN]
+  },
+  {
+    name: 'Director User',
+    email: 'director@college.gmail',
+    password: 'Director@123',
+    role: ROLES.DIRECTOR,
+    department: null,
+    permissions: ROLE_PERMISSIONS[ROLES.DIRECTOR]
+  },
+  {
+    name: 'Dean User',
+    email: 'dean@college.gmail',
+    password: 'Dean@123',
+    role: ROLES.DEAN,
+    department: null,
+    permissions: ROLE_PERMISSIONS[ROLES.DEAN]
+  },
+
+  // --- CSE DEPARTMENT ---
+  {
+    name: 'HOD CSE',
+    email: 'hod.cse@college.gmail',
+    password: 'HODCSE@123',
+    role: ROLES.HOD,
+    department: DEPARTMENTS.CSE,
+    permissions: ROLE_PERMISSIONS[ROLES.HOD]
+  },
+  {
+    name: 'Professor CSE 1',
+    email: 'professor.cse1@college.gmail',
+    password: 'ProfCSE1@123',
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.CSE,
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Professor CSE 2',
+    email: 'professor.cse2@college.gmail',
+    password: 'ProfCSE2@123',
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.CSE,
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CSE 1',
+    email: 'assistant.cse1@college.gmail',
+    password: 'AsstCSE1@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CSE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CSE 2',
+    email: 'assistant.cse2@college.gmail',
+    password: 'AsstCSE2@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CSE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CSE 3',
+    email: 'assistant.cse3@college.gmail',
+    password: 'AsstCSE3@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CSE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CSE 4',
+    email: 'assistant.cse4@college.gmail',
+    password: 'AsstCSE4@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CSE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+
+  // --- ECE DEPARTMENT ---
+  {
+    name: 'HOD ECE',
+    email: 'hod.ece@college.gmail',
+    password: 'HODECE@123',
+    role: ROLES.HOD,
+    department: DEPARTMENTS.ECE,
+    permissions: ROLE_PERMISSIONS[ROLES.HOD]
+  },
+  {
+    name: 'Professor ECE 1',
+    email: 'professor.ece1@college.gmail',
+    password: 'ProfECE1@123',
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.ECE,
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Professor ECE 2',
+    email: 'professor.ece2@college.gmail',
+    password: 'ProfECE2@123',
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.ECE,
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ECE 1',
+    email: 'assistant.ece1@college.gmail',
+    password: 'AsstECE1@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ECE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ECE 2',
+    email: 'assistant.ece2@college.gmail',
+    password: 'AsstECE2@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ECE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ECE 3',
+    email: 'assistant.ece3@college.gmail',
+    password: 'AsstECE3@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ECE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ECE 4',
+    email: 'assistant.ece4@college.gmail',
+    password: 'AsstECE4@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ECE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+
+  // --- EE DEPARTMENT ---
+  {
+    name: 'HOD EE',
+    email: 'hod.ee@college.gmail',
+    password: 'HODEE@123',
+    role: ROLES.HOD,
+    department: DEPARTMENTS.EE,
+    permissions: ROLE_PERMISSIONS[ROLES.HOD]
+  },
+  {
+    name: 'Professor EE 1',
+    email: 'professor.ee1@college.gmail',
+    password: 'ProfEE1@123',
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.EE,
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Professor EE 2',
+    email: 'professor.ee2@college.gmail',
+    password: 'ProfEE2@123',
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.EE,
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor EE 1',
+    email: 'assistant.ee1@college.gmail',
+    password: 'AsstEE1@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.EE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor EE 2',
+    email: 'assistant.ee2@college.gmail',
+    password: 'AsstEE2@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.EE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor EE 3',
+    email: 'assistant.ee3@college.gmail',
+    password: 'AsstEE3@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.EE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor EE 4',
+    email: 'assistant.ee4@college.gmail',
+    password: 'AsstEE4@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.EE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+
+  // --- ME DEPARTMENT ---
+  {
+    name: 'HOD ME',
+    email: 'hod.me@college.gmail',
+    password: 'HODME@123',
+    role: ROLES.HOD,
+    department: DEPARTMENTS.ME,
+    permissions: ROLE_PERMISSIONS[ROLES.HOD]
+  },
+  {
+    name: 'Professor ME 1',
+    email: 'professor.me1@college.gmail',
+    password: 'ProfME1@123',
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.ME,
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Professor ME 2',
+    email: 'professor.me2@college.gmail',
+    password: 'ProfME2@123',
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.ME,
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ME 1',
+    email: 'assistant.me1@college.gmail',
+    password: 'AsstME1@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ME,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ME 2',
+    email: 'assistant.me2@college.gmail',
+    password: 'AsstME2@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ME,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ME 3',
+    email: 'assistant.me3@college.gmail',
+    password: 'AsstME3@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ME,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ME 4',
+    email: 'assistant.me4@college.gmail',
+    password: 'AsstME4@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ME,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+
+  // --- CE DEPARTMENT ---
+  {
+    name: 'HOD CE',
+    email: 'hod.ce@college.gmail',
+    password: 'HODCE@123',
+    role: ROLES.HOD,
+    department: DEPARTMENTS.CE,
+    permissions: ROLE_PERMISSIONS[ROLES.HOD]
+  },
+  {
+    name: 'Professor CE 1',
+    email: 'professor.ce1@college.gmail',
+    password: 'ProfCE1@123',
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.CE,
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Professor CE 2',
+    email: 'professor.ce2@college.gmail',
+    password: 'ProfCE2@123',
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.CE,
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CE 1',
+    email: 'assistant.ce1@college.gmail',
+    password: 'AsstCE1@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CE 2',
+    email: 'assistant.ce2@college.gmail',
+    password: 'AsstCE2@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CE 3',
+    email: 'assistant.ce3@college.gmail',
+    password: 'AsstCE3@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CE 4',
+    email: 'assistant.ce4@college.gmail',
+    password: 'AsstCE4@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+
+  // --- CHE DEPARTMENT ---
+  {
+    name: 'HOD CHE',
+    email: 'hod.che@college.gmail',
+    password: 'HODCHE@123',
+    role: ROLES.HOD,
+    department: DEPARTMENTS.CHE,
+    permissions: ROLE_PERMISSIONS[ROLES.HOD]
+  },
+  {
+    name: 'Professor CHE 1',
+    email: 'professor.che1@college.gmail',
+    password: 'ProfCHE1@123',
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.CHE,
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Professor CHE 2',
+    email: 'professor.che2@college.gmail',
+    password: 'ProfCHE2@123',
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.CHE,
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CHE 1',
+    email: 'assistant.che1@college.gmail',
+    password: 'AsstCHE1@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CHE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CHE 2',
+    email: 'assistant.che2@college.gmail',
+    password: 'AsstCHE2@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CHE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CHE 3',
+    email: 'assistant.che3@college.gmail',
+    password: 'AsstCHE3@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CHE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CHE 4',
+    email: 'assistant.che4@college.gmail',
+    password: 'AsstCHE4@123',
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CHE,
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  }
+];
+
+function createToken(user) {
+  return jwt.sign(
+    {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+      department: user.department,
+      permissions: user.permissions
+    },
+    process.env.JWT_SECRET || 'change-this-secret',
+    { expiresIn: '7d' }
+  );
+}
+
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ message: 'Access token required.' });
+  jwt.verify(token, process.env.JWT_SECRET || 'change-this-secret', (err, user) => {
+    if (err) return res.status(403).json({ message: 'Invalid or expired token.' });
+    req.user = user;
+    next();
+  });
+}
+
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user) return res.status(401).json({ message: 'Authentication required.' });
+    if (!roles.includes(req.user.role)) return res.status(403).json({ message: 'Access denied.' });
+    next();
+  };
+}
+
+function requirePermission(...permissions) {
+  return (req, res, next) => {
+    if (!req.user) return res.status(401).json({ message: 'Authentication required.' });
+    const userPerms = req.user.permissions || ROLE_PERMISSIONS[req.user.role] || [];
+    const hasPermission = permissions.some(p => userPerms.includes(p));
+    if (!hasPermission) return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+    next();
+  };
+}
+
+function requireAdmin(req, res, next) {
+  if (!req.user) return res.status(401).json({ message: 'Authentication required.' });
+  if (req.user.role !== ROLES.ADMIN) return res.status(403).json({ message: 'Admin access required.' });
+  next();
+}
+
+function requireCollegeWideAccess(req, res, next) {
+  if (!req.user) return res.status(401).json({ message: 'Authentication required.' });
+  if (!COLLEGE_WIDE_ROLES.includes(req.user.role)) return res.status(403).json({ message: 'Access denied.' });
+  next();
+}
+
+function canAccessDepartment(user, department) {
+  if (COLLEGE_WIDE_ROLES.includes(user.role)) return true;
+  return user.department === department;
+}
+
+function canApproveDocuments(user) {
+  const perms = user.permissions || ROLE_PERMISSIONS[user.role] || [];
+  return perms.includes(PERMISSIONS.APPROVE_DOCUMENT);
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "100mb" }));
@@ -25,7 +555,6 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/eduvault";
 const JWT_SECRET = process.env.JWT_SECRET || "change-this-secret";
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "ankushadmin@gmail.com").split(",").map(e => e.toLowerCase().trim());
 const CHUNK_SIZE = parseInt(process.env.CHUNK_SIZE) || 500;
 const CHUNK_OVERLAP = parseInt(process.env.CHUNK_OVERLAP) || 100;
 const MIN_CHUNK_LENGTH = parseInt(process.env.MIN_CHUNK_LENGTH) || 100;
@@ -56,10 +585,49 @@ try {
   console.log("AI initialization warning:", e.message);
 }
 
-mongoose.connect(MONGO_URI).then(() => {
+mongoose.connect(MONGO_URI).then(async () => {
   console.log("MongoDB connected");
-  createTextIndexes();
+  await migrateLegacyData();
+  await createTextIndexes();
+  await seedDemoUsers();
 }).catch(err => console.error("MongoDB error:", err.message));
+
+async function migrateLegacyData() {
+  try {
+    const db = mongoose.connection.db;
+    const docsResult = await db.collection('documents').updateMany(
+      { $or: [{ status: { $exists: false } }, { status: null }, { status: "" }] },
+      { $set: { status: "published" } }
+    );
+    if (docsResult.modifiedCount > 0) {
+      console.log(`Migrated ${docsResult.modifiedCount} legacy documents to published`);
+    }
+    const adminEmail = 'ankushadmin@gmail.com';
+    const adminUser = await db.collection('users').findOne({ email: adminEmail });
+    if (adminUser && adminUser.role !== ROLES.ADMIN) {
+      await db.collection('users').updateOne(
+        { email: adminEmail },
+        { $set: { role: ROLES.ADMIN, permissions: ROLE_PERMISSIONS[ROLES.ADMIN], department: null } }
+      );
+      console.log('Promoted ankushadmin@gmail.com to admin');
+    }
+    const usersToFix = await db.collection('users').find({
+      role: { $in: [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN, ROLES.HOD, ROLES.PROFESSOR, ROLES.ASSISTANT_PROFESSOR] }
+    }).toArray();
+    for (const user of usersToFix) {
+      const expectedPerms = ROLE_PERMISSIONS[user.role] || [];
+      const currentPerms = user.permissions || [];
+      if (!currentPerms.includes(PERMISSIONS.CREATE_DOCUMENT)) {
+        await db.collection('users').updateOne(
+          { _id: user._id },
+          { $set: { permissions: expectedPerms } }
+        );
+      }
+    }
+  } catch (e) {
+    console.log("Legacy migration warning:", e.message);
+  }
+}
 
 async function createTextIndexes() {
   try {
@@ -68,15 +636,14 @@ async function createTextIndexes() {
     const existingIndexes = await collection.indexes();
     const textIndex = existingIndexes.find(idx => idx.key && idx.key._fts === "text");
     if (textIndex) {
-      console.log(`Dropping existing text index: ${textIndex.name}`);
       await collection.dropIndex(textIndex.name);
     }
     await collection.createIndex(
-      { 
-        title: "text", 
-        titleHindi: "text", 
+      {
+        title: "text",
+        titleHindi: "text",
         titleRomanized: "text",
-        extractedText: "text", 
+        extractedText: "text",
         extractedTextHindi: "text",
         extractedTextRomanized: "text",
         textContent: "text",
@@ -89,30 +656,44 @@ async function createTextIndexes() {
         semester: "text",
         session: "text"
       },
-      { 
+      {
         weights: {
-          title: 15,
-          titleHindi: 15,
-          titleRomanized: 12,
-          officialDocType: 10,
-          paperType: 8,
-          extractedText: 5,
-          extractedTextHindi: 5,
-          extractedTextRomanized: 4,
-          textContent: 3,
-          textContentHindi: 3,
-          textContentRomanized: 2,
-          branch: 5,
-          year: 4,
-          semester: 4,
-          session: 3
+          title: 15, titleHindi: 15, titleRomanized: 12,
+          officialDocType: 10, paperType: 8,
+          extractedText: 5, extractedTextHindi: 5, extractedTextRomanized: 4,
+          textContent: 3, textContentHindi: 3, textContentRomanized: 2,
+          branch: 5, year: 4, semester: 4, session: 3
         },
         name: "document_text_search_v3"
       }
     );
-    console.log("Enhanced text indexes created successfully");
+    console.log("Text indexes created");
   } catch (e) {
-    console.log("Text index creation warning:", e.message);
+    console.log("Text index warning:", e.message);
+  }
+}
+
+async function seedDemoUsers() {
+  try {
+    const User = mongoose.model("User");
+    for (const userData of DEMO_USERS) {
+      const existingUser = await User.findOne({ email: userData.email.toLowerCase() });
+      if (!existingUser) {
+        const hashedPassword = await bcrypt.hash(userData.password, 10);
+        const user = new User({
+          name: userData.name,
+          email: userData.email.toLowerCase(),
+          password: hashedPassword,
+          role: userData.role,
+          department: userData.department,
+          permissions: userData.permissions
+        });
+        await user.save();
+        console.log(`Seeded demo user: ${userData.email}`);
+      }
+    }
+  } catch (error) {
+    console.error("Seed error:", error.message);
   }
 }
 
@@ -121,7 +702,9 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
   avatar: { type: String, default: "" },
-  role: { type: String, enum: ["student", "admin"], default: "student" },
+  role: { type: String, enum: Object.values(ROLES), default: ROLES.ASSISTANT_PROFESSOR },
+  department: { type: String, enum: [...Object.values(DEPARTMENTS), null], default: null },
+  permissions: { type: [String], default: [] },
   year: { type: String, default: "" },
   semester: { type: String, default: "" },
   branch: { type: String, default: "" },
@@ -135,6 +718,7 @@ const documentSchema = new mongoose.Schema({
   fileUrl: { type: String, required: true },
   fileType: { type: String, default: "" },
   uploadedBy: { type: String, required: true },
+  uploadedByRole: { type: String, default: "" },
   category: { type: String, default: "General" },
   docDate: { type: String, default: "" },
   year: { type: String, default: "" },
@@ -144,6 +728,7 @@ const documentSchema = new mongoose.Schema({
   officialDocType: { type: String, default: "" },
   session: { type: String, default: "" },
   storageName: { type: String, default: "" },
+  department: { type: String, enum: [...Object.values(DEPARTMENTS), null, ""], default: null },
   createdAt: { type: Date, default: Date.now },
   textContent: { type: String, default: "" },
   textContentHindi: { type: String, default: "" },
@@ -169,7 +754,13 @@ const documentSchema = new mongoose.Schema({
   processingError: { type: String, default: "" },
   pageTexts: { type: [String], default: [] },
   fullTextSearchScore: { type: Number, default: 0 },
-  status: { type: String, enum: ["draft", "published"], default: "published" },
+  status: { type: String, enum: ["draft", "pending_approval", "approved", "rejected", "published"], default: "published" },
+  approvalStage: { type: String, default: "" },
+  approvedBy: { type: String, default: "" },
+  approvedAt: { type: Date, default: null },
+  rejectedBy: { type: String, default: "" },
+  rejectedAt: { type: Date, default: null },
+  rejectionReason: { type: String, default: "" },
   draftCreatedAt: { type: Date, default: null },
   publishedAt: { type: Date, default: null }
 });
@@ -192,7 +783,8 @@ const chunkSchema = new mongoose.Schema({
     year: { type: String, default: "" },
     session: { type: String, default: "" },
     officialDocType: { type: String, default: "" },
-    paperType: { type: String, default: "" }
+    paperType: { type: String, default: "" },
+    department: { type: String, default: "" }
   },
   createdAt: { type: Date, default: Date.now }
 });
@@ -200,6 +792,7 @@ const chunkSchema = new mongoose.Schema({
 chunkSchema.index({ documentId: 1, chunkIndex: 1 });
 chunkSchema.index({ text: "text" });
 chunkSchema.index({ "metadata.category": 1, "metadata.branch": 1 });
+chunkSchema.index({ "metadata.department": 1 });
 
 const historySchema = new mongoose.Schema({
   email: { type: String, required: true, lowercase: true, trim: true },
@@ -213,34 +806,6 @@ const User = mongoose.model("User", userSchema);
 const Document = mongoose.model("Document", documentSchema);
 const Chunk = mongoose.model("Chunk", chunkSchema);
 const History = mongoose.model("History", historySchema);
-
-function isAdminEmail(email) {
-  return ADMIN_EMAILS.includes(String(email || "").toLowerCase().trim());
-}
-
-function createToken(user) {
-  return jwt.sign({ id: user._id, email: user.email, role: user.role }, JWT_SECRET, { expiresIn: "24h" });
-}
-
-function authenticateToken(req, res, next) {
-  const authHeader = req.headers.authorization;
-  const token = authHeader && authHeader.split(" ")[1];
-  if (!token) return res.status(401).json({ message: "Access denied. No token provided." });
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    next();
-  } catch {
-    return res.status(403).json({ message: "Invalid or expired token." });
-  }
-}
-
-function requireAdmin(req, res, next) {
-  if (!req.user || req.user.role !== "admin") {
-    return res.status(403).json({ message: "Access denied. Admin role required." });
-  }
-  next();
-}
 
 function detectLanguage(text) {
   if (!text) return 'en';
@@ -309,9 +874,7 @@ function getUniqueWords(text) {
 }
 
 async function generateEmbedding(text) {
-  if (!text || text.length < 5) {
-    return [];
-  }
+  if (!text || text.length < 5) return [];
   try {
     const cleanText = text.substring(0, 2000).trim();
     if (genAI) {
@@ -333,7 +896,7 @@ async function generateEmbedding(text) {
       return [];
     }
   } catch (e) {
-    console.error("Embedding generation error:", e.message);
+    console.error("Embedding error:", e.message);
     return [];
   }
   return [];
@@ -393,7 +956,8 @@ async function embedDocumentChunks(document, chunks, metadata) {
           year: document.year || metadata.year || "",
           session: document.session || metadata.session || "",
           officialDocType: document.officialDocType || metadata.officialDocType || "",
-          paperType: document.paperType || metadata.paperType || ""
+          paperType: document.paperType || metadata.paperType || "",
+          department: document.department || metadata.department || ""
         }
       });
     }
@@ -401,7 +965,7 @@ async function embedDocumentChunks(document, chunks, metadata) {
   return embeddedChunks;
 }
 
-function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedBy, category, docDate, year, semester, branch, paperType, officialDocType, session, storageName, pageTexts, ocrConfidence, ocrApplied, isScanned, status) {
+function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedBy, uploadedByRole, category, docDate, year, semester, branch, paperType, officialDocType, session, storageName, department, pageTexts, ocrConfidence, ocrApplied, isScanned, status) {
   const finalTitle = title || '';
   const titleLang = detectLanguage(finalTitle);
   const textLang = detectLanguage(extractedText);
@@ -410,7 +974,7 @@ function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedB
   const romanizedText = romanizeHindi(extractedText);
   const normalizedTitle = normalizeText(finalTitle);
   const normalizedText = normalizeText(extractedText);
-  const metaBlob = [finalTitle, officialDocType, paperType, category, storageName, year, semester, branch, session].filter(Boolean).join(' ');
+  const metaBlob = [finalTitle, officialDocType, paperType, category, storageName, year, semester, branch, session, department].filter(Boolean).join(' ');
   const metaBlobRomanized = romanizeHindi(metaBlob);
   let extractedTextHindi = '';
   let searchTermsHindi = [];
@@ -439,11 +1003,13 @@ function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedB
     titleHindi: titleHindi || '',
     titleRomanized: romanizedTitle,
     fileUrl, fileType: fileType || "",
-    uploadedBy, category: category || "General",
+    uploadedBy, uploadedByRole: uploadedByRole || "",
+    category: category || "General",
     docDate: docDate || "", year: year || "",
     semester: semester || "", branch: branch || "",
     paperType: paperType || "", officialDocType: officialDocType || "",
     session: session || "", storageName: storageName || "",
+    department: department || null,
     textContent, textContentHindi: textContentHindi || '',
     textContentRomanized, extractedText: normalizedText,
     extractedTextHindi: extractedTextHindi || '',
@@ -487,7 +1053,7 @@ const synonymMap = {
   'new year': ['new year', 'नया साल', 'new years', 'new year day'],
   'republic day': ['republic day', 'गणतंत्र दिवस', '26 january'],
   'independence day': ['independence day', 'स्वतंत्रता दिवस', '15 august'],
-  'gandhi jayanti': ['gandhi jayanti', 'गांधी जयंती', '2 october'],
+  'gandhi jayanti': ['gandhi jayanti', 'गांधी जयंती', '2 october']
 };
 
 function tokenize(text) {
@@ -501,7 +1067,7 @@ const STOP_WORDS = new Set([
   'they','them','their','this','that','these','those','and','or','but','if','then','than','so',
   'give','giving','gave','show','showing','find','finding','want','wanting','need','needing',
   'please','tell','telling','get','getting','can','could','would','should','do','does','did',
-  'from','by','as','all','any','some','any','have','has','had','will','shall','not','no','yes',
+  'from','by','as','all','any','some','have','has','had','will','shall','not','no','yes',
   'there','here','what','which','who','whom','how','when','where','why'
 ]);
 
@@ -513,17 +1079,6 @@ function filterStopWords(tokens) {
 function normalizeUnicode(text) {
   if (!text) return '';
   return text.normalize('NFKC');
-}
-
-function getWholeWordMatches(tokens, searchTokens) {
-  const matches = [];
-  const tokenSet = new Set(tokens);
-  for (const st of searchTokens) {
-    if (tokenSet.has(st)) {
-      matches.push(st);
-    }
-  }
-  return matches;
 }
 
 function getSynonymMatches(tokens, searchTokens) {
@@ -546,57 +1101,16 @@ function getSynonymMatches(tokens, searchTokens) {
   return matches;
 }
 
-function getRomanizedMatches(tokens, searchTokens) {
-  const matches = [];
-  const tokenSet = new Set(tokens);
-  for (const st of searchTokens) {
-    const romanized = romanizeHindi(st);
-    if (romanized && romanized !== st && tokenSet.has(romanized)) {
-      matches.push(romanized);
-    }
-  }
-  return matches;
-}
-
-function getFuzzyMatches(tokens, searchTokens) {
-  const matches = [];
-  const tokenSet = new Set(tokens);
-  for (const st of searchTokens) {
-    if (st.length < 3) continue;
-    for (const token of tokenSet) {
-      if (token === st) continue;
-      if (token.length < 3) continue;
-      const maxDist = Math.min(2, Math.max(1, Math.floor(Math.max(st.length, token.length) * 0.3)));
-      const dist = levenshteinDistance(st, token);
-      if (dist <= maxDist) {
-        matches.push(token);
-      }
-    }
-  }
-  return matches;
-}
-
 function levenshteinDistance(a, b) {
   if (a.length === 0) return b.length;
   if (b.length === 0) return a.length;
   const matrix = [];
-  for (let i = 0; i <= b.length; i++) {
-    matrix[i] = [i];
-  }
-  for (let j = 0; j <= a.length; j++) {
-    matrix[0][j] = j;
-  }
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
   for (let i = 1; i <= b.length; i++) {
     for (let j = 1; j <= a.length; j++) {
-      if (b[i-1] === a[j-1]) {
-        matrix[i][j] = matrix[i-1][j-1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i-1][j-1] + 1,
-          matrix[i][j-1] + 1,
-          matrix[i-1][j] + 1
-        );
-      }
+      if (b[i-1] === a[j-1]) matrix[i][j] = matrix[i-1][j-1];
+      else matrix[i][j] = Math.min(matrix[i-1][j-1] + 1, matrix[i][j-1] + 1, matrix[i-1][j] + 1);
     }
   }
   return matrix[b.length][a.length];
@@ -621,45 +1135,12 @@ function preprocessQuery(query) {
 
 function transliterateEnglishToHindi(englishText) {
   const mapping = {
-    'eid': 'ईद',
-    'id': 'ईद',
-    'e': 'इ',
-    'i': 'इ',
-    'ee': 'ई',
-    'a': 'अ',
-    'aa': 'आ',
-    'u': 'उ',
-    'oo': 'ऊ',
-    'k': 'क',
-    'kh': 'ख',
-    'g': 'ग',
-    'gh': 'घ',
-    'ch': 'च',
-    'chh': 'छ',
-    'j': 'ज',
-    'jh': 'झ',
-    't': 'ट',
-    'th': 'ठ',
-    'd': 'ड',
-    'dh': 'ढ',
-    'n': 'न',
-    'p': 'प',
-    'ph': 'फ',
-    'b': 'ब',
-    'bh': 'भ',
-    'm': 'म',
-    'y': 'य',
-    'r': 'र',
-    'l': 'ल',
-    'v': 'व',
-    'sh': 'श',
-    's': 'स',
-    'h': 'ह',
-    'ng': 'ंग',
-    'ny': 'ञ',
-    'ksh': 'क्ष',
-    'tr': 'त्र',
-    'gya': 'ज्ञ'
+    'eid': 'ईद', 'id': 'ईद', 'e': 'इ', 'i': 'इ', 'ee': 'ई', 'a': 'अ', 'aa': 'आ',
+    'u': 'उ', 'oo': 'ऊ', 'k': 'क', 'kh': 'ख', 'g': 'ग', 'gh': 'घ', 'ch': 'च',
+    'chh': 'छ', 'j': 'ज', 'jh': 'झ', 't': 'ट', 'th': 'ठ', 'd': 'ड', 'dh': 'ढ',
+    'n': 'न', 'p': 'प', 'ph': 'फ', 'b': 'ब', 'bh': 'भ', 'm': 'म', 'y': 'य',
+    'r': 'र', 'l': 'ल', 'v': 'व', 'sh': 'श', 's': 'स', 'h': 'ह', 'ng': 'ंग',
+    'ny': 'ञ', 'ksh': 'क्ष', 'tr': 'त्र', 'gya': 'ज्ञ'
   };
   let result = '';
   let i = 0;
@@ -776,246 +1257,80 @@ function calculateMetadataScore(chunk, query) {
   let score = 0;
   const q = query.toLowerCase();
   const metadata = chunk.metadata || {};
-  const fields = [
-    metadata.title, metadata.category, metadata.branch,
-    metadata.semester, metadata.year, metadata.session,
-    metadata.officialDocType, metadata.paperType
-  ];
+  const fields = [metadata.title, metadata.category, metadata.branch, metadata.semester, metadata.year, metadata.session, metadata.officialDocType, metadata.paperType];
   for (const field of fields) {
-    if (field && field.toLowerCase().includes(q)) {
-      score += 0.2;
-    }
+    if (field && field.toLowerCase().includes(q)) score += 0.2;
   }
   return Math.min(score, 1);
 }
 
-function calculateExactMatchScore(doc, query, processedQuery) {
-  let score = 0;
-  const queryLower = processedQuery.toLowerCase();
-  const titleLower = (doc.title || '').toLowerCase();
-  const titleHindiLower = (doc.titleHindi || '').toLowerCase();
-  const titleRomanizedLower = (doc.titleRomanized || '').toLowerCase();
-  const filenameLower = (doc.storageName || '').toLowerCase();
-  const originalQuery = query.toLowerCase().trim();
-  
-  if (titleLower === originalQuery) {
-    score += 5.0;
-  } else if (titleLower.includes(originalQuery)) {
-    score += 3.0;
-  } else if (titleLower.split(' ').some(word => word === originalQuery)) {
-    score += 2.5;
-  }
-  
-  if (titleHindiLower === originalQuery) {
-    score += 5.0;
-  } else if (titleHindiLower.includes(originalQuery)) {
-    score += 3.0;
-  }
-  
-  if (titleRomanizedLower === originalQuery) {
-    score += 4.0;
-  } else if (titleRomanizedLower.includes(originalQuery)) {
-    score += 2.5;
-  }
-  
-  if (filenameLower === originalQuery || filenameLower === originalQuery + '.pdf' || filenameLower === originalQuery + '.docx' || filenameLower === originalQuery + '.doc' || filenameLower === originalQuery + '.xlsx' || filenameLower === originalQuery + '.pptx' || filenameLower === originalQuery + '.txt') {
-    score += 4.0;
-  } else if (filenameLower.includes(originalQuery)) {
-    score += 2.0;
-  }
-  
-  if (doc.category && doc.category.toLowerCase().includes(originalQuery)) {
-    score += 1.0;
-  }
-  
-  if (doc.officialDocType && doc.officialDocType.toLowerCase().includes(originalQuery)) {
-    score += 1.0;
-  }
-  
-  if (doc.paperType && doc.paperType.toLowerCase().includes(originalQuery)) {
-    score += 1.0;
-  }
-  
-  if (doc.branch && doc.branch.toLowerCase().includes(originalQuery)) {
-    score += 0.5;
-  }
-  
-  if (doc.year && doc.year.toLowerCase().includes(originalQuery)) {
-    score += 0.5;
-  }
-  
-  if (doc.semester && doc.semester.toLowerCase().includes(originalQuery)) {
-    score += 0.5;
-  }
-  
-  const queryTokens = tokenize(processedQuery);
-  const titleTokens = tokenize(titleLower);
-  const matchedTokens = queryTokens.filter(t => titleTokens.includes(t));
-  if (matchedTokens.length > 0) {
-    score += matchedTokens.length * 0.5;
-  }
-  
-  return Math.min(score, 10);
-}
-
-function calculateKeywordScore(doc, queryTokens) {
-  if (!queryTokens || queryTokens.length === 0) return 0;
-  let score = 0;
-  const allText = `${doc.title || ''} ${doc.titleHindi || ''} ${doc.titleRomanized || ''} ${doc.extractedText || ''} ${doc.extractedTextHindi || ''} ${doc.extractedTextRomanized || ''} ${doc.keywords || []} ${doc.keywordsHindi || []} ${doc.searchTerms || []} ${doc.searchTermsHindi || []}`.toLowerCase();
-  const tokens = tokenize(allText);
-  const matched = queryTokens.filter(t => tokens.includes(t));
-  if (matched.length > 0) {
-    score = Math.min(matched.length / queryTokens.length, 1) * 1.5;
-  }
-  return score;
-}
-
 function calculateEnhancedExactMatchScore(doc, query, processedQuery) {
   let score = 0;
-  const queryLower = processedQuery.toLowerCase();
   const originalQuery = query.toLowerCase().trim();
   const queryWords = originalQuery.split(/\s+/).filter(w => w.length > 1);
-  
   const titleLower = (doc.title || '').toLowerCase();
   const titleHindiLower = (doc.titleHindi || '').toLowerCase();
   const titleRomanizedLower = (doc.titleRomanized || '').toLowerCase();
-  
-  if (titleLower === originalQuery || titleLower.includes(originalQuery)) {
-    score += 10.0;
-  }
-  if (titleHindiLower.includes(originalQuery)) {
-    score += 8.0;
-  }
-  if (titleRomanizedLower.includes(originalQuery)) {
-    score += 6.0;
-  }
-  
+  if (titleLower === originalQuery || titleLower.includes(originalQuery)) score += 10.0;
+  if (titleHindiLower.includes(originalQuery)) score += 8.0;
+  if (titleRomanizedLower.includes(originalQuery)) score += 6.0;
   let allWordsInTitle = true;
   let matchedCount = 0;
   for (const word of queryWords) {
-    if (titleLower.includes(word) || titleHindiLower.includes(word) || titleRomanizedLower.includes(word)) {
-      matchedCount++;
-    } else {
-      allWordsInTitle = false;
-    }
+    if (titleLower.includes(word) || titleHindiLower.includes(word) || titleRomanizedLower.includes(word)) matchedCount++;
+    else allWordsInTitle = false;
   }
-  if (allWordsInTitle && queryWords.length > 0) {
-    score += 5.0 * (matchedCount / queryWords.length);
-  } else if (matchedCount > 0) {
-    score += 2.0 * (matchedCount / queryWords.length);
-  }
-  
-  const metadataFields = [
-    doc.officialDocType, doc.paperType, doc.category, 
-    doc.branch, doc.year, doc.semester, doc.session
-  ];
-  
-  let metadataMatches = 0;
+  if (allWordsInTitle && queryWords.length > 0) score += 5.0 * (matchedCount / queryWords.length);
+  else if (matchedCount > 0) score += 2.0 * (matchedCount / queryWords.length);
+  const metadataFields = [doc.officialDocType, doc.paperType, doc.category, doc.branch, doc.year, doc.semester, doc.session];
   for (const field of metadataFields) {
-    if (field && field.toLowerCase().includes(originalQuery)) {
-      metadataMatches++;
-      score += 3.0;
-    } else if (field) {
+    if (field && field.toLowerCase().includes(originalQuery)) score += 3.0;
+    else if (field) {
       const fieldLower = field.toLowerCase();
       for (const word of queryWords) {
-        if (fieldLower.includes(word)) {
-          metadataMatches++;
-          score += 1.5;
-          break;
-        }
+        if (fieldLower.includes(word)) { score += 1.5; break; }
       }
     }
   }
-  
   const filenameLower = (doc.storageName || '').toLowerCase();
-  if (filenameLower === originalQuery || filenameLower === originalQuery + '.pdf' || 
-      filenameLower === originalQuery + '.docx' || filenameLower === originalQuery + '.doc') {
-    score += 6.0;
-  } else if (filenameLower.includes(originalQuery)) {
-    score += 3.0;
-  }
-  
+  if (filenameLower === originalQuery || filenameLower === originalQuery + '.pdf' || filenameLower === originalQuery + '.docx' || filenameLower === originalQuery + '.doc') score += 6.0;
+  else if (filenameLower.includes(originalQuery)) score += 3.0;
   const contentLower = (doc.extractedText || '').toLowerCase();
   const contentHindiLower = (doc.extractedTextHindi || '').toLowerCase();
-  
-  if (contentLower.includes(originalQuery)) {
-    score += 4.0;
-  }
-  if (contentHindiLower.includes(originalQuery)) {
-    score += 3.0;
-  }
-  
+  if (contentLower.includes(originalQuery)) score += 4.0;
+  if (contentHindiLower.includes(originalQuery)) score += 3.0;
   if (originalQuery.includes('elective') || queryWords.some(w => w === 'elective')) {
-    const docText = (doc.extractedText || '') + (doc.title || '');
-    const hasElective = docText.toLowerCase().includes('elective') || docText.toLowerCase().includes('elective');
-    if (hasElective) {
-      score += 8.0;
-    }
-    if (doc.title.toLowerCase().includes('syllabus') || 
-        doc.titleHindi.toLowerCase().includes('पाठ्यक्रम') ||
-        doc.officialDocType === 'Syllabus') {
-      score += 10.0;
-    }
+    const docText = ((doc.extractedText || '') + (doc.title || '')).toLowerCase();
+    if (docText.includes('elective')) score += 8.0;
+    if (doc.title.toLowerCase().includes('syllabus') || doc.titleHindi.toLowerCase().includes('पाठ्यक्रम') || doc.officialDocType === 'Syllabus') score += 10.0;
   }
-  
   if (originalQuery.includes('syllabus') || queryWords.some(w => w === 'syllabus')) {
-    if (doc.title.toLowerCase().includes('syllabus') || 
-        doc.titleHindi.toLowerCase().includes('पाठ्यक्रम') ||
-        doc.officialDocType === 'Syllabus') {
-      score += 10.0;
-    }
+    if (doc.title.toLowerCase().includes('syllabus') || doc.titleHindi.toLowerCase().includes('पाठ्यक्रम') || doc.officialDocType === 'Syllabus') score += 10.0;
   }
-  
-  const yearPattern = /(\d+)(?:st|nd|rd|th)?\s*year/i;
-  const yearMatch = originalQuery.match(yearPattern);
-  if (yearMatch) {
-    const yearNum = yearMatch[1];
-    if (doc.year && doc.year.includes(yearNum)) {
-      score += 3.0;
-    }
-  }
-  
-  const semPattern = /(\d+)(?:st|nd|rd|th)?\s*semester/i;
-  const semMatch = originalQuery.match(semPattern);
-  if (semMatch) {
-    const semNum = semMatch[1];
-    if (doc.semester && doc.semester.includes(semNum)) {
-      score += 3.0;
-    }
-  }
-  
+  const yearMatch = originalQuery.match(/(\d+)(?:st|nd|rd|th)?\s*year/i);
+  if (yearMatch && doc.year && doc.year.includes(yearMatch[1])) score += 3.0;
+  const semMatch = originalQuery.match(/(\d+)(?:st|nd|rd|th)?\s*semester/i);
+  if (semMatch && doc.semester && doc.semester.includes(semMatch[1])) score += 3.0;
   return Math.min(score, 30);
 }
 
 function calculateEnhancedKeywordScore(doc, queryTokens, processedQuery) {
   if (!queryTokens || queryTokens.length === 0) return 0;
-  
   let score = 0;
   const allText = `${doc.title || ''} ${doc.titleHindi || ''} ${doc.titleRomanized || ''} ${doc.extractedText || ''} ${doc.extractedTextHindi || ''} ${doc.extractedTextRomanized || ''} ${doc.keywords || []} ${doc.keywordsHindi || []} ${doc.searchTerms || []} ${doc.searchTermsHindi || []}`.toLowerCase();
   const tokens = tokenize(allText);
   const tokenSet = new Set(tokens);
-  
   let matchedCount = 0;
   const importantTerms = ['elective', 'syllabus', 'course', 'curriculum', '1st', '2nd', '3rd', '4th', 'year', 'semester'];
-  
   for (const token of queryTokens) {
     if (tokenSet.has(token)) {
       matchedCount++;
-      if (importantTerms.some(term => token.includes(term) || term.includes(token))) {
-        matchedCount += 0.5;
-      }
+      if (importantTerms.some(term => token.includes(term) || term.includes(token))) matchedCount += 0.5;
     }
   }
-  
-  if (matchedCount > 0) {
-    score = Math.min(matchedCount / queryTokens.length, 1) * 2.0;
-  }
-  
+  if (matchedCount > 0) score = Math.min(matchedCount / queryTokens.length, 1) * 2.0;
   const synonymMatches = getSynonymMatches(tokens, queryTokens);
-  if (synonymMatches.length > 0) {
-    score += Math.min(synonymMatches.length * 0.3, 1.0);
-  }
-  
+  if (synonymMatches.length > 0) score += Math.min(synonymMatches.length * 0.3, 1.0);
   return Math.min(score, 3);
 }
 
@@ -1023,93 +1338,55 @@ function calculatePhraseMatchBonus(doc, query) {
   let bonus = 0;
   const queryLower = query.toLowerCase().trim();
   const titleLower = (doc.title || '').toLowerCase();
-  
-  if (titleLower.includes(queryLower)) {
-    bonus += 5.0;
-  }
-  
+  if (titleLower.includes(queryLower)) bonus += 5.0;
   const queryWords = queryLower.split(/\s+/).filter(w => w.length > 1);
   if (queryWords.length >= 2) {
     let foundSequence = 0;
     let lastIndex = -1;
     for (const word of queryWords) {
       const idx = titleLower.indexOf(word, lastIndex + 1);
-      if (idx !== -1 && idx > lastIndex) {
-        foundSequence++;
-        lastIndex = idx;
-      }
+      if (idx !== -1 && idx > lastIndex) { foundSequence++; lastIndex = idx; }
     }
-    if (foundSequence === queryWords.length) {
-      bonus += 3.0;
-    } else if (foundSequence >= 2) {
-      bonus += 1.5;
-    }
+    if (foundSequence === queryWords.length) bonus += 3.0;
+    else if (foundSequence >= 2) bonus += 1.5;
   }
-  
   return bonus;
 }
 
 function calculateKeywordBoost(doc, query) {
   let boost = 0;
   const queryLower = query.toLowerCase();
-  const docText = (doc.extractedText || '') + (doc.title || '');
-  const docLower = docText.toLowerCase();
-  
+  const docLower = ((doc.extractedText || '') + (doc.title || '')).toLowerCase();
   if (queryLower.includes('elective') && queryLower.includes('syllabus')) {
-    if (doc.officialDocType === 'Syllabus' && docLower.includes('elective')) {
-      boost += 15.0;
-    }
-    if (doc.officialDocType === 'Syllabus' && doc.category === 'Official Update') {
-      boost += 5.0;
-    }
+    if (doc.officialDocType === 'Syllabus' && docLower.includes('elective')) boost += 15.0;
+    if (doc.officialDocType === 'Syllabus' && doc.category === 'Official Update') boost += 5.0;
   }
-  
   const yearMatch = queryLower.match(/(\d+)(?:st|nd|rd|th)?\s*year/);
   const semMatch = queryLower.match(/(\d+)(?:st|nd|rd|th)?\s*semester/);
-  
   if (yearMatch && semMatch) {
-    const year = yearMatch[1];
-    const sem = semMatch[1];
-    if (doc.year && doc.year.includes(year) && doc.semester && doc.semester.includes(sem)) {
-      boost += 8.0;
-    }
+    if (doc.year && doc.year.includes(yearMatch[1]) && doc.semester && doc.semester.includes(semMatch[1])) boost += 8.0;
   }
-  
   const branches = ['cse', 'cs', 'computer', 'ece', 'ee', 'me', 'ce', 'chemical', 'aai', 'ai'];
   for (const branch of branches) {
-    if (queryLower.includes(branch) && doc.branch && doc.branch.toLowerCase().includes(branch)) {
-      boost += 3.0;
-    }
+    if (queryLower.includes(branch) && doc.branch && doc.branch.toLowerCase().includes(branch)) boost += 3.0;
   }
-  
   return boost;
 }
 
 async function semanticSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
   const processedQuery = preprocessQuery(query);
-  if (!processedQuery || processedQuery.length < 2) {
-    const docs = await Document.find(filter).sort({ createdAt: -1 }).limit(limit);
-    return docs;
-  }
-  
+  if (!processedQuery || processedQuery.length < 2) return await Document.find(filter).sort({ createdAt: -1 }).limit(limit);
   const queryEmbedding = await generateEmbedding(processedQuery);
-  if (!queryEmbedding || queryEmbedding.length === 0) {
-    return [];
-  }
-  
+  if (!queryEmbedding || queryEmbedding.length === 0) return [];
   const filterQuery = {};
   if (filter.category) filterQuery['metadata.category'] = filter.category;
   if (filter.branch) filterQuery['metadata.branch'] = filter.branch;
   if (filter.semester) filterQuery['metadata.semester'] = filter.semester;
   if (filter.year) filterQuery['metadata.year'] = filter.year;
   if (filter.status) filterQuery['metadata.status'] = filter.status;
-  
+  if (filter.department) filterQuery['metadata.department'] = filter.department;
   let chunks = await Chunk.find(filterQuery).limit(200);
-  
-  if (chunks.length === 0) {
-    return [];
-  }
-  
+  if (chunks.length === 0) return [];
   const scoredChunks = chunks.map(chunk => {
     const similarity = cosineSimilarity(queryEmbedding, chunk.embedding || []);
     const textTokens = tokenize(chunk.text);
@@ -1119,15 +1396,12 @@ async function semanticSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) 
     const combinedScore = (similarity * 0.6) + (keywordScore * 0.3) + (metadataScore * 0.1);
     return { chunk, similarity, keywordScore, metadataScore, combinedScore };
   });
-  
   scoredChunks.sort((a, b) => b.combinedScore - a.combinedScore);
-  
   const topChunks = scoredChunks.slice(0, limit);
   const documentIds = [...new Set(topChunks.map(sc => sc.chunk.documentId.toString()))];
   const documents = await Document.find({ _id: { $in: documentIds } });
   const docMap = {};
   documents.forEach(doc => { docMap[doc._id.toString()] = doc; });
-  
   return topChunks.map(sc => {
     const doc = docMap[sc.chunk.documentId.toString()];
     if (!doc) return null;
@@ -1148,10 +1422,7 @@ async function semanticSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) 
 
 async function fullTextSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
   const processedQuery = preprocessQuery(query);
-  if (!processedQuery || processedQuery.length < 2) {
-    return [];
-  }
-  
+  if (!processedQuery || processedQuery.length < 2) return [];
   try {
     const filterConditions = {};
     if (filter.category) filterConditions.category = filter.category;
@@ -1159,17 +1430,10 @@ async function fullTextSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) 
     if (filter.semester) filterConditions.semester = filter.semester;
     if (filter.year) filterConditions.year = filter.year;
     if (filter.status) filterConditions.status = filter.status;
-    
+    if (filter.department) filterConditions.department = filter.department;
     const textSearchQuery = { $text: { $search: processedQuery } };
     const combinedQuery = Object.keys(filterConditions).length > 0 ? { $and: [textSearchQuery, filterConditions] } : textSearchQuery;
-    
-    const results = await Document.find(
-      combinedQuery,
-      { score: { $meta: "textScore" } }
-    )
-    .sort({ score: { $meta: "textScore" } })
-    .limit(limit);
-    
+    const results = await Document.find(combinedQuery, { score: { $meta: "textScore" } }).sort({ score: { $meta: "textScore" } }).limit(limit);
     return results.map(doc => {
       const docObj = doc.toObject ? doc.toObject() : doc;
       docObj.fullTextScore = doc._doc ? doc._doc.score : 0;
@@ -1177,7 +1441,6 @@ async function fullTextSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) 
       return docObj;
     });
   } catch (e) {
-    console.log("Full text search error:", e.message);
     return [];
   }
 }
@@ -1187,42 +1450,16 @@ async function fallbackSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) 
   const searchTokens = filterStopWords(tokenize(processedQuery));
   const searchConditions = [];
   const escapedQuery = processedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  
-  searchConditions.push({ title: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ titleHindi: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ titleRomanized: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ extractedText: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ extractedTextHindi: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ extractedTextRomanized: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ textContent: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ textContentHindi: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ textContentRomanized: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ officialDocType: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ paperType: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ category: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ year: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ semester: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ branch: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ session: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ keywords: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ keywordsHindi: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ searchTerms: { $regex: escapedQuery, $options: "i" } });
-  searchConditions.push({ searchTermsHindi: { $regex: escapedQuery, $options: "i" } });
-  
+  ['title','titleHindi','titleRomanized','extractedText','extractedTextHindi','extractedTextRomanized','textContent','textContentHindi','textContentRomanized','officialDocType','paperType','category','year','semester','branch','session','keywords','keywordsHindi','searchTerms','searchTermsHindi'].forEach(field => {
+    searchConditions.push({ [field]: { $regex: escapedQuery, $options: "i" } });
+  });
   for (const token of searchTokens) {
     if (token.length < 2) continue;
     const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    searchConditions.push({ title: { $regex: escapedToken, $options: "i" } });
-    searchConditions.push({ titleHindi: { $regex: escapedToken, $options: "i" } });
-    searchConditions.push({ titleRomanized: { $regex: escapedToken, $options: "i" } });
-    searchConditions.push({ extractedText: { $regex: escapedToken, $options: "i" } });
-    searchConditions.push({ extractedTextHindi: { $regex: escapedToken, $options: "i" } });
-    searchConditions.push({ extractedTextRomanized: { $regex: escapedToken, $options: "i" } });
-    searchConditions.push({ textContent: { $regex: escapedToken, $options: "i" } });
-    searchConditions.push({ textContentHindi: { $regex: escapedToken, $options: "i" } });
-    searchConditions.push({ textContentRomanized: { $regex: escapedToken, $options: "i" } });
+    ['title','titleHindi','titleRomanized','extractedText','extractedTextHindi','extractedTextRomanized','textContent','textContentHindi','textContentRomanized'].forEach(field => {
+      searchConditions.push({ [field]: { $regex: escapedToken, $options: "i" } });
+    });
   }
-  
   const hindiTransliteration = transliterateEnglishToHindi(processedQuery);
   if (hindiTransliteration && hindiTransliteration !== processedQuery) {
     const escapedHindi = hindiTransliteration.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1230,7 +1467,6 @@ async function fallbackSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) 
     searchConditions.push({ extractedTextHindi: { $regex: escapedHindi, $options: "i" } });
     searchConditions.push({ textContentHindi: { $regex: escapedHindi, $options: "i" } });
   }
-  
   const romanizedQuery = romanizeHindi(processedQuery);
   if (romanizedQuery && romanizedQuery !== processedQuery) {
     const escapedRomanized = romanizedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1238,99 +1474,70 @@ async function fallbackSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) 
     searchConditions.push({ extractedTextRomanized: { $regex: escapedRomanized, $options: "i" } });
     searchConditions.push({ textContentRomanized: { $regex: escapedRomanized, $options: "i" } });
   }
-  
   let dbFilter = { ...filter };
   if (filter.category) dbFilter.category = filter.category;
   if (filter.branch) dbFilter.branch = filter.branch;
   if (filter.semester) dbFilter.semester = filter.semester;
   if (filter.year) dbFilter.year = filter.year;
   if (filter.status) dbFilter.status = filter.status;
-  
+  if (filter.department) dbFilter.department = filter.department;
   const finalQuery = searchConditions.length > 0 ? { $or: searchConditions, ...dbFilter } : dbFilter;
   let docs = await Document.find(finalQuery).limit(limit);
-  
   if (docs.length === 0 && processedQuery.length > 2) {
     const chunkMatch = await Chunk.find({
       $text: { $search: processedQuery },
       ...(filter.category ? { 'metadata.category': filter.category } : {}),
-      ...(filter.branch ? { 'metadata.branch': filter.branch } : {})
+      ...(filter.branch ? { 'metadata.branch': filter.branch } : {}),
+      ...(filter.department ? { 'metadata.department': filter.department } : {})
     }).limit(limit);
-    
     if (chunkMatch.length > 0) {
       const docIds = [...new Set(chunkMatch.map(c => c.documentId.toString()))];
       docs = await Document.find({ _id: { $in: docIds } });
     }
   }
-  
   return docs.slice(0, limit);
 }
 
 async function enhancedHybridSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) {
   const processedQuery = preprocessQuery(query);
   const queryTokens = filterStopWords(tokenize(processedQuery));
-  
-  if (!processedQuery || processedQuery.length < 2) {
-    const docs = await Document.find(filter).sort({ createdAt: -1 }).limit(limit);
-    return docs;
-  }
-  
+  if (!processedQuery || processedQuery.length < 2) return await Document.find(filter).sort({ createdAt: -1 }).limit(limit);
   const [semanticResults, fullTextResults, fallbackResults] = await Promise.all([
     semanticSearch(query, filter, limit * 3),
     fullTextSearch(query, filter, limit * 3),
     fallbackSearch(query, filter, limit * 3)
   ]);
-  
   const resultMap = new Map();
   const scoreMap = new Map();
   const detailMap = new Map();
-  const allDocs = [];
-  
   for (const doc of semanticResults) {
     const id = doc._id.toString();
     const semanticScore = doc.semanticScore || 0;
-    const semanticWeight = 3.0;
     resultMap.set(id, doc);
-    scoreMap.set(id, (scoreMap.get(id) || 0) + semanticScore * semanticWeight);
-    detailMap.set(id, { semanticScore: semanticScore * semanticWeight });
-    allDocs.push(id);
+    scoreMap.set(id, (scoreMap.get(id) || 0) + semanticScore * 3.0);
+    detailMap.set(id, { semanticScore: semanticScore * 3.0 });
   }
-  
   for (const doc of fullTextResults) {
     const id = doc._id.toString();
     const textScore = doc.fullTextScore || 0;
-    const textWeight = 3.0;
-    if (!resultMap.has(id)) {
-      resultMap.set(id, doc);
-    }
-    scoreMap.set(id, (scoreMap.get(id) || 0) + textScore * textWeight);
+    if (!resultMap.has(id)) resultMap.set(id, doc);
+    scoreMap.set(id, (scoreMap.get(id) || 0) + textScore * 3.0);
     const details = detailMap.get(id) || {};
-    details.textScore = textScore * textWeight;
+    details.textScore = textScore * 3.0;
     detailMap.set(id, details);
-    if (!allDocs.includes(id)) allDocs.push(id);
   }
-  
   for (const doc of fallbackResults) {
     const id = doc._id.toString();
-    if (resultMap.has(id)) {
-      const existing = resultMap.get(id);
-      if (existing.relevanceScore && doc.relevanceScore && doc.relevanceScore > existing.relevanceScore) {
-        resultMap.set(id, doc);
-      }
-    } else {
-      resultMap.set(id, doc);
-    }
+    if (!resultMap.has(id)) resultMap.set(id, doc);
     const fallbackScore = doc.relevanceScore || 0;
-    const fallbackWeight = 0.8;
-    scoreMap.set(id, (scoreMap.get(id) || 0) + fallbackScore * fallbackWeight);
+    scoreMap.set(id, (scoreMap.get(id) || 0) + fallbackScore * 0.8);
     const details = detailMap.get(id) || {};
-    details.fallbackScore = fallbackScore * fallbackWeight;
+    details.fallbackScore = fallbackScore * 0.8;
     detailMap.set(id, details);
-    if (!allDocs.includes(id)) allDocs.push(id);
   }
-  
   const finalResults = Array.from(resultMap.values()).map(doc => {
     const id = doc._id.toString();
-    let currentScore = scoreMap.get(id) || 0;
+    const currentScore = scoreMap.get(id) || 0;
     const exactMatchScore = calculateEnhancedExactMatchScore(doc, query, processedQuery);
     const keywordScore = calculateEnhancedKeywordScore(doc, queryTokens, processedQuery);
     const phraseBonus = calculatePhraseMatchBonus(doc, query);
@@ -1341,15 +1548,11 @@ async function enhancedHybridSearch(query, filter = {}, limit = SEARCH_RESULTS_L
       ...detailMap.get(id),
       exactMatchScore: exactMatchScore * 150,
       keywordScore: keywordScore * 75,
-      phraseBonus: phraseBonus,
-      keywordBoost: keywordBoost,
-      totalScore: totalScore
+      phraseBonus, keywordBoost, totalScore
     };
     return doc;
   });
-  
   finalResults.sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0));
-  
   return finalResults.slice(0, limit);
 }
 
@@ -1357,17 +1560,8 @@ function preprocessImage(imagePath) {
   return new Promise((resolve) => {
     try {
       const outputPath = imagePath.replace(/(\.[^.]+)$/, '_processed$1');
-      sharp(imagePath)
-        .greyscale()
-        .normalize()
-        .sharpen()
-        .threshold(128)
-        .toFile(outputPath)
-        .then(() => resolve(outputPath))
-        .catch(() => resolve(imagePath));
-    } catch (e) {
-      resolve(imagePath);
-    }
+      sharp(imagePath).greyscale().normalize().sharpen().threshold(128).toFile(outputPath).then(() => resolve(outputPath)).catch(() => resolve(imagePath));
+    } catch (e) { resolve(imagePath); }
   });
 }
 
@@ -1376,9 +1570,7 @@ async function checkTesseractLangs() {
     const { stdout, stderr } = await exec(`tesseract --list-langs`);
     const output = `${stdout || ""}\n${stderr || ""}`;
     return output.split("\n").map(line => line.trim()).filter(line => line && !line.toLowerCase().startsWith("list of"));
-  } catch (e) {
-    return [];
-  }
+  } catch (e) { return []; }
 }
 
 async function ocrImage(imagePath, lang = 'eng') {
@@ -1395,15 +1587,11 @@ async function ocrImage(imagePath, lang = 'eng') {
       text = fs.readFileSync(resultPath, 'utf8');
       fs.unlinkSync(resultPath);
     }
-    if (processedPath !== imagePath && fs.existsSync(processedPath)) {
-      fs.unlinkSync(processedPath);
-    }
+    if (processedPath !== imagePath && fs.existsSync(processedPath)) fs.unlinkSync(processedPath);
     const confidenceMatch = stderr.match(/confidence = (\d+\.?\d*)/i);
     const confidence = confidenceMatch ? parseFloat(confidenceMatch[1]) : 60;
     return { text: text.trim(), confidence };
-  } catch (e) {
-    return { text: '', confidence: 0 };
-  }
+  } catch (e) { return { text: '', confidence: 0 }; }
 }
 
 async function ocrImageWithRetry(imagePath, lang = 'eng', attempts = 2) {
@@ -1411,12 +1599,8 @@ async function ocrImageWithRetry(imagePath, lang = 'eng', attempts = 2) {
   for (let i = 0; i < attempts; i++) {
     const result = await ocrImage(imagePath, lang);
     lastResult = result;
-    if (result.text && result.text.length > 20 && result.confidence >= 50) {
-      return result;
-    }
-    if (i < attempts - 1) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+    if (result.text && result.text.length > 20 && result.confidence >= 50) return result;
+    if (i < attempts - 1) await new Promise(resolve => setTimeout(resolve, 1000));
   }
   return lastResult;
 }
@@ -1440,7 +1624,6 @@ async function extractPDFText(filePath) {
         const asciiCount = (embeddedText.match(/[a-zA-Z]/g) || []).length;
         if ((devanagariCount + asciiCount) / (embeddedText.length || 1) > 0.4) {
           pageTexts = [embeddedText];
-          ocrConfidence = 85;
           return { text: embeddedText, pageTexts, ocrApplied: false, isScanned: false, ocrConfidence: 85, totalPages };
         }
       }
@@ -1461,18 +1644,12 @@ async function extractPDFText(filePath) {
                 for (let textItem of page.Texts) {
                   if (textItem.R) {
                     for (let line of textItem.R) {
-                      if (line.T) {
-                        const decoded = decodeURIComponent(line.T);
-                        pageText += decoded + ' ';
-                      }
+                      if (line.T) pageText += decodeURIComponent(line.T) + ' ';
                     }
                   }
                 }
               }
-              if (pageText.trim()) {
-                pages.push(pageText.trim());
-                text += pageText + ' ';
-              }
+              if (pageText.trim()) { pages.push(pageText.trim()); text += pageText + ' '; }
             }
           }
         } catch (e) {}
@@ -1491,16 +1668,13 @@ async function extractPDFText(filePath) {
       const words = stdout.split(/\s+/).filter(w => w.length > 2);
       if (words.length > 5) {
         pageTexts = [stdout];
-        ocrConfidence = 85;
         return { text: stdout, pageTexts, ocrApplied: false, isScanned: false, ocrConfidence: 85, totalPages: totalPages || 1 };
       }
     }
   } catch (e) {}
   try {
     const tempPdfDir = path.join(tempDir, `pdf_ocr_${Date.now()}`);
-    if (!fs.existsSync(tempPdfDir)) {
-      fs.mkdirSync(tempPdfDir, { recursive: true });
-    }
+    if (!fs.existsSync(tempPdfDir)) fs.mkdirSync(tempPdfDir, { recursive: true });
     await exec(`pdftoppm -png -r 300 "${filePath}" "${path.join(tempPdfDir, 'page')}"`);
     const pageFiles = fs.readdirSync(tempPdfDir).filter(f => f.startsWith('page') && f.endsWith('.png')).sort();
     if (pageFiles.length > 0) {
@@ -1519,27 +1693,18 @@ async function extractPDFText(filePath) {
             totalConfidence += result.confidence;
             pageCount++;
           }
-          if (processedPath !== pagePath && fs.existsSync(processedPath)) {
-            fs.unlinkSync(processedPath);
-          }
+          if (processedPath !== pagePath && fs.existsSync(processedPath)) fs.unlinkSync(processedPath);
         } catch (e) {}
-        if (fs.existsSync(pagePath)) {
-          fs.unlinkSync(pagePath);
-        }
+        if (fs.existsSync(pagePath)) fs.unlinkSync(pagePath);
       }
-      if (fs.existsSync(tempPdfDir)) {
-        fs.rmdirSync(tempPdfDir, { recursive: true });
-      }
+      if (fs.existsSync(tempPdfDir)) fs.rmdirSync(tempPdfDir, { recursive: true });
       if (combinedText.trim()) {
-        ocrApplied = true;
-        isScanned = true;
+        ocrApplied = true; isScanned = true;
         ocrConfidence = pageCount > 0 ? totalConfidence / pageCount : 60;
         return { text: combinedText.trim(), pageTexts: pageTextsOcr, ocrApplied, isScanned, ocrConfidence, totalPages: pageCount };
       }
     }
-    if (fs.existsSync(tempPdfDir)) {
-      fs.rmdirSync(tempPdfDir, { recursive: true });
-    }
+    if (fs.existsSync(tempPdfDir)) fs.rmdirSync(tempPdfDir, { recursive: true });
   } catch (e) {}
   if (embeddedText && embeddedText.trim()) {
     return { text: embeddedText, pageTexts: [embeddedText], ocrApplied: false, isScanned: false, ocrConfidence: 70, totalPages: totalPages || 1 };
@@ -1551,9 +1716,7 @@ async function extractImageText(filePath) {
   try {
     const result = await ocrImageWithRetry(filePath, 'hi+eng', 2);
     return { text: result.text || '', confidence: result.confidence || 0, ocrApplied: true };
-  } catch (e) {
-    return { text: '', confidence: 0, ocrApplied: false };
-  }
+  } catch (e) { return { text: '', confidence: 0, ocrApplied: false }; }
 }
 
 async function extractWordText(filePath) {
@@ -1619,9 +1782,7 @@ function extractTextFile(filePath) {
   try {
     const content = fs.readFileSync(filePath, 'utf8');
     return content ? normalizeText(content) : '';
-  } catch (e) {
-    return '';
-  }
+  } catch (e) { return ''; }
 }
 
 async function extractFileContent(filePath, mimeType) {
@@ -1660,17 +1821,8 @@ async function extractFileContent(filePath, mimeType) {
       result.text = extractTextFile(filePath);
       result.totalPages = 1;
       result.pageTexts = [result.text];
-    } else {
-      try {
-        const content = fs.readFileSync(filePath, 'utf8');
-        result.text = normalizeText(content);
-        result.totalPages = 1;
-        result.pageTexts = [result.text];
-      } catch (e) {}
     }
-  } catch (e) {
-    result.text = '';
-  }
+  } catch (e) { result.text = ''; }
   return result;
 }
 
@@ -1678,14 +1830,7 @@ async function generateRAGResponse(query, context) {
   try {
     if (genAI) {
       const model = genAI.getGenerativeModel({ model: "gemini-pro" });
-      const prompt = `You are a college document assistant. Answer the user's question based ONLY on the following document excerpts. If the answer is not found in the excerpts, say "I don't have information about that in the uploaded documents." Do not make up information.
-
-Document excerpts:
-${context}
-
-User question: ${query}
-
-Answer:`;
+      const prompt = `You are a college document assistant. Answer the user's question based ONLY on the following document excerpts. If the answer is not found in the excerpts, say "I don't have information about that in the uploaded documents." Do not make up information.\n\nDocument excerpts:\n${context}\n\nUser question: ${query}\n\nAnswer:`;
       const result = await model.generateContent(prompt);
       return result.response.text();
     }
@@ -1700,9 +1845,7 @@ Answer:`;
       });
       return response.choices[0].message.content;
     }
-  } catch (e) {
-    return "AI service unavailable. Please try again later.";
-  }
+  } catch (e) { return "AI service unavailable. Please try again later."; }
   return "AI service not configured. Please set up OpenAI or Gemini API key.";
 }
 
@@ -1733,18 +1876,28 @@ app.post("/api/auth/signup", async (req, res) => {
     const normalizedEmail = email.toLowerCase().trim();
     const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) return res.status(400).json({ message: "Email already registered." });
+    const demoUser = DEMO_USERS.find(u => u.email.toLowerCase() === normalizedEmail);
     const hashedPassword = await bcrypt.hash(password, 10);
-    const assignedRole = isAdminEmail(normalizedEmail) ? "admin" : "student";
     const user = new User({
-      name, email: normalizedEmail, password: hashedPassword,
-      avatar: avatar || "", role: assignedRole,
-      year: assignedRole === "student" ? year || "" : "",
-      semester: assignedRole === "student" ? semester || "" : "",
-      branch: assignedRole === "student" ? branch || "" : ""
+      name,
+      email: normalizedEmail,
+      password: hashedPassword,
+      avatar: avatar || "",
+      role: demoUser ? demoUser.role : ROLES.ASSISTANT_PROFESSOR,
+      department: demoUser ? demoUser.department : null,
+      permissions: demoUser ? demoUser.permissions : ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR],
+      year: year || "",
+      semester: semester || "",
+      branch: branch || ""
     });
     await user.save();
     const token = createToken(user);
-    res.status(201).json({ token, name: user.name, email: user.email, avatar: user.avatar, role: user.role, year: user.year, semester: user.semester, branch: user.branch });
+    res.status(201).json({
+      token,
+      name: user.name, email: user.email, avatar: user.avatar,
+      role: user.role, department: user.department, permissions: user.permissions,
+      year: user.year, semester: user.semester, branch: user.branch
+    });
   } catch (error) {
     res.status(500).json({ message: "Server error during signup." });
   }
@@ -1756,23 +1909,27 @@ app.post("/api/auth/signin", async (req, res) => {
     if (!email || !password) return res.status(400).json({ message: "Email and password are required." });
     const normalizedEmail = email.toLowerCase().trim();
     const user = await User.findOne({ email: normalizedEmail });
-    if (!user) return res.status(400).json({ message: "Invalid credentials." });
+    if (!user) return res.status(400).json({ message: "Invalid email or password." });
     const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) return res.status(400).json({ message: "Invalid credentials." });
-    const shouldBeAdmin = isAdminEmail(user.email);
-    if (shouldBeAdmin && user.role !== "admin") {
-      user.role = "admin";
-      user.year = "";
-      user.semester = "";
-      user.branch = "";
+    if (!validPassword) return res.status(400).json({ message: "Invalid email or password." });
+    const demoUser = DEMO_USERS.find(u => u.email.toLowerCase() === normalizedEmail);
+    if (demoUser && user.role !== demoUser.role) {
+      user.role = demoUser.role;
+      user.department = demoUser.department;
+      user.permissions = demoUser.permissions;
       await user.save();
     }
-    if (!shouldBeAdmin && user.role === "admin") {
-      user.role = "student";
+    if (!user.permissions || user.permissions.length === 0) {
+      user.permissions = ROLE_PERMISSIONS[user.role] || ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR];
       await user.save();
     }
     const token = createToken(user);
-    res.status(200).json({ token, name: user.name, email: user.email, avatar: user.avatar, role: user.role, year: user.year, semester: user.semester, branch: user.branch });
+    res.status(200).json({
+      token,
+      name: user.name, email: user.email, avatar: user.avatar,
+      role: user.role, department: user.department, permissions: user.permissions,
+      year: user.year, semester: user.semester, branch: user.branch
+    });
   } catch (error) {
     res.status(500).json({ message: "Server error during signin." });
   }
@@ -1782,7 +1939,11 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found." });
-    res.status(200).json({ name: user.name, email: user.email, avatar: user.avatar, role: user.role, year: user.year, semester: user.semester, branch: user.branch });
+    res.status(200).json({
+      name: user.name, email: user.email, avatar: user.avatar,
+      role: user.role, department: user.department, permissions: user.permissions,
+      year: user.year, semester: user.semester, branch: user.branch
+    });
   } catch (error) {
     res.status(500).json({ message: "Server error while loading user." });
   }
@@ -1799,11 +1960,74 @@ app.put("/api/auth/update-avatar", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single("file"), async (req, res) => {
+app.get("/api/users", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { department, role } = req.query;
+    const filter = {};
+    if (department) filter.department = department;
+    if (role) filter.role = role;
+    const users = await User.find(filter).select('-password').sort({ role: 1, department: 1, name: 1 });
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({ message: "Server error while fetching users." });
+  }
+});
+
+app.get("/api/users/:id", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) return res.status(404).json({ message: "User not found." });
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({ message: "Server error while fetching user." });
+  }
+});
+
+app.put("/api/users/:id", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const { name, role, department, permissions } = req.body;
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: "User not found." });
+    if (name) user.name = name;
+    if (role && Object.values(ROLES).includes(role)) {
+      user.role = role;
+      user.permissions = ROLE_PERMISSIONS[role] || [];
+    }
+    if (department !== undefined) user.department = department || null;
+    if (permissions && Array.isArray(permissions)) user.permissions = permissions;
+    await user.save();
+    res.status(200).json({ message: "User updated successfully.", user: { id: user._id, name: user.name, email: user.email, role: user.role, department: user.department, permissions: user.permissions } });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while updating user." });
+  }
+});
+
+app.delete("/api/users/:id", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: "User not found." });
+    if (user.role === ROLES.ADMIN) return res.status(403).json({ message: "Cannot delete admin account." });
+    await User.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: "User deleted successfully." });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while deleting user." });
+  }
+});
+
+app.post("/api/documents/upload", authenticateToken, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: "No file uploaded." });
-    const { title, category, docDate, year, semester, branch, paperType, officialDocType, session, status } = req.body;
+    const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
+    const canUpload = userPermissions.includes(PERMISSIONS.CREATE_DOCUMENT) || userPermissions.includes(PERMISSIONS.SUBMIT_DOCUMENT);
+    if (!canUpload) {
+      if (req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(403).json({ message: "Access denied. You don't have permission to upload documents." });
+    }
+    const { title, category, docDate, year, semester, branch, paperType, officialDocType, session, status, department } = req.body;
     const docStatus = status === "draft" ? "draft" : "published";
+    let docDepartment = department || req.user.department;
+    if (COLLEGE_WIDE_ROLES.includes(req.user.role)) docDepartment = department || null;
+    else docDepartment = req.user.department;
     let finalTitle = (title && title.trim()) ? title.trim() : req.file.originalname;
     if (!finalTitle.trim()) finalTitle = req.file.originalname;
     const fileUrl = `${req.protocol}://${req.get("host")}/uploads/documents/${req.file.filename}`;
@@ -1812,76 +2036,50 @@ app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single
     const isImage = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.tiff'].includes(ext);
     const isPDF = ext === '.pdf';
     let extractionResult = { text: '', pageTexts: [], ocrApplied: false, isScanned: false, ocrConfidence: 0, totalPages: 0 };
-    if (isPDF || isImage) {
-      extractionResult = await extractFileContent(filePath, req.file.mimetype);
-    } else {
+    if (isPDF || isImage) extractionResult = await extractFileContent(filePath, req.file.mimetype);
+    else {
       const text = await extractFileContent(filePath, req.file.mimetype);
       extractionResult.text = text.text || '';
       extractionResult.pageTexts = text.pageTexts || [];
       extractionResult.totalPages = text.totalPages || 1;
     }
     const extractedText = extractionResult.text || '';
-    const metaBlob = [finalTitle, officialDocType, paperType, category, year, semester, branch, session].filter(Boolean).join(' ');
     const docData = buildIndexedDocument(
       finalTitle, extractedText, fileUrl, req.file.mimetype || "",
-      req.user.email, category, docDate, year || "", semester || "",
+      req.user.email, req.user.role, category, docDate, year || "", semester || "",
       branch || "", paperType || "", officialDocType || "", session || "",
-      req.file.filename, extractionResult.pageTexts || [],
-      extractionResult.ocrConfidence || 0,
-      extractionResult.ocrApplied || false,
-      extractionResult.isScanned || false,
-      docStatus
+      req.file.filename, docDepartment, extractionResult.pageTexts || [],
+      extractionResult.ocrConfidence || 0, extractionResult.ocrApplied || false,
+      extractionResult.isScanned || false, docStatus
     );
     docData.processingStatus = "completed";
     docData.pageCount = extractionResult.totalPages || 0;
-    if (docStatus === "draft") {
-      docData.draftCreatedAt = new Date();
-    } else {
-      docData.publishedAt = new Date();
-    }
+    if (docStatus === "draft") docData.draftCreatedAt = new Date();
+    else docData.publishedAt = new Date();
     const newDoc = new Document(docData);
     await newDoc.save();
-    
     const textToChunk = (extractedText || docData.textContent || finalTitle);
     const textChunks = chunkText(textToChunk);
-    
     if (textChunks.length > 0) {
       const metadata = {
-        pageNumber: 0,
-        title: finalTitle,
-        category: category || "General",
-        branch: branch || "",
-        semester: semester || "",
-        year: year || "",
-        session: session || "",
-        officialDocType: officialDocType || "",
-        paperType: paperType || ""
+        pageNumber: 0, title: finalTitle, category: category || "General",
+        branch: branch || "", semester: semester || "", year: year || "",
+        session: session || "", officialDocType: officialDocType || "",
+        paperType: paperType || "", department: docDepartment || ""
       };
       const embeddedChunks = await embedDocumentChunks(newDoc, textChunks, metadata);
-      if (embeddedChunks.length > 0) {
-        await Chunk.insertMany(embeddedChunks);
-        console.log(`Created ${embeddedChunks.length} chunks with embeddings for ${finalTitle}`);
-      }
+      if (embeddedChunks.length > 0) await Chunk.insertMany(embeddedChunks);
     }
-    
     try {
       if (extractedText && extractedText.length > 100) {
         const embedding = await generateEmbedding(extractedText.substring(0, 2000));
-        if (embedding && embedding.length > 0) {
-          newDoc.embedding = embedding;
-          await newDoc.save();
-        }
+        if (embedding && embedding.length > 0) { newDoc.embedding = embedding; await newDoc.save(); }
       }
-    } catch (e) {
-      console.error("Document embedding error:", e.message);
-    }
-    
+    } catch (e) {}
     res.status(201).json({
       message: docStatus === "draft" ? "Document saved as draft successfully." : "Document uploaded and indexed successfully.",
-      id: newDoc._id,
-      fileUrl,
-      status: docStatus,
-      language: docData.language,
+      id: newDoc._id, fileUrl, status: docStatus,
+      department: docDepartment, language: docData.language,
       extractedTextLength: extractedText.length,
       hasHindiText: !!(docData.extractedTextHindi || docData.titleHindi),
       pageCount: extractionResult.totalPages || 0,
@@ -1894,77 +2092,127 @@ app.post("/api/documents/upload", authenticateToken, requireAdmin, upload.single
     });
   } catch (error) {
     if (req.file && req.file.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    console.error("Upload error:", error);
     res.status(500).json({ message: error.message || "Server error while uploading document." });
   }
 });
 
-app.get("/api/documents/drafts", authenticateToken, requireAdmin, async (req, res) => {
+app.get("/api/documents/drafts", authenticateToken, async (req, res) => {
   try {
-    const drafts = await Document.find({ status: "draft" }).sort({ draftCreatedAt: -1 });
+    let filter = { status: "draft" };
+    if (req.user.role === ROLES.ADMIN || COLLEGE_WIDE_ROLES.includes(req.user.role)) filter = { status: "draft" };
+    else if (req.user.department) filter = { status: "draft", $or: [{ department: req.user.department }, { uploadedBy: req.user.email }] };
+    else filter = { status: "draft", uploadedBy: req.user.email };
+    const drafts = await Document.find(filter).sort({ draftCreatedAt: -1 });
     res.status(200).json(drafts);
   } catch (error) {
     res.status(500).json({ message: "Server error while fetching drafts." });
   }
 });
 
-app.post("/api/documents/publish/:id", authenticateToken, requireAdmin, async (req, res) => {
+app.get("/api/documents/pending-approval", authenticateToken, async (req, res) => {
   try {
+    if (!canApproveDocuments(req.user)) return res.status(403).json({ message: "Access denied." });
+    let filter = { status: "pending_approval" };
+    if (req.user.role === ROLES.HOD && req.user.department) { filter.department = req.user.department; filter.approvalStage = "hod"; }
+    else if (req.user.role === ROLES.DEAN) filter.approvalStage = { $in: ["dean", "hod"] };
+    else if (req.user.role === ROLES.DIRECTOR) filter.approvalStage = { $in: ["director", "dean", "hod"] };
+    const pendingDocs = await Document.find(filter).sort({ createdAt: -1 });
+    res.status(200).json(pendingDocs);
+  } catch (error) {
+    res.status(500).json({ message: "Server error while fetching pending approvals." });
+  }
+});
+
+app.post("/api/documents/:id/approve", authenticateToken, async (req, res) => {
+  try {
+    if (!canApproveDocuments(req.user)) return res.status(403).json({ message: "Access denied." });
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
-    if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
-    doc.status = "published";
-    doc.draftCreatedAt = null;
-    doc.publishedAt = new Date();
+    if (doc.status !== "pending_approval") return res.status(400).json({ message: "Document is not pending approval." });
+    if (req.user.role === ROLES.HOD) {
+      if (doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
+      if (doc.approvalStage !== "hod") return res.status(400).json({ message: "Not at HOD stage." });
+      doc.approvalStage = "dean";
+    } else if (req.user.role === ROLES.DEAN) {
+      if (doc.approvalStage !== "dean") return res.status(400).json({ message: "Not at Dean stage." });
+      doc.approvalStage = "director";
+    } else if (req.user.role === ROLES.DIRECTOR) {
+      if (doc.approvalStage !== "director") return res.status(400).json({ message: "Not at Director stage." });
+      doc.status = "published"; doc.approvalStage = ""; doc.publishedAt = new Date();
+    } else if (req.user.role === ROLES.ADMIN) {
+      doc.status = "published"; doc.approvalStage = ""; doc.publishedAt = new Date();
+    }
+    doc.approvedBy = req.user.email; doc.approvedAt = new Date();
     await doc.save();
-    
+    res.status(200).json({ message: "Document approved successfully.", status: doc.status, approvalStage: doc.approvalStage });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while approving document." });
+  }
+});
+
+app.post("/api/documents/:id/reject", authenticateToken, async (req, res) => {
+  try {
+    if (!canApproveDocuments(req.user)) return res.status(403).json({ message: "Access denied." });
+    const { reason } = req.body;
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: "Document not found." });
+    if (doc.status !== "pending_approval") return res.status(400).json({ message: "Document is not pending approval." });
+    if (req.user.role === ROLES.HOD && doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
+    doc.status = "rejected"; doc.rejectedBy = req.user.email; doc.rejectedAt = new Date();
+    doc.rejectionReason = reason || "No reason provided";
+    await doc.save();
+    res.status(200).json({ message: "Document rejected successfully." });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while rejecting document." });
+  }
+});
+
+app.post("/api/documents/publish/:id", authenticateToken, async (req, res) => {
+  try {
+    const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
+    if (!userPermissions.includes(PERMISSIONS.CREATE_DOCUMENT) && !userPermissions.includes(PERMISSIONS.APPROVE_DOCUMENT)) {
+      return res.status(403).json({ message: "Access denied." });
+    }
+    const doc = await Document.findById(req.params.id);
+    if (!doc) return res.status(404).json({ message: "Document not found." });
+    if (!COLLEGE_WIDE_ROLES.includes(req.user.role) && doc.department !== req.user.department) {
+      return res.status(403).json({ message: "Access denied." });
+    }
+    if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
+    doc.status = "published"; doc.draftCreatedAt = null; doc.publishedAt = new Date();
+    await doc.save();
     const textToChunk = (doc.extractedText || doc.textContent || doc.title);
     const textChunks = chunkText(textToChunk);
-    
     if (textChunks.length > 0) {
-      const metadata = {
-        pageNumber: 0,
-        title: doc.title,
-        category: doc.category,
-        branch: doc.branch,
-        semester: doc.semester,
-        year: doc.year,
-        session: doc.session,
-        officialDocType: doc.officialDocType,
-        paperType: doc.paperType
-      };
       const existingChunks = await Chunk.find({ documentId: doc._id });
       if (existingChunks.length === 0) {
+        const metadata = {
+          pageNumber: 0, title: doc.title, category: doc.category,
+          branch: doc.branch, semester: doc.semester, year: doc.year,
+          session: doc.session, officialDocType: doc.officialDocType,
+          paperType: doc.paperType, department: doc.department || ""
+        };
         const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
-        if (embeddedChunks.length > 0) {
-          await Chunk.insertMany(embeddedChunks);
-          console.log(`Created ${embeddedChunks.length} chunks for published draft ${doc.title}`);
-        }
+        if (embeddedChunks.length > 0) await Chunk.insertMany(embeddedChunks);
       }
     }
-    
-    try {
-      if (doc.extractedText && doc.extractedText.length > 100 && (!doc.embedding || doc.embedding.length === 0)) {
-        const embedding = await generateEmbedding(doc.extractedText.substring(0, 2000));
-        if (embedding && embedding.length > 0) {
-          doc.embedding = embedding;
-          await doc.save();
-        }
-      }
-    } catch (e) {
-      console.error("Document embedding error during publish:", e.message);
-    }
-    
     res.status(200).json({ message: "Draft published successfully.", document: doc });
   } catch (error) {
     res.status(500).json({ message: "Server error while publishing draft." });
   }
 });
 
-app.delete("/api/documents/draft/:id", authenticateToken, requireAdmin, async (req, res) => {
+app.delete("/api/documents/draft/:id", authenticateToken, async (req, res) => {
   try {
+    const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
+    if (!userPermissions.includes(PERMISSIONS.CREATE_DOCUMENT) && !userPermissions.includes(PERMISSIONS.DELETE_DOCUMENT)) {
+      return res.status(403).json({ message: "Access denied." });
+    }
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Draft not found." });
+    if (!COLLEGE_WIDE_ROLES.includes(req.user.role)) {
+      if (doc.uploadedBy !== req.user.email && doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
+    }
     if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
     if (doc.storageName) {
       const filePath = path.join(uploadDir, doc.storageName);
@@ -1978,7 +2226,7 @@ app.delete("/api/documents/draft/:id", authenticateToken, requireAdmin, async (r
   }
 });
 
-app.get("/api/documents/draft/:id", authenticateToken, requireAdmin, async (req, res) => {
+app.get("/api/documents/draft/:id", authenticateToken, async (req, res) => {
   try {
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Draft not found." });
@@ -1989,7 +2237,7 @@ app.get("/api/documents/draft/:id", authenticateToken, requireAdmin, async (req,
   }
 });
 
-app.put("/api/documents/draft/:id", authenticateToken, requireAdmin, async (req, res) => {
+app.put("/api/documents/draft/:id", authenticateToken, async (req, res) => {
   try {
     const { title, category, docDate, year, semester, branch, paperType, officialDocType, session } = req.body;
     const doc = await Document.findById(req.params.id);
@@ -2009,7 +2257,7 @@ app.put("/api/documents/draft/:id", authenticateToken, requireAdmin, async (req,
     if (paperType !== undefined) doc.paperType = paperType;
     if (officialDocType !== undefined) doc.officialDocType = officialDocType;
     if (session !== undefined) doc.session = session;
-    const metaBlob = [doc.title, doc.officialDocType, doc.paperType, doc.category, doc.storageName, doc.year, doc.semester, doc.branch, doc.session].filter(Boolean).join(' ');
+    const metaBlob = [doc.title, doc.officialDocType, doc.paperType, doc.category, doc.storageName, doc.year, doc.semester, doc.branch, doc.session, doc.department].filter(Boolean).join(' ');
     if (doc.extractedText) {
       doc.extractedTextRomanized = romanizeHindi(doc.extractedText);
       doc.textContentRomanized = `${doc.titleRomanized} ${doc.extractedTextRomanized} ${romanizeHindi(metaBlob)}`.trim();
@@ -2020,25 +2268,12 @@ app.put("/api/documents/draft/:id", authenticateToken, requireAdmin, async (req,
     doc.searchTerms = getUniqueWords(`${doc.title} ${doc.extractedText || ''} ${metaBlob}`).slice(0, 1000);
     doc.textContent = `${doc.title} ${doc.extractedText || ''} ${metaBlob}`.trim();
     await doc.save();
-    
     await Chunk.deleteMany({ documentId: doc._id });
     const textChunks = chunkText(doc.extractedText || doc.textContent || doc.title);
     if (textChunks.length > 0) {
-      const metadata = {
-        pageNumber: 0,
-        title: doc.title,
-        category: doc.category,
-        branch: doc.branch,
-        semester: doc.semester,
-        year: doc.year,
-        session: doc.session,
-        officialDocType: doc.officialDocType,
-        paperType: doc.paperType
-      };
+      const metadata = { pageNumber: 0, title: doc.title, category: doc.category, branch: doc.branch, semester: doc.semester, year: doc.year, session: doc.session, officialDocType: doc.officialDocType, paperType: doc.paperType, department: doc.department || "" };
       const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
-      if (embeddedChunks.length > 0) {
-        await Chunk.insertMany(embeddedChunks);
-      }
+      if (embeddedChunks.length > 0) await Chunk.insertMany(embeddedChunks);
     }
     res.status(200).json({ message: "Draft updated successfully.", doc });
   } catch (error) {
@@ -2048,15 +2283,28 @@ app.put("/api/documents/draft/:id", authenticateToken, requireAdmin, async (req,
 
 app.get("/api/documents/search", authenticateToken, async (req, res) => {
   try {
-    const { q, category, branch, semester, year, limit } = req.query;
+    const { q, category, branch, semester, year, limit, department } = req.query;
     const filter = {};
     if (category) filter.category = category;
     if (branch) filter.branch = branch;
     if (semester) filter.semester = semester;
     if (year) filter.year = year;
-    const isAdmin = req.user && req.user.role === 'admin';
-    if (!isAdmin) {
+    if (COLLEGE_WIDE_ROLES.includes(req.user.role)) {
+      if (department) filter.department = department;
+    } else if (req.user.department) {
+      filter.department = req.user.department;
+    }
+    const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
+    const canSeeAll = userPermissions.includes(PERMISSIONS.APPROVE_DOCUMENT) || COLLEGE_WIDE_ROLES.includes(req.user.role);
+    if (!canSeeAll) {
       filter.status = "published";
+    } else {
+      filter.$or = [
+        { status: "published" },
+        { status: { $exists: false } },
+        { status: null },
+        { status: "" }
+      ];
     }
     const resultLimit = parseInt(limit) || SEARCH_RESULTS_LIMIT;
     if (!q || q.trim() === '') {
@@ -2066,7 +2314,6 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
     const results = await enhancedHybridSearch(q.trim(), filter, resultLimit);
     res.status(200).json(results);
   } catch (error) {
-    console.error("Search error:", error);
     res.status(500).json({ message: "Search failed", error: error.message });
   }
 });
@@ -2075,11 +2322,13 @@ app.get("/api/documents/:id", authenticateToken, async (req, res) => {
   try {
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
+    if (!COLLEGE_WIDE_ROLES.includes(req.user.role)) {
+      if (doc.department && doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
+    }
     if (doc.status === "draft") {
-      const isAdmin = req.user && req.user.role === 'admin';
-      if (!isAdmin) {
-        return res.status(403).json({ message: "Access denied." });
-      }
+      const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
+      const canView = userPermissions.includes(PERMISSIONS.CREATE_DOCUMENT) || doc.uploadedBy === req.user.email || doc.department === req.user.department;
+      if (!canView) return res.status(403).json({ message: "Access denied." });
     }
     res.status(200).json(doc);
   } catch (error) {
@@ -2087,11 +2336,18 @@ app.get("/api/documents/:id", authenticateToken, async (req, res) => {
   }
 });
 
-app.put("/api/documents/:id", authenticateToken, requireAdmin, async (req, res) => {
+app.put("/api/documents/:id", authenticateToken, async (req, res) => {
   try {
+    const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
+    if (!userPermissions.includes(PERMISSIONS.EDIT_DOCUMENT) && !userPermissions.includes(PERMISSIONS.CREATE_DOCUMENT)) {
+      return res.status(403).json({ message: "Access denied." });
+    }
     const { title, category, docDate, year, semester, branch, paperType, officialDocType, session } = req.body;
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
+    if (!COLLEGE_WIDE_ROLES.includes(req.user.role)) {
+      if (doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
+    }
     if (title !== undefined && title !== doc.title) {
       doc.title = title;
       const lang = detectLanguage(title);
@@ -2106,7 +2362,7 @@ app.put("/api/documents/:id", authenticateToken, requireAdmin, async (req, res) 
     if (paperType !== undefined) doc.paperType = paperType;
     if (officialDocType !== undefined) doc.officialDocType = officialDocType;
     if (session !== undefined) doc.session = session;
-    const metaBlob = [doc.title, doc.officialDocType, doc.paperType, doc.category, doc.storageName, doc.year, doc.semester, doc.branch, doc.session].filter(Boolean).join(' ');
+    const metaBlob = [doc.title, doc.officialDocType, doc.paperType, doc.category, doc.storageName, doc.year, doc.semester, doc.branch, doc.session, doc.department].filter(Boolean).join(' ');
     if (doc.extractedText) {
       doc.extractedTextRomanized = romanizeHindi(doc.extractedText);
       doc.textContentRomanized = `${doc.titleRomanized} ${doc.extractedTextRomanized} ${romanizeHindi(metaBlob)}`.trim();
@@ -2117,25 +2373,12 @@ app.put("/api/documents/:id", authenticateToken, requireAdmin, async (req, res) 
     doc.searchTerms = getUniqueWords(`${doc.title} ${doc.extractedText || ''} ${metaBlob}`).slice(0, 1000);
     doc.textContent = `${doc.title} ${doc.extractedText || ''} ${metaBlob}`.trim();
     await doc.save();
-    
     await Chunk.deleteMany({ documentId: doc._id });
     const textChunks = chunkText(doc.extractedText || doc.textContent || doc.title);
     if (textChunks.length > 0) {
-      const metadata = {
-        pageNumber: 0,
-        title: doc.title,
-        category: doc.category,
-        branch: doc.branch,
-        semester: doc.semester,
-        year: doc.year,
-        session: doc.session,
-        officialDocType: doc.officialDocType,
-        paperType: doc.paperType
-      };
+      const metadata = { pageNumber: 0, title: doc.title, category: doc.category, branch: doc.branch, semester: doc.semester, year: doc.year, session: doc.session, officialDocType: doc.officialDocType, paperType: doc.paperType, department: doc.department || "" };
       const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
-      if (embeddedChunks.length > 0) {
-        await Chunk.insertMany(embeddedChunks);
-      }
+      if (embeddedChunks.length > 0) await Chunk.insertMany(embeddedChunks);
     }
     res.status(200).json({ message: "Document updated successfully.", doc });
   } catch (error) {
@@ -2143,10 +2386,15 @@ app.put("/api/documents/:id", authenticateToken, requireAdmin, async (req, res) 
   }
 });
 
-app.delete("/api/documents/:id", authenticateToken, requireAdmin, async (req, res) => {
+app.delete("/api/documents/:id", authenticateToken, async (req, res) => {
   try {
+    const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
+    if (!userPermissions.includes(PERMISSIONS.DELETE_DOCUMENT)) return res.status(403).json({ message: "Access denied." });
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
+    if (!COLLEGE_WIDE_ROLES.includes(req.user.role)) {
+      if (doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
+    }
     if (doc.storageName) {
       const filePath = path.join(uploadDir, doc.storageName);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
@@ -2202,10 +2450,7 @@ app.post("/api/chat", authenticateToken, async (req, res) => {
     let sources = [];
     if (queryEmbedding && queryEmbedding.length > 0) {
       const chunks = await Chunk.find().limit(100);
-      const scored = chunks.map(chunk => ({
-        chunk,
-        similarity: cosineSimilarity(queryEmbedding, chunk.embedding || [])
-      }));
+      const scored = chunks.map(chunk => ({ chunk, similarity: cosineSimilarity(queryEmbedding, chunk.embedding || []) }));
       scored.sort((a, b) => b.similarity - a.similarity);
       const topChunks = scored.slice(0, 5);
       for (const sc of topChunks) {
@@ -2220,14 +2465,11 @@ app.post("/api/chat", authenticateToken, async (req, res) => {
       const topDocs = searchResults.slice(0, 3);
       for (const doc of topDocs) {
         const text = doc.extractedText || doc.textContent || '';
-        context += `\n--- Document: ${doc.title} (${doc.category || 'General'}) ---\n`;
-        context += text.substring(0, 1500) + '\n';
+        context += `\n--- Document: ${doc.title} (${doc.category || 'General'}) ---\n${text.substring(0, 1500)}\n`;
         sources.push({ title: doc.title, id: doc._id });
       }
     }
-    if (!context) {
-      return res.status(200).json({ answer: "I don't have information about that in the uploaded documents." });
-    }
+    if (!context) return res.status(200).json({ answer: "I don't have information about that in the uploaded documents." });
     const answer = await generateRAGResponse(question, context);
     res.status(200).json({ answer, sources });
   } catch (error) {
@@ -2251,10 +2493,10 @@ app.post("/api/documents/reindex", authenticateToken, requireAdmin, async (req, 
             if (result.text) {
               const docData = buildIndexedDocument(
                 doc.title, result.text, doc.fileUrl, doc.fileType,
-                doc.uploadedBy, doc.category, doc.docDate,
+                doc.uploadedBy, doc.uploadedByRole || "", doc.category, doc.docDate,
                 doc.year, doc.semester, doc.branch, doc.paperType,
                 doc.officialDocType, doc.session, doc.storageName,
-                result.pageTexts || [], result.ocrConfidence || 0,
+                doc.department, result.pageTexts || [], result.ocrConfidence || 0,
                 result.ocrApplied || false, result.isScanned || false,
                 doc.status || "published"
               );
@@ -2265,22 +2507,9 @@ app.post("/api/documents/reindex", authenticateToken, requireAdmin, async (req, 
               reindexedCount++;
               const textChunks = chunkText(result.text || doc.textContent || doc.title);
               if (textChunks.length > 0) {
-                const metadata = {
-                  pageNumber: 0,
-                  title: doc.title,
-                  category: doc.category,
-                  branch: doc.branch,
-                  semester: doc.semester,
-                  year: doc.year,
-                  session: doc.session,
-                  officialDocType: doc.officialDocType,
-                  paperType: doc.paperType
-                };
+                const metadata = { pageNumber: 0, title: doc.title, category: doc.category, branch: doc.branch, semester: doc.semester, year: doc.year, session: doc.session, officialDocType: doc.officialDocType, paperType: doc.paperType, department: doc.department || "" };
                 const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
-                if (embeddedChunks.length > 0) {
-                  await Chunk.insertMany(embeddedChunks);
-                  chunkCount += embeddedChunks.length;
-                }
+                if (embeddedChunks.length > 0) { await Chunk.insertMany(embeddedChunks); chunkCount += embeddedChunks.length; }
               }
             }
           } catch (err) {
@@ -2316,11 +2545,11 @@ app.get("/api/documents/debug", authenticateToken, async (req, res) => {
         isScanned: d.isScanned, processingStatus: d.processingStatus,
         keywordsCount: d.keywords ? d.keywords.length : 0,
         hasEmbedding: d.embedding && d.embedding.length > 0,
-        status: d.status || "published"
+        status: d.status || "published",
+        department: d.department
       })),
       chunkSample: chunkSample.map(c => ({
-        documentId: c.documentId,
-        chunkIndex: c.chunkIndex,
+        documentId: c.documentId, chunkIndex: c.chunkIndex,
         textLength: c.text ? c.text.length : 0,
         hasEmbedding: c.embedding && c.embedding.length > 0,
         metadata: c.metadata
@@ -2334,9 +2563,10 @@ app.get("/api/documents/debug", authenticateToken, async (req, res) => {
 app.get("/api/status", async (req, res) => {
   const docCount = await Document.countDocuments().catch(() => 0);
   const chunkCount = await Chunk.countDocuments().catch(() => 0);
+  const userCount = await User.countDocuments().catch(() => 0);
   res.json({
     status: "online",
-    version: "2.0.0",
+    version: "3.0.0",
     features: {
       ocr: true,
       semanticSearch: process.env.SEMANTIC_SEARCH_ENABLED === 'true',
@@ -2347,20 +2577,22 @@ app.get("/api/status", async (req, res) => {
       chunkSize: CHUNK_SIZE,
       chunkOverlap: CHUNK_OVERLAP,
       chatbot: !!(genAI || openai),
-      drafts: true
+      drafts: true,
+      roleBasedAccess: true,
+      departmentIsolation: true
     },
+    roles: Object.values(ROLES),
+    departments: Object.values(DEPARTMENTS),
     storage: "local",
-    adminEmails: ADMIN_EMAILS,
-    stats: {
-      documents: docCount,
-      chunks: chunkCount
-    }
+    stats: { documents: docCount, chunks: chunkCount, users: userCount }
   });
 });
 
 app.use((error, req, res, next) => {
   if (error instanceof multer.MulterError) {
-    return res.status(400).json({ message: error.code === "LIMIT_FILE_SIZE" ? "File is too large. Maximum size is 50MB." : error.message });
+    return res.status(400).json({
+      message: error.code === "LIMIT_FILE_SIZE" ? "File is too large. Maximum size is 50MB." : error.message
+    });
   }
   res.status(500).json({ message: error.message || "Server error." });
 });
@@ -2370,11 +2602,13 @@ app.listen(PORT, async () => {
   console.log(`Storage mode: local`);
   console.log(`OCR DPI: 300`);
   console.log(`AI services: ${genAI || openai ? 'Enabled' : 'Disabled'}`);
-  console.log(`Semantic search: ${process.env.SEMANTIC_SEARCH_ENABLED === 'true' ? 'Enabled' : 'Disabled'}`);
   console.log(`Embedding model: ${EMBEDDING_MODEL}`);
   console.log(`Chunk size: ${CHUNK_SIZE}, Overlap: ${CHUNK_OVERLAP}`);
+  console.log(`Role-based access control: Enabled`);
+  console.log(`Departments: ${Object.values(DEPARTMENTS).join(', ')}`);
   console.log(`Drafts feature: Enabled`);
   const docCount = await Document.countDocuments().catch(() => 0);
   const chunkCount = await Chunk.countDocuments().catch(() => 0);
-  console.log(`Existing documents: ${docCount}, chunks: ${chunkCount}`);
+  const userCount = await User.countDocuments().catch(() => 0);
+  console.log(`Existing documents: ${docCount}, chunks: ${chunkCount}, users: ${userCount}`);
 });
