@@ -73,6 +73,34 @@
                         <div id="searchSuggestions" class="search-suggestions-box hidden"></div>
                     </div>
                     
+                    <div id="departmentFilterContainer" class="filter-selector-container hidden">
+                        <label for="departmentFilterSelect">Department Filter:</label>
+                        <select id="departmentFilterSelect" class="filter-select">
+                            <option value="all">All Departments</option>
+                            <option value="CSE">CSE</option>
+                            <option value="ECE">ECE</option>
+                            <option value="EE">EE</option>
+                            <option value="ME">ME</option>
+                            <option value="CE">CE</option>
+                            <option value="CHE">CHE</option>
+                        </select>
+                    </div>
+
+                    <div id="branchFilterContainer" class="filter-selector-container hidden">
+                        <label for="branchFilterSelect">Branch Filter:</label>
+                        <select id="branchFilterSelect" class="filter-select">
+                            <option value="all">All Branches</option>
+                            <option value="CSE-R">CSE-R</option>
+                            <option value="CSE-A.I">CSE-A.I</option>
+                            <option value="CSE-SF">CSE-SF</option>
+                            <option value="ECE">ECE</option>
+                            <option value="EE">EE</option>
+                            <option value="ME">ME</option>
+                            <option value="CE">CE</option>
+                            <option value="CHE">CHE</option>
+                        </select>
+                    </div>
+
                     <div class="category-filter-table">
                         <div class="filter-tab active" data-category="all">
                             <i class="fa-solid fa-vault"></i> All Vault
@@ -200,7 +228,7 @@
                     <div class="input-block">
                         <label for="regBranchSelect">Branch Name</label>
                         <select id="regBranchSelect">
-                            <option value="CSE-(R)">CSE-(R)</option>
+                            <option value="CSE-R">CSE-R</option>
                             <option value="CSE-A.I">CSE-A.I</option>
                             <option value="CSE-SF">CSE-SF</option>
                             <option value="ECE">ECE</option>
@@ -241,6 +269,18 @@
                     </select>
                 </div>
                 <div id="universityFields" class="category-conditional-fields">
+                    <div id="docDepartmentField" class="input-block hidden">
+                        <label for="docDepartmentSelect">Department</label>
+                        <select id="docDepartmentSelect">
+                            <option value="">-- Select Department --</option>
+                            <option value="CSE">CSE</option>
+                            <option value="ECE">ECE</option>
+                            <option value="EE">EE</option>
+                            <option value="ME">ME</option>
+                            <option value="CE">CE</option>
+                            <option value="CHE">CHE</option>
+                        </select>
+                    </div>
                     <div class="input-block">
                         <label for="docSessionSelect">Academic Session</label>
                         <select id="docSessionSelect">
@@ -271,8 +311,8 @@
                     <div class="input-block">
                         <label for="docBranchSelect">Branch Name</label>
                         <select id="docBranchSelect">
-                            <option value="All Branches" id="allBranchesOpt">All Branches</option>
-                            <option value="CSE-(R)">CSE-(R)</option>
+                            <option value="All Branches" id="allBranchesOpt">All CSE Branches</option>
+                            <option value="CSE-R">CSE-R</option>
                             <option value="CSE-A.I">CSE-A.I</option>
                             <option value="CSE-SF">CSE-SF</option>
                             <option value="ECE">ECE</option>
@@ -292,6 +332,18 @@
                     </div>
                 </div>
                 <div id="officialFields" class="category-conditional-fields">
+                    <div id="officialDocDepartmentField" class="input-block hidden">
+                        <label for="officialDocDepartmentSelect">Department</label>
+                        <select id="officialDocDepartmentSelect">
+                            <option value="">-- Select Department --</option>
+                            <option value="CSE">CSE</option>
+                            <option value="ECE">ECE</option>
+                            <option value="EE">EE</option>
+                            <option value="ME">ME</option>
+                            <option value="CE">CE</option>
+                            <option value="CHE">CHE</option>
+                        </select>
+                    </div>
                     <div class="input-block">
                         <label for="officialDocTypeSelect">Official Document Type</label>
                         <select id="officialDocTypeSelect">
@@ -365,8 +417,8 @@
                         <label for="officialDocBranchSelect">Branch Name</label>
                         <select id="officialDocBranchSelect">
                             <option value="" disabled selected>-- Select Branch --</option>
-                            <option value="All Branches">All Branches</option>
-                            <option value="CSE-(R)">CSE-(R)</option>
+                            <option value="All Branches">All CSE Branches</option>
+                            <option value="CSE-R">CSE-R</option>
                             <option value="CSE-A.I">CSE-A.I</option>
                             <option value="CSE-SF">CSE-SF</option>
                             <option value="ECE">ECE</option>
@@ -437,8 +489,8 @@
                     <div class="input-block">
                         <label for="editDocBranchSelect">Branch Name</label>
                         <select id="editDocBranchSelect">
-                            <option value="All Branches">All Branches</option>
-                            <option value="CSE-(R)">CSE-(R)</option>
+                            <option value="All Branches">All CSE Branches</option>
+                            <option value="CSE-R">CSE-R</option>
                             <option value="CSE-A.I">CSE-A.I</option>
                             <option value="CSE-SF">CSE-SF</option>
                             <option value="ECE">ECE</option>
@@ -527,8 +579,8 @@
                     <div class="input-block">
                         <label for="editOfficialDocBranchSelect">Branch Name</label>
                         <select id="editOfficialDocBranchSelect">
-                            <option value="All Branches">All Branches</option>
-                            <option value="CSE-(R)">CSE-(R)</option>
+                            <option value="All Branches">All CSE Branches</option>
+                            <option value="CSE-R">CSE-R</option>
                             <option value="CSE-A.I">CSE-A.I</option>
                             <option value="CSE-SF">CSE-SF</option>
                             <option value="ECE">ECE</option>
@@ -572,15 +624,15 @@
                 <div class="input-block">
                     <label for="academicBranchSelect">Branch</label>
                     <select id="academicBranchSelect">
-                        <option value="All Branches">All Branches</option>
-                            <option value="CSE-(R)">CSE-(R)</option>
-                            <option value="CSE-A.I">CSE-A.I</option>
-                            <option value="CSE-SF">CSE-SF</option>
-                            <option value="ECE">ECE</option>
-                            <option value="EE">EE</option>
-                            <option value="ME">ME</option>
-                            <option value="CE">CE</option>
-                            <option value="CHE">CHE</option>
+                        <option value="All Branches">All CSE Branches</option>
+                        <option value="CSE-R">CSE-R</option>
+                        <option value="CSE-A.I">CSE-A.I</option>
+                        <option value="CSE-SF">CSE-SF</option>
+                        <option value="ECE">ECE</option>
+                        <option value="EE">EE</option>
+                        <option value="ME">ME</option>
+                        <option value="CE">CE</option>
+                        <option value="CHE">CHE</option>
                     </select>
                 </div>
                 <div class="input-block">

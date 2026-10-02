@@ -31,8 +31,16 @@ const DEPARTMENTS = {
   ME: 'ME',
   CE: 'CE',
   EE: 'EE',
-  CHE: 'CHE',
+  CHE: 'CHE'
 };
+
+const CSE_BRANCHES = ['CSE-R', 'CSE-A.I', 'CSE-SF'];
+
+const ALL_BRANCHES = [
+  'CSE-R', 'CSE-A.I', 'CSE-SF',
+  'ECE', 'EE', 'ME', 'CE', 'CHE',
+  'All Branches'
+];
 
 const PERMISSIONS = {
   CREATE_DOCUMENT: 'create_document',
@@ -121,6 +129,7 @@ const DEMO_USERS = [
     password: '817167',
     role: ROLES.ADMIN,
     department: null,
+    branch: null,
     permissions: ROLE_PERMISSIONS[ROLES.ADMIN]
   },
   {
@@ -129,6 +138,7 @@ const DEMO_USERS = [
     password: 'Director@123',
     role: ROLES.DIRECTOR,
     department: null,
+    branch: null,
     permissions: ROLE_PERMISSIONS[ROLES.DIRECTOR]
   },
   {
@@ -137,6 +147,7 @@ const DEMO_USERS = [
     password: 'Dean@123',
     role: ROLES.DEAN,
     department: null,
+    branch: null,
     permissions: ROLE_PERMISSIONS[ROLES.DEAN]
   },
   {
@@ -145,6 +156,7 @@ const DEMO_USERS = [
     password: 'HODCSE@123',
     role: ROLES.HOD,
     department: DEPARTMENTS.CSE,
+    branch: null,
     permissions: ROLE_PERMISSIONS[ROLES.HOD]
   },
   {
@@ -153,6 +165,7 @@ const DEMO_USERS = [
     password: 'ProfCSE1@123',
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.CSE,
+    branch: 'CSE-R',
     permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
   },
   {
@@ -161,6 +174,7 @@ const DEMO_USERS = [
     password: 'ProfCSE2@123',
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.CSE,
+    branch: 'CSE-A.I',
     permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
   },
   {
@@ -169,6 +183,7 @@ const DEMO_USERS = [
     password: 'AsstCSE1@123',
     role: ROLES.ASSISTANT_PROFESSOR,
     department: DEPARTMENTS.CSE,
+    branch: 'CSE-SF',
     permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   },
   {
@@ -177,22 +192,7 @@ const DEMO_USERS = [
     password: 'AsstCSE2@123',
     role: ROLES.ASSISTANT_PROFESSOR,
     department: DEPARTMENTS.CSE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor CSE 3',
-    email: 'assistant.cse3@college.gmail',
-    password: 'AsstCSE3@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.CSE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor CSE 4',
-    email: 'assistant.cse4@college.gmail',
-    password: 'AsstCSE4@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.CSE,
+    branch: 'CSE-R',
     permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   },
   {
@@ -201,6 +201,7 @@ const DEMO_USERS = [
     password: 'HODECE@123',
     role: ROLES.HOD,
     department: DEPARTMENTS.ECE,
+    branch: null,
     permissions: ROLE_PERMISSIONS[ROLES.HOD]
   },
   {
@@ -209,14 +210,7 @@ const DEMO_USERS = [
     password: 'ProfECE1@123',
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.ECE,
-    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
-  },
-  {
-    name: 'Professor ECE 2',
-    email: 'professor.ece2@college.gmail',
-    password: 'ProfECE2@123',
-    role: ROLES.PROFESSOR,
-    department: DEPARTMENTS.ECE,
+    branch: 'ECE',
     permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
   },
   {
@@ -225,30 +219,7 @@ const DEMO_USERS = [
     password: 'AsstECE1@123',
     role: ROLES.ASSISTANT_PROFESSOR,
     department: DEPARTMENTS.ECE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor ECE 2',
-    email: 'assistant.ece2@college.gmail',
-    password: 'AsstECE2@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.ECE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor ECE 3',
-    email: 'assistant.ece3@college.gmail',
-    password: 'AsstECE3@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.ECE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor ECE 4',
-    email: 'assistant.ece4@college.gmail',
-    password: 'AsstECE4@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.ECE,
+    branch: 'ECE',
     permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   },
   {
@@ -257,6 +228,7 @@ const DEMO_USERS = [
     password: 'HODEE@123',
     role: ROLES.HOD,
     department: DEPARTMENTS.EE,
+    branch: null,
     permissions: ROLE_PERMISSIONS[ROLES.HOD]
   },
   {
@@ -265,47 +237,8 @@ const DEMO_USERS = [
     password: 'ProfEE1@123',
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.EE,
+    branch: 'EE',
     permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
-  },
-  {
-    name: 'Professor EE 2',
-    email: 'professor.ee2@college.gmail',
-    password: 'ProfEE2@123',
-    role: ROLES.PROFESSOR,
-    department: DEPARTMENTS.EE,
-    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor EE 1',
-    email: 'assistant.ee1@college.gmail',
-    password: 'AsstEE1@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.EE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor EE 2',
-    email: 'assistant.ee2@college.gmail',
-    password: 'AsstEE2@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.EE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor EE 3',
-    email: 'assistant.ee3@college.gmail',
-    password: 'AsstEE3@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.EE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor EE 4',
-    email: 'assistant.ee4@college.gmail',
-    password: 'AsstEE4@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.EE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   },
   {
     name: 'HOD ME',
@@ -313,6 +246,7 @@ const DEMO_USERS = [
     password: 'HODME@123',
     role: ROLES.HOD,
     department: DEPARTMENTS.ME,
+    branch: null,
     permissions: ROLE_PERMISSIONS[ROLES.HOD]
   },
   {
@@ -321,47 +255,8 @@ const DEMO_USERS = [
     password: 'ProfME1@123',
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.ME,
+    branch: 'ME',
     permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
-  },
-  {
-    name: 'Professor ME 2',
-    email: 'professor.me2@college.gmail',
-    password: 'ProfME2@123',
-    role: ROLES.PROFESSOR,
-    department: DEPARTMENTS.ME,
-    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor ME 1',
-    email: 'assistant.me1@college.gmail',
-    password: 'AsstME1@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.ME,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor ME 2',
-    email: 'assistant.me2@college.gmail',
-    password: 'AsstME2@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.ME,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor ME 3',
-    email: 'assistant.me3@college.gmail',
-    password: 'AsstME3@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.ME,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor ME 4',
-    email: 'assistant.me4@college.gmail',
-    password: 'AsstME4@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.ME,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   },
   {
     name: 'HOD CE',
@@ -369,6 +264,7 @@ const DEMO_USERS = [
     password: 'HODCE@123',
     role: ROLES.HOD,
     department: DEPARTMENTS.CE,
+    branch: null,
     permissions: ROLE_PERMISSIONS[ROLES.HOD]
   },
   {
@@ -377,47 +273,8 @@ const DEMO_USERS = [
     password: 'ProfCE1@123',
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.CE,
+    branch: 'CE',
     permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
-  },
-  {
-    name: 'Professor CE 2',
-    email: 'professor.ce2@college.gmail',
-    password: 'ProfCE2@123',
-    role: ROLES.PROFESSOR,
-    department: DEPARTMENTS.CE,
-    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor CE 1',
-    email: 'assistant.ce1@college.gmail',
-    password: 'AsstCE1@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.CE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor CE 2',
-    email: 'assistant.ce2@college.gmail',
-    password: 'AsstCE2@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.CE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor CE 3',
-    email: 'assistant.ce3@college.gmail',
-    password: 'AsstCE3@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.CE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor CE 4',
-    email: 'assistant.ce4@college.gmail',
-    password: 'AsstCE4@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.CE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   },
   {
     name: 'HOD CHE',
@@ -425,6 +282,7 @@ const DEMO_USERS = [
     password: 'HODCHE@123',
     role: ROLES.HOD,
     department: DEPARTMENTS.CHE,
+    branch: null,
     permissions: ROLE_PERMISSIONS[ROLES.HOD]
   },
   {
@@ -433,47 +291,8 @@ const DEMO_USERS = [
     password: 'ProfCHE1@123',
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.CHE,
+    branch: 'CHE',
     permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
-  },
-  {
-    name: 'Professor CHE 2',
-    email: 'professor.che2@college.gmail',
-    password: 'ProfCHE2@123',
-    role: ROLES.PROFESSOR,
-    department: DEPARTMENTS.CHE,
-    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor CHE 1',
-    email: 'assistant.che1@college.gmail',
-    password: 'AsstCHE1@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.CHE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor CHE 2',
-    email: 'assistant.che2@college.gmail',
-    password: 'AsstCHE2@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.CHE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor CHE 3',
-    email: 'assistant.che3@college.gmail',
-    password: 'AsstCHE3@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.CHE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
-  },
-  {
-    name: 'Assistant Professor CHE 4',
-    email: 'assistant.che4@college.gmail',
-    password: 'AsstCHE4@123',
-    role: ROLES.ASSISTANT_PROFESSOR,
-    department: DEPARTMENTS.CHE,
-    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   }
 ];
 
@@ -482,9 +301,45 @@ const STAFF_BY_EMAIL = new Map(DEMO_USERS.map(u => [u.email.toLowerCase().trim()
 function resolveAccess(email) {
   const staff = STAFF_BY_EMAIL.get(String(email || '').toLowerCase().trim());
   if (staff) {
-    return { role: staff.role, department: staff.department || null, permissions: ROLE_PERMISSIONS[staff.role] };
+    return {
+      role: staff.role,
+      department: staff.department || null,
+      branch: staff.branch || null,
+      permissions: ROLE_PERMISSIONS[staff.role]
+    };
   }
-  return { role: ROLES.STUDENT, department: null, permissions: ROLE_PERMISSIONS[ROLES.STUDENT] };
+  return { role: ROLES.STUDENT, department: null, branch: null, permissions: ROLE_PERMISSIONS[ROLES.STUDENT] };
+}
+
+function normalizeDepartmentForResource(department, branch) {
+  if (!department) return null;
+  const upperDept = String(department).toUpperCase().trim();
+  if (CSE_BRANCHES.includes(branch)) return DEPARTMENTS.CSE;
+  if (upperDept === 'CSE' || CSE_BRANCHES.some(b => upperDept.includes(b.replace('CSE-', '')))) {
+    return DEPARTMENTS.CSE;
+  }
+  if (Object.values(DEPARTMENTS).includes(upperDept)) return upperDept;
+  return null;
+}
+
+function getDepartmentFromBranch(branch) {
+  if (!branch) return null;
+  if (CSE_BRANCHES.includes(branch)) return DEPARTMENTS.CSE;
+  if (Object.values(DEPARTMENTS).includes(branch)) return branch;
+  return null;
+}
+
+function normalizeBranchForResource(branch, department) {
+  if (!branch) return department || '';
+  if (branch === 'All Branches') return 'All Branches';
+  if (CSE_BRANCHES.includes(branch)) return branch;
+  if (Object.values(DEPARTMENTS).includes(branch)) return branch;
+  if (department === DEPARTMENTS.CSE) {
+    if (branch.includes('R') || branch.includes('R)')) return 'CSE-R';
+    if (branch.includes('AI') || branch.includes('A.I')) return 'CSE-A.I';
+    if (branch.includes('SF')) return 'CSE-SF';
+  }
+  return branch;
 }
 
 async function syncUserAccess(user) {
@@ -492,9 +347,13 @@ async function syncUserAccess(user) {
   const samePerms = Array.isArray(user.permissions) &&
     user.permissions.length === access.permissions.length &&
     access.permissions.every(p => user.permissions.includes(p));
-  if (user.role !== access.role || (user.department || null) !== access.department || !samePerms) {
+  if (user.role !== access.role ||
+      (user.department || null) !== access.department ||
+      (user.branch || null) !== access.branch ||
+      !samePerms) {
     user.role = access.role;
     user.department = access.department;
+    user.branch = access.branch;
     user.permissions = access.permissions;
     await user.save();
   }
@@ -508,6 +367,7 @@ function createToken(user) {
       email: user.email,
       role: user.role,
       department: user.department,
+      branch: user.branch,
       permissions: user.permissions
     },
     process.env.JWT_SECRET || 'change-this-secret',
@@ -530,6 +390,7 @@ function authenticateToken(req, res, next) {
         email: dbUser.email,
         role: access.role,
         department: access.department,
+        branch: access.branch,
         permissions: access.permissions
       };
       next();
@@ -575,9 +436,25 @@ function requireCollegeWideAccess(req, res, next) {
   next();
 }
 
-function canAccessDepartment(user, department) {
-  if (COLLEGE_WIDE_ROLES.includes(user.role)) return true;
-  return user.department === department;
+function isCollegeWideRole(user) {
+  return COLLEGE_WIDE_ROLES.includes(user.role);
+}
+
+function userCanAccessResource(user, resource) {
+  if (isCollegeWideRole(user)) return true;
+  if (!user.department) return false;
+  if (!resource.department) return true;
+  return resource.department === user.department;
+}
+
+function userCanAccessBranch(user, resourceBranch, resourceDepartment) {
+  if (isCollegeWideRole(user)) return true;
+  if (!resourceBranch || resourceBranch === 'All Branches' || resourceBranch === '') return true;
+  if (!user.department) return false;
+  const normalizedDept = resourceDepartment || getDepartmentFromBranch(resourceBranch);
+  if (normalizedDept === user.department) return true;
+  if (user.department === DEPARTMENTS.CSE && CSE_BRANCHES.includes(resourceBranch)) return true;
+  return false;
 }
 
 function canApproveDocuments(user) {
@@ -587,7 +464,9 @@ function canApproveDocuments(user) {
 
 function canManageDocuments(user) {
   const perms = user.permissions || ROLE_PERMISSIONS[user.role] || [];
-  return perms.includes(PERMISSIONS.CREATE_DOCUMENT) || perms.includes(PERMISSIONS.DELETE_DOCUMENT) || perms.includes(PERMISSIONS.APPROVE_DOCUMENT);
+  return perms.includes(PERMISSIONS.CREATE_DOCUMENT) ||
+         perms.includes(PERMISSIONS.DELETE_DOCUMENT) ||
+         perms.includes(PERMISSIONS.APPROVE_DOCUMENT);
 }
 
 function canManageDrafts(user) {
@@ -603,17 +482,36 @@ function isStudent(user) {
   return user.role === ROLES.STUDENT;
 }
 
-function userCanAccessBranch(user, docBranch) {
-  if (COLLEGE_WIDE_ROLES.includes(user.role)) return true;
-  if (!docBranch || docBranch === "All Branches" || docBranch === "") return true;
-  if (!user.department) return true;
-  return docBranch === user.department || docBranch === "All Branches";
+function validateDepartmentForUser(user, requestedDepartment) {
+  if (isCollegeWideRole(user)) {
+    if (!requestedDepartment) return null;
+    return normalizeDepartmentForResource(requestedDepartment, null);
+  }
+  return user.department;
+}
+
+function validateBranchForUser(user, requestedBranch, department) {
+  if (!requestedBranch || requestedBranch === 'All Branches') {
+    if (department === DEPARTMENTS.CSE && !isCollegeWideRole(user)) {
+      return 'All Branches';
+    }
+    return requestedBranch || '';
+  }
+  if (isCollegeWideRole(user)) {
+    return normalizeBranchForResource(requestedBranch, department);
+  }
+  if (department === DEPARTMENTS.CSE) {
+    if (CSE_BRANCHES.includes(requestedBranch)) return requestedBranch;
+    return 'CSE-R';
+  }
+  return department || requestedBranch;
 }
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
+
 const PUBLIC_FILES = ['index.html', 'script.js', 'style.css'];
 PUBLIC_FILES.forEach(file => {
   app.get(`/${file}`, (req, res) => {
@@ -621,10 +519,12 @@ PUBLIC_FILES.forEach(file => {
     res.sendFile(path.join(__dirname, file));
   });
 });
+
 app.get('/', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.sendFile(path.join(__dirname, 'index.html'));
 });
+
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const PORT = process.env.PORT || 5000;
@@ -682,14 +582,14 @@ async function migrateLegacyData() {
     if (adminUser && adminUser.role !== ROLES.ADMIN) {
       await db.collection('users').updateOne(
         { email: adminEmail },
-        { $set: { role: ROLES.ADMIN, permissions: ROLE_PERMISSIONS[ROLES.ADMIN], department: null } }
+        { $set: { role: ROLES.ADMIN, permissions: ROLE_PERMISSIONS[ROLES.ADMIN], department: null, branch: null } }
       );
       console.log('Promoted ankushadmin@gmail.com to admin');
     }
     const staffEmails = Array.from(STAFF_BY_EMAIL.keys());
     const demoted = await db.collection('users').updateMany(
       { email: { $nin: staffEmails }, $or: [{ role: { $ne: ROLES.STUDENT } }, { permissions: { $ne: ROLE_PERMISSIONS[ROLES.STUDENT] } }] },
-      { $set: { role: ROLES.STUDENT, department: null, permissions: ROLE_PERMISSIONS[ROLES.STUDENT] } }
+      { $set: { role: ROLES.STUDENT, department: null, branch: null, permissions: ROLE_PERMISSIONS[ROLES.STUDENT] } }
     );
     if (demoted.modifiedCount > 0) {
       console.log(`Reset ${demoted.modifiedCount} non-staff accounts to student`);
@@ -707,6 +607,10 @@ async function migrateLegacyData() {
         );
       }
     }
+    await db.collection('documents').updateMany(
+      { department: { $exists: false } },
+      { $set: { department: null } }
+    );
   } catch (e) {
     console.log("Legacy migration warning:", e.message);
   }
@@ -737,7 +641,8 @@ async function createTextIndexes() {
         branch: "text",
         year: "text",
         semester: "text",
-        session: "text"
+        session: "text",
+        department: "text"
       },
       {
         weights: {
@@ -745,9 +650,9 @@ async function createTextIndexes() {
           officialDocType: 10, paperType: 8,
           extractedText: 5, extractedTextHindi: 5, extractedTextRomanized: 4,
           textContent: 3, textContentHindi: 3, textContentRomanized: 2,
-          branch: 5, year: 4, semester: 4, session: 3
+          branch: 5, year: 4, semester: 4, session: 3, department: 6
         },
-        name: "document_text_search_v3"
+        name: "document_text_search_v4"
       }
     );
     console.log("Text indexes created");
@@ -769,6 +674,7 @@ async function seedDemoUsers() {
           password: hashedPassword,
           role: userData.role,
           department: userData.department,
+          branch: userData.branch || null,
           permissions: userData.permissions
         });
         await user.save();
@@ -776,10 +682,13 @@ async function seedDemoUsers() {
       } else {
         const expectedPerms = ROLE_PERMISSIONS[userData.role] || [];
         const currentPerms = existingUser.permissions || [];
-        if (!currentPerms.includes(PERMISSIONS.MANAGE_DRAFTS) || !currentPerms.includes(PERMISSIONS.CREATE_DOCUMENT)) {
+        if (!currentPerms.includes(PERMISSIONS.MANAGE_DRAFTS) ||
+            !currentPerms.includes(PERMISSIONS.CREATE_DOCUMENT) ||
+            existingUser.department !== userData.department) {
           existingUser.permissions = expectedPerms;
           existingUser.role = userData.role;
           existingUser.department = userData.department;
+          existingUser.branch = userData.branch || null;
           await existingUser.save();
           console.log(`Updated permissions for: ${userData.email}`);
         }
@@ -797,10 +706,10 @@ const userSchema = new mongoose.Schema({
   avatar: { type: String, default: "" },
   role: { type: String, enum: Object.values(ROLES), default: ROLES.STUDENT },
   department: { type: String, enum: [...Object.values(DEPARTMENTS), null], default: null },
+  branch: { type: String, default: null },
   permissions: { type: [String], default: [] },
   year: { type: String, default: "" },
   semester: { type: String, default: "" },
-  branch: { type: String, default: "" },
   createdAt: { type: Date, default: Date.now }
 });
 
@@ -877,7 +786,8 @@ const chunkSchema = new mongoose.Schema({
     session: { type: String, default: "" },
     officialDocType: { type: String, default: "" },
     paperType: { type: String, default: "" },
-    department: { type: String, default: "" }
+    department: { type: String, default: "" },
+    status: { type: String, default: "published" }
   },
   createdAt: { type: Date, default: Date.now }
 });
@@ -1050,7 +960,8 @@ async function embedDocumentChunks(document, chunks, metadata) {
           session: document.session || metadata.session || "",
           officialDocType: document.officialDocType || metadata.officialDocType || "",
           paperType: document.paperType || metadata.paperType || "",
-          department: document.department || metadata.department || ""
+          department: document.department || metadata.department || "",
+          status: document.status || metadata.status || "published"
         }
       });
     }
@@ -1350,7 +1261,7 @@ function calculateMetadataScore(chunk, query) {
   let score = 0;
   const q = query.toLowerCase();
   const metadata = chunk.metadata || {};
-  const fields = [metadata.title, metadata.category, metadata.branch, metadata.semester, metadata.year, metadata.session, metadata.officialDocType, metadata.paperType];
+  const fields = [metadata.title, metadata.category, metadata.branch, metadata.semester, metadata.year, metadata.session, metadata.officialDocType, metadata.paperType, metadata.department];
   for (const field of fields) {
     if (field && field.toLowerCase().includes(q)) score += 0.2;
   }
@@ -1375,7 +1286,7 @@ function calculateEnhancedExactMatchScore(doc, query, processedQuery) {
   }
   if (allWordsInTitle && queryWords.length > 0) score += 5.0 * (matchedCount / queryWords.length);
   else if (matchedCount > 0) score += 2.0 * (matchedCount / queryWords.length);
-  const metadataFields = [doc.officialDocType, doc.paperType, doc.category, doc.branch, doc.year, doc.semester, doc.session];
+  const metadataFields = [doc.officialDocType, doc.paperType, doc.category, doc.branch, doc.year, doc.semester, doc.session, doc.department];
   for (const field of metadataFields) {
     if (field && field.toLowerCase().includes(originalQuery)) score += 3.0;
     else if (field) {
@@ -1543,7 +1454,7 @@ async function fallbackSearch(query, filter = {}, limit = SEARCH_RESULTS_LIMIT) 
   const searchTokens = filterStopWords(tokenize(processedQuery));
   const searchConditions = [];
   const escapedQuery = processedQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  ['title','titleHindi','titleRomanized','extractedText','extractedTextHindi','extractedTextRomanized','textContent','textContentHindi','textContentRomanized','officialDocType','paperType','category','year','semester','branch','session','keywords','keywordsHindi','searchTerms','searchTermsHindi'].forEach(field => {
+  ['title','titleHindi','titleRomanized','extractedText','extractedTextHindi','extractedTextRomanized','textContent','textContentHindi','textContentRomanized','officialDocType','paperType','category','year','semester','branch','session','department','keywords','keywordsHindi','searchTerms','searchTermsHindi'].forEach(field => {
     searchConditions.push({ [field]: { $regex: escapedQuery, $options: "i" } });
   });
   for (const token of searchTokens) {
@@ -1971,25 +1882,33 @@ app.post("/api/auth/signup", async (req, res) => {
     if (existingUser) return res.status(400).json({ message: "Email already registered." });
     const access = resolveAccess(normalizedEmail);
     const hashedPassword = await bcrypt.hash(password, 10);
+    let userDepartment = access.department;
+    let userBranch = access.branch;
+    if (access.role === ROLES.STUDENT && branch) {
+      const deptFromBranch = getDepartmentFromBranch(branch);
+      if (deptFromBranch) userDepartment = deptFromBranch;
+      userBranch = branch;
+    }
     const user = new User({
       name,
       email: normalizedEmail,
       password: hashedPassword,
       avatar: avatar || "",
       role: access.role,
-      department: access.department,
+      department: userDepartment,
+      branch: userBranch,
       permissions: access.permissions,
       year: year || "",
-      semester: semester || "",
-      branch: branch || ""
+      semester: semester || ""
     });
     await user.save();
     const token = createToken(user);
     res.status(201).json({
       token,
       name: user.name, email: user.email, avatar: user.avatar,
-      role: user.role, department: user.department, permissions: user.permissions,
-      year: user.year, semester: user.semester, branch: user.branch
+      role: user.role, department: user.department, branch: user.branch,
+      permissions: user.permissions,
+      year: user.year, semester: user.semester
     });
   } catch (error) {
     res.status(500).json({ message: "Server error during signup." });
@@ -2010,8 +1929,9 @@ app.post("/api/auth/signin", async (req, res) => {
     res.status(200).json({
       token,
       name: user.name, email: user.email, avatar: user.avatar,
-      role: user.role, department: user.department, permissions: user.permissions,
-      year: user.year, semester: user.semester, branch: user.branch
+      role: user.role, department: user.department, branch: user.branch,
+      permissions: user.permissions,
+      year: user.year, semester: user.semester
     });
   } catch (error) {
     res.status(500).json({ message: "Server error during signin." });
@@ -2025,8 +1945,9 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
     await syncUserAccess(user);
     res.status(200).json({
       name: user.name, email: user.email, avatar: user.avatar,
-      role: user.role, department: user.department, permissions: user.permissions,
-      year: user.year, semester: user.semester, branch: user.branch
+      role: user.role, department: user.department, branch: user.branch,
+      permissions: user.permissions,
+      year: user.year, semester: user.semester
     });
   } catch (error) {
     res.status(500).json({ message: "Server error while loading user." });
@@ -2069,7 +1990,7 @@ app.get("/api/users/:id", authenticateToken, requireAdmin, async (req, res) => {
 
 app.put("/api/users/:id", authenticateToken, requireAdmin, async (req, res) => {
   try {
-    const { name, role, department, permissions } = req.body;
+    const { name, role, department, branch, permissions } = req.body;
     const user = await User.findById(req.params.id);
     if (!user) return res.status(404).json({ message: "User not found." });
     if (name) user.name = name;
@@ -2078,9 +1999,10 @@ app.put("/api/users/:id", authenticateToken, requireAdmin, async (req, res) => {
       user.permissions = ROLE_PERMISSIONS[role] || [];
     }
     if (department !== undefined) user.department = department || null;
+    if (branch !== undefined) user.branch = branch || null;
     if (permissions && Array.isArray(permissions)) user.permissions = permissions;
     await user.save();
-    res.status(200).json({ message: "User updated successfully.", user: { id: user._id, name: user.name, email: user.email, role: user.role, department: user.department, permissions: user.permissions } });
+    res.status(200).json({ message: "User updated successfully.", user: { id: user._id, name: user.name, email: user.email, role: user.role, department: user.department, branch: user.branch, permissions: user.permissions } });
   } catch (error) {
     res.status(500).json({ message: "Server error while updating user." });
   }
@@ -2109,9 +2031,32 @@ app.post("/api/documents/upload", authenticateToken, requireFaculty, upload.sing
     }
     const { title, category, docDate, year, semester, branch, paperType, officialDocType, session, status, department } = req.body;
     const docStatus = status === "draft" ? "draft" : "published";
-    let docDepartment = department || req.user.department;
-    if (COLLEGE_WIDE_ROLES.includes(req.user.role)) docDepartment = department || null;
-    else docDepartment = req.user.department;
+    let docDepartment;
+    let docBranch;
+    if (isCollegeWideRole(req.user)) {
+      docDepartment = department ? normalizeDepartmentForResource(department, branch) : null;
+      docBranch = branch ? normalizeBranchForResource(branch, docDepartment) : '';
+    } else {
+      docDepartment = req.user.department;
+      if (docDepartment === DEPARTMENTS.CSE) {
+        if (branch && CSE_BRANCHES.includes(branch)) {
+          docBranch = branch;
+        } else if (req.user.branch && CSE_BRANCHES.includes(req.user.branch)) {
+          docBranch = req.user.branch;
+        } else {
+          docBranch = 'CSE-R';
+        }
+      } else {
+        docBranch = docDepartment || branch || '';
+      }
+    }
+    if (docDepartment === DEPARTMENTS.CSE && !CSE_BRANCHES.includes(docBranch)) {
+      if (docBranch === 'All Branches') {
+        docBranch = 'All Branches';
+      } else {
+        docBranch = 'CSE-R';
+      }
+    }
     let finalTitle = (title && title.trim()) ? title.trim() : req.file.originalname;
     if (!finalTitle.trim()) finalTitle = req.file.originalname;
     const fileUrl = `${req.protocol}://${req.get("host")}/uploads/documents/${req.file.filename}`;
@@ -2131,7 +2076,7 @@ app.post("/api/documents/upload", authenticateToken, requireFaculty, upload.sing
     const docData = buildIndexedDocument(
       finalTitle, extractedText, fileUrl, req.file.mimetype || "",
       req.user.email, req.user.role, category, docDate, year || "", semester || "",
-      branch || "", paperType || "", officialDocType || "", session || "",
+      docBranch || "", paperType || "", officialDocType || "", session || "",
       req.file.filename, docDepartment, extractionResult.pageTexts || [],
       extractionResult.ocrConfidence || 0, extractionResult.ocrApplied || false,
       extractionResult.isScanned || false, docStatus
@@ -2147,9 +2092,10 @@ app.post("/api/documents/upload", authenticateToken, requireFaculty, upload.sing
     if (textChunks.length > 0) {
       const metadata = {
         pageNumber: 0, title: finalTitle, category: category || "General",
-        branch: branch || "", semester: semester || "", year: year || "",
+        branch: docBranch || "", semester: semester || "", year: year || "",
         session: session || "", officialDocType: officialDocType || "",
-        paperType: paperType || "", department: docDepartment || ""
+        paperType: paperType || "", department: docDepartment || "",
+        status: docStatus
       };
       const embeddedChunks = await embedDocumentChunks(newDoc, textChunks, metadata);
       if (embeddedChunks.length > 0) await Chunk.insertMany(embeddedChunks);
@@ -2163,7 +2109,8 @@ app.post("/api/documents/upload", authenticateToken, requireFaculty, upload.sing
     res.status(201).json({
       message: docStatus === "draft" ? "Document saved as draft successfully." : "Document uploaded and indexed successfully.",
       id: newDoc._id, fileUrl, status: docStatus,
-      department: docDepartment, language: docData.language,
+      department: docDepartment, branch: docBranch,
+      language: docData.language,
       extractedTextLength: extractedText.length,
       hasHindiText: !!(docData.extractedTextHindi || docData.titleHindi),
       pageCount: extractionResult.totalPages || 0,
@@ -2186,7 +2133,7 @@ app.get("/api/documents/drafts", authenticateToken, requireFaculty, async (req, 
       return res.status(403).json({ message: "Access denied. Insufficient permissions." });
     }
     let filter = { status: "draft" };
-    if (COLLEGE_WIDE_ROLES.includes(req.user.role)) {
+    if (isCollegeWideRole(req.user)) {
       filter = { status: "draft" };
     } else if (req.user.department) {
       filter = { status: "draft", department: req.user.department };
@@ -2204,7 +2151,10 @@ app.get("/api/documents/pending-approval", authenticateToken, async (req, res) =
   try {
     if (!canApproveDocuments(req.user)) return res.status(403).json({ message: "Access denied." });
     let filter = { status: "pending_approval" };
-    if (req.user.role === ROLES.HOD && req.user.department) { filter.department = req.user.department; filter.approvalStage = "hod"; }
+    if (req.user.role === ROLES.HOD && req.user.department) {
+      filter.department = req.user.department;
+      filter.approvalStage = "hod";
+    }
     else if (req.user.role === ROLES.DEAN) filter.approvalStage = { $in: ["dean", "hod"] };
     else if (req.user.role === ROLES.DIRECTOR) filter.approvalStage = { $in: ["director", "dean", "hod"] };
     const pendingDocs = await Document.find(filter).sort({ createdAt: -1 });
@@ -2221,7 +2171,9 @@ app.post("/api/documents/:id/approve", authenticateToken, async (req, res) => {
     if (!doc) return res.status(404).json({ message: "Document not found." });
     if (doc.status !== "pending_approval") return res.status(400).json({ message: "Document is not pending approval." });
     if (req.user.role === ROLES.HOD) {
-      if (doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
+      if (!isCollegeWideRole(req.user) && doc.department !== req.user.department) {
+        return res.status(403).json({ message: "Access denied. You can only approve documents from your department." });
+      }
       if (doc.approvalStage !== "hod") return res.status(400).json({ message: "Not at HOD stage." });
       doc.approvalStage = "dean";
     } else if (req.user.role === ROLES.DEAN) {
@@ -2248,7 +2200,9 @@ app.post("/api/documents/:id/reject", authenticateToken, async (req, res) => {
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
     if (doc.status !== "pending_approval") return res.status(400).json({ message: "Document is not pending approval." });
-    if (req.user.role === ROLES.HOD && doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
+    if (req.user.role === ROLES.HOD && !isCollegeWideRole(req.user) && doc.department !== req.user.department) {
+      return res.status(403).json({ message: "Access denied." });
+    }
     doc.status = "rejected"; doc.rejectedBy = req.user.email; doc.rejectedAt = new Date();
     doc.rejectionReason = reason || "No reason provided";
     await doc.save();
@@ -2265,12 +2219,16 @@ app.post("/api/documents/publish/:id", authenticateToken, requireFaculty, async 
     }
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
-    if (!COLLEGE_WIDE_ROLES.includes(req.user.role) && doc.department !== req.user.department) {
+    if (!isCollegeWideRole(req.user) && doc.department !== req.user.department) {
       return res.status(403).json({ message: "Access denied." });
     }
     if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
     doc.status = "published"; doc.draftCreatedAt = null; doc.publishedAt = new Date();
     await doc.save();
+    await Chunk.updateMany(
+      { documentId: doc._id },
+      { $set: { "metadata.status": "published" } }
+    );
     const textToChunk = (doc.extractedText || doc.textContent || doc.title);
     const textChunks = chunkText(textToChunk);
     if (textChunks.length > 0) {
@@ -2280,7 +2238,8 @@ app.post("/api/documents/publish/:id", authenticateToken, requireFaculty, async 
           pageNumber: 0, title: doc.title, category: doc.category,
           branch: doc.branch, semester: doc.semester, year: doc.year,
           session: doc.session, officialDocType: doc.officialDocType,
-          paperType: doc.paperType, department: doc.department || ""
+          paperType: doc.paperType, department: doc.department || "",
+          status: "published"
         };
         const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
         if (embeddedChunks.length > 0) await Chunk.insertMany(embeddedChunks);
@@ -2299,8 +2258,10 @@ app.delete("/api/documents/draft/:id", authenticateToken, requireFaculty, async 
     }
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Draft not found." });
-    if (!COLLEGE_WIDE_ROLES.includes(req.user.role)) {
-      if (doc.uploadedBy !== req.user.email && doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
+    if (!isCollegeWideRole(req.user)) {
+      if (doc.uploadedBy !== req.user.email && doc.department !== req.user.department) {
+        return res.status(403).json({ message: "Access denied." });
+      }
     }
     if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
     if (doc.storageName) {
@@ -2320,6 +2281,9 @@ app.get("/api/documents/draft/:id", authenticateToken, requireFaculty, async (re
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Draft not found." });
     if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
+    if (!isCollegeWideRole(req.user) && doc.department !== req.user.department) {
+      return res.status(403).json({ message: "Access denied." });
+    }
     res.status(200).json(doc);
   } catch (error) {
     res.status(500).json({ message: "Server error while fetching draft." });
@@ -2335,7 +2299,7 @@ app.put("/api/documents/draft/:id", authenticateToken, requireFaculty, async (re
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Draft not found." });
     if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
-    if (!COLLEGE_WIDE_ROLES.includes(req.user.role) && doc.department !== req.user.department) {
+    if (!isCollegeWideRole(req.user) && doc.department !== req.user.department) {
       return res.status(403).json({ message: "Access denied." });
     }
     if (title !== undefined && title !== doc.title) {
@@ -2348,7 +2312,15 @@ app.put("/api/documents/draft/:id", authenticateToken, requireFaculty, async (re
     if (docDate !== undefined) doc.docDate = docDate;
     if (year !== undefined) doc.year = year;
     if (semester !== undefined) doc.semester = semester;
-    if (branch !== undefined) doc.branch = branch;
+    if (branch !== undefined) {
+      if (doc.department === DEPARTMENTS.CSE && CSE_BRANCHES.includes(branch)) {
+        doc.branch = branch;
+      } else if (isCollegeWideRole(req.user)) {
+        doc.branch = normalizeBranchForResource(branch, doc.department);
+      } else {
+        doc.branch = req.user.department === DEPARTMENTS.CSE ? 'CSE-R' : req.user.department;
+      }
+    }
     if (paperType !== undefined) doc.paperType = paperType;
     if (officialDocType !== undefined) doc.officialDocType = officialDocType;
     if (session !== undefined) doc.session = session;
@@ -2366,7 +2338,13 @@ app.put("/api/documents/draft/:id", authenticateToken, requireFaculty, async (re
     await Chunk.deleteMany({ documentId: doc._id });
     const textChunks = chunkText(doc.extractedText || doc.textContent || doc.title);
     if (textChunks.length > 0) {
-      const metadata = { pageNumber: 0, title: doc.title, category: doc.category, branch: doc.branch, semester: doc.semester, year: doc.year, session: doc.session, officialDocType: doc.officialDocType, paperType: doc.paperType, department: doc.department || "" };
+      const metadata = {
+        pageNumber: 0, title: doc.title, category: doc.category,
+        branch: doc.branch, semester: doc.semester, year: doc.year,
+        session: doc.session, officialDocType: doc.officialDocType,
+        paperType: doc.paperType, department: doc.department || "",
+        status: "draft"
+      };
       const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
       if (embeddedChunks.length > 0) await Chunk.insertMany(embeddedChunks);
     }
@@ -2382,13 +2360,18 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
     const staff = isFaculty(req.user);
     const filter = {};
     if (category) filter.category = category;
-    if (branch) filter.branch = branch;
     if (semester) filter.semester = semester;
     if (year) filter.year = year;
-    if (COLLEGE_WIDE_ROLES.includes(req.user.role)) {
+    if (isCollegeWideRole(req.user)) {
       if (department) filter.department = department;
+      if (branch && branch !== 'All Branches') filter.branch = branch;
     } else if (req.user.department) {
       filter.department = req.user.department;
+      if (req.user.department === DEPARTMENTS.CSE && branch && branch !== 'All Branches') {
+        if (CSE_BRANCHES.includes(branch)) filter.branch = branch;
+      } else if (branch && branch !== 'All Branches' && req.user.department !== DEPARTMENTS.CSE) {
+        filter.branch = req.user.department;
+      }
     }
     if (!staff) {
       filter.status = "published";
@@ -2405,11 +2388,11 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
     const resultLimit = parseInt(limit) || SEARCH_RESULTS_LIMIT;
     if (!q || q.trim() === '') {
       let docs = await Document.find(filter).sort({ createdAt: -1 }).limit(resultLimit);
-      docs = docs.filter(doc => userCanAccessBranch(req.user, doc.branch));
+      docs = docs.filter(doc => userCanAccessResource(req.user, doc));
       return res.status(200).json(docs);
     }
     let results = await enhancedHybridSearch(q.trim(), filter, resultLimit * 2);
-    results = results.filter(doc => userCanAccessBranch(req.user, doc.branch));
+    results = results.filter(doc => userCanAccessResource(req.user, doc));
     results = results.slice(0, resultLimit);
     res.status(200).json(results);
   } catch (error) {
@@ -2457,9 +2440,8 @@ app.get("/api/documents/:id", authenticateToken, async (req, res) => {
   try {
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
-    if (!userCanAccessBranch(req.user, doc.branch)) return res.status(403).json({ message: "Access denied." });
-    if (!COLLEGE_WIDE_ROLES.includes(req.user.role) && req.user.department) {
-      if (doc.department && doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
+    if (!userCanAccessResource(req.user, doc)) {
+      return res.status(403).json({ message: "Access denied. You don't have permission to view this resource." });
     }
     if (doc.status && doc.status !== "published") {
       if (!isFaculty(req.user)) return res.status(403).json({ message: "Access denied." });
@@ -2478,8 +2460,8 @@ app.put("/api/documents/:id", authenticateToken, requireFaculty, async (req, res
     const { title, category, docDate, year, semester, branch, paperType, officialDocType, session } = req.body;
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
-    if (!COLLEGE_WIDE_ROLES.includes(req.user.role)) {
-      if (doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
+    if (!isCollegeWideRole(req.user) && doc.department !== req.user.department) {
+      return res.status(403).json({ message: "Access denied. You can only update documents from your department." });
     }
     if (title !== undefined && title !== doc.title) {
       doc.title = title;
@@ -2491,7 +2473,19 @@ app.put("/api/documents/:id", authenticateToken, requireFaculty, async (req, res
     if (docDate !== undefined) doc.docDate = docDate;
     if (year !== undefined) doc.year = year;
     if (semester !== undefined) doc.semester = semester;
-    if (branch !== undefined) doc.branch = branch;
+    if (branch !== undefined) {
+      if (isCollegeWideRole(req.user)) {
+        doc.branch = normalizeBranchForResource(branch, doc.department);
+      } else if (doc.department === DEPARTMENTS.CSE) {
+        if (branch === 'All Branches') {
+          doc.branch = 'All Branches';
+        } else if (CSE_BRANCHES.includes(branch)) {
+          doc.branch = branch;
+        }
+      } else {
+        doc.branch = doc.department;
+      }
+    }
     if (paperType !== undefined) doc.paperType = paperType;
     if (officialDocType !== undefined) doc.officialDocType = officialDocType;
     if (session !== undefined) doc.session = session;
@@ -2509,7 +2503,13 @@ app.put("/api/documents/:id", authenticateToken, requireFaculty, async (req, res
     await Chunk.deleteMany({ documentId: doc._id });
     const textChunks = chunkText(doc.extractedText || doc.textContent || doc.title);
     if (textChunks.length > 0) {
-      const metadata = { pageNumber: 0, title: doc.title, category: doc.category, branch: doc.branch, semester: doc.semester, year: doc.year, session: doc.session, officialDocType: doc.officialDocType, paperType: doc.paperType, department: doc.department || "" };
+      const metadata = {
+        pageNumber: 0, title: doc.title, category: doc.category,
+        branch: doc.branch, semester: doc.semester, year: doc.year,
+        session: doc.session, officialDocType: doc.officialDocType,
+        paperType: doc.paperType, department: doc.department || "",
+        status: doc.status || "published"
+      };
       const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
       if (embeddedChunks.length > 0) await Chunk.insertMany(embeddedChunks);
     }
@@ -2526,8 +2526,8 @@ app.delete("/api/documents/:id", authenticateToken, requireFaculty, async (req, 
     }
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
-    if (!COLLEGE_WIDE_ROLES.includes(req.user.role)) {
-      if (doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
+    if (!isCollegeWideRole(req.user) && doc.department !== req.user.department) {
+      return res.status(403).json({ message: "Access denied. You can only delete documents from your department." });
     }
     if (doc.storageName) {
       const filePath = path.join(uploadDir, doc.storageName);
@@ -2641,7 +2641,13 @@ app.post("/api/documents/reindex", authenticateToken, requireAdmin, async (req, 
               reindexedCount++;
               const textChunks = chunkText(result.text || doc.textContent || doc.title);
               if (textChunks.length > 0) {
-                const metadata = { pageNumber: 0, title: doc.title, category: doc.category, branch: doc.branch, semester: doc.semester, year: doc.year, session: doc.session, officialDocType: doc.officialDocType, paperType: doc.paperType, department: doc.department || "" };
+                const metadata = {
+                  pageNumber: 0, title: doc.title, category: doc.category,
+                  branch: doc.branch, semester: doc.semester, year: doc.year,
+                  session: doc.session, officialDocType: doc.officialDocType,
+                  paperType: doc.paperType, department: doc.department || "",
+                  status: doc.status || "published"
+                };
                 const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
                 if (embeddedChunks.length > 0) { await Chunk.insertMany(embeddedChunks); chunkCount += embeddedChunks.length; }
               }
@@ -2664,7 +2670,7 @@ app.get("/api/status", async (req, res) => {
   const userCount = await User.countDocuments().catch(() => 0);
   res.json({
     status: "online",
-    version: "3.0.0",
+    version: "3.1.0",
     features: {
       ocr: true,
       semanticSearch: process.env.SEMANTIC_SEARCH_ENABLED === 'true',
@@ -2678,10 +2684,12 @@ app.get("/api/status", async (req, res) => {
       drafts: true,
       roleBasedAccess: true,
       departmentIsolation: true,
-      branchAccessControl: true
+      branchAccessControl: true,
+      cseBranches: CSE_BRANCHES
     },
     roles: Object.values(ROLES),
     departments: Object.values(DEPARTMENTS),
+    cseBranches: CSE_BRANCHES,
     storage: "local",
     stats: { documents: docCount, chunks: chunkCount, users: userCount }
   });
@@ -2705,8 +2713,9 @@ app.listen(PORT, async () => {
   console.log(`Chunk size: ${CHUNK_SIZE}, Overlap: ${CHUNK_OVERLAP}`);
   console.log(`Role-based access control: Enabled`);
   console.log(`Departments: ${Object.values(DEPARTMENTS).join(', ')}`);
+  console.log(`CSE Branches: ${CSE_BRANCHES.join(', ')}`);
   console.log(`Drafts feature: Enabled`);
-  console.log(`Branch-based access control: Enabled`);
+  console.log(`Department-based access control: Enabled`);
   const docCount = await Document.countDocuments().catch(() => 0);
   const chunkCount = await Chunk.countDocuments().catch(() => 0);
   const userCount = await User.countDocuments().catch(() => 0);

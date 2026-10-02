@@ -6,13 +6,15 @@ let currentMode = 'signin';
 let activeUserEmail = null;
 let currentUserRole = 'student';
 let currentUserDepartment = null;
+let currentUserBranch = null;
 let currentUserPermissions = [];
 let currentUserYear = null;
 let currentUserSemester = null;
-let currentUserBranch = null;
 let tempSignupAvatarBase64 = "";
 let pendingUploadFile = null;
 let currentSelectedCategory = "all";
+let currentSelectedDepartmentFilter = "all";
+let currentSelectedBranchFilter = "all";
 let cachedDocuments = [];
 let authToken = localStorage.getItem('token') || null;
 let isUserLoggedIn = false;
@@ -29,6 +31,19 @@ const ROLES = {
   ASSISTANT_PROFESSOR: 'assistant_professor',
   STUDENT: 'student'
 };
+
+const DEPARTMENTS = {
+  CSE: 'CSE',
+  ECE: 'ECE',
+  EE: 'EE',
+  ME: 'ME',
+  CE: 'CE',
+  CHE: 'CHE'
+};
+
+const CSE_BRANCHES = ['CSE-R', 'CSE-A.I', 'CSE-SF'];
+
+const ALL_DEPARTMENTS = ['CSE', 'ECE', 'EE', 'ME', 'CE', 'CHE'];
 
 const FACULTY_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN, ROLES.HOD, ROLES.PROFESSOR, ROLES.ASSISTANT_PROFESSOR];
 const COLLEGE_WIDE_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN];
@@ -89,6 +104,10 @@ let editingDocId = null;
 const docSemSelect = document.getElementById('docSemSelect');
 const docBranchSelect = document.getElementById('docBranchSelect');
 const allBranchesOpt = document.getElementById('allBranchesOpt');
+const docDepartmentSelect = document.getElementById('docDepartmentSelect');
+const docDepartmentField = document.getElementById('docDepartmentField');
+const officialDocDepartmentSelect = document.getElementById('officialDocDepartmentSelect');
+const officialDocDepartmentField = document.getElementById('officialDocDepartmentField');
 const mainDashboardView = document.getElementById('mainDashboardView');
 const historyPageView = document.getElementById('historyPageView');
 const draftsPageView = document.getElementById('draftsPageView');
@@ -113,6 +132,10 @@ const closeDeleteConfirmBtn = document.getElementById('closeDeleteConfirmBtn');
 const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
 const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
 const adminActionWrapper = document.getElementById('adminActionWrapper');
+const departmentFilterContainer = document.getElementById('departmentFilterContainer');
+const branchFilterContainer = document.getElementById('branchFilterContainer');
+const departmentFilterSelect = document.getElementById('departmentFilterSelect');
+const branchFilterSelect = document.getElementById('branchFilterSelect');
 
 function isFacultyRole(role) {
   return FACULTY_ROLES.includes(String(role || '').toLowerCase());
@@ -120,6 +143,14 @@ function isFacultyRole(role) {
 
 function isStudentRole(role) {
   return String(role || ROLES.STUDENT).toLowerCase() === ROLES.STUDENT;
+}
+
+function isCollegeWideRole() {
+  return COLLEGE_WIDE_ROLES.includes(currentUserRole);
+}
+
+function isCseDepartment() {
+  return currentUserDepartment === DEPARTMENTS.CSE;
 }
 
 function hasStaffAccess() {
@@ -141,10 +172,6 @@ function setDefaultAvatar(container) {
 
 function setAvatarImage(container, base64Str) {
   if (container) container.innerHTML = `<img src="${base64Str}" alt="Profile">`;
-}
-
-function isCollegeWideRole() {
-  return COLLEGE_WIDE_ROLES.includes(currentUserRole);
 }
 
 function isFaculty() {
@@ -183,11 +210,28 @@ function canDeleteDocuments() {
   return hasStaffAccess();
 }
 
-function userCanAccessBranch(docBranch) {
-  if (COLLEGE_WIDE_ROLES.includes(currentUserRole)) return true;
+function userCanAccessResource(doc) {
+  if (isCollegeWideRole()) return true;
+  if (!currentUserDepartment) return false;
+  if (!doc.department) return true;
+  return doc.department === currentUserDepartment;
+}
+
+function userCanAccessBranch(docBranch, docDepartment) {
+  if (isCollegeWideRole()) return true;
   if (!docBranch || docBranch === "All Branches" || docBranch === "") return true;
-  if (!currentUserDepartment) return true;
-  return docBranch === currentUserDepartment || docBranch === "All Branches";
+  if (!currentUserDepartment) return false;
+  const normalizedDept = docDepartment || getDepartmentFromBranch(docBranch);
+  if (normalizedDept === currentUserDepartment) return true;
+  if (currentUserDepartment === DEPARTMENTS.CSE && CSE_BRANCHES.includes(docBranch)) return true;
+  return false;
+}
+
+function getDepartmentFromBranch(branch) {
+  if (!branch) return null;
+  if (CSE_BRANCHES.includes(branch)) return DEPARTMENTS.CSE;
+  if (ALL_DEPARTMENTS.includes(branch)) return branch;
+  return null;
 }
 
 function showDeleteConfirmModal(subject, index) {
@@ -244,7 +288,13 @@ function handleSemesterBranchLogic() {
     docBranchSelect.value = "All Branches";
   } else {
     allBranchesOpt.style.display = 'none';
-    if (docBranchSelect.value === "All Branches") docBranchSelect.value = "CSE-(R)";
+    if (docBranchSelect.value === "All Branches") {
+      if (isCseDepartment()) {
+        docBranchSelect.value = "CSE-R";
+      } else {
+        docBranchSelect.value = currentUserDepartment || "CSE-R";
+      }
+    }
   }
 }
 
@@ -264,6 +314,7 @@ if (docCategorySelect && universityFields && officialFields) {
       universityFields.style.display = 'none';
       officialFields.style.display = 'none';
     }
+    setupDepartmentBranchSelectors();
   });
 }
 
@@ -331,10 +382,10 @@ if (logoutBtn) {
     activeUserEmail = null;
     currentUserRole = 'student';
     currentUserDepartment = null;
+    currentUserBranch = null;
     currentUserPermissions = [];
     currentUserYear = null;
     currentUserSemester = null;
-    currentUserBranch = null;
     cachedDocuments = [];
     authToken = null;
     isUserLoggedIn = false;
@@ -359,6 +410,8 @@ if (logoutBtn) {
     }
     if (recommendedTab) recommendedTab.classList.add('hidden');
     if (searchSuggestions) searchSuggestions.classList.add('hidden');
+    if (departmentFilterContainer) departmentFilterContainer.classList.add('hidden');
+    if (branchFilterContainer) branchFilterContainer.classList.add('hidden');
     setDefaultAvatar(avatarContainer);
     const goSignInBtnReal = document.getElementById('goSignInBtn');
     const goSignUpBtnReal = document.getElementById('goSignUpBtn');
@@ -367,6 +420,8 @@ if (logoutBtn) {
     filterTabs.forEach(t => t.classList.remove('active'));
     if (filterTabs[0]) filterTabs[0].classList.add('active');
     currentSelectedCategory = "all";
+    currentSelectedDepartmentFilter = "all";
+    currentSelectedBranchFilter = "all";
     if (mainDashboardView) mainDashboardView.classList.remove('hidden');
     if (historyPageView) historyPageView.classList.add('hidden');
     if (draftsPageView) draftsPageView.classList.add('hidden');
@@ -376,6 +431,99 @@ if (logoutBtn) {
     academicCards.forEach(card => card.remove());
     fetchDocuments();
     renderActionButtons();
+    renderDepartmentBranchFilters();
+  });
+}
+
+function setupDepartmentBranchSelectors() {
+  if (!docDepartmentSelect || !docBranchSelect) return;
+  if (isCollegeWideRole()) {
+    if (docDepartmentField) docDepartmentField.classList.remove('hidden');
+    if (officialDocDepartmentField) officialDocDepartmentField.classList.remove('hidden');
+    if (docDepartmentSelect) {
+      docDepartmentSelect.disabled = false;
+      docDepartmentSelect.value = "";
+    }
+    if (officialDocDepartmentSelect) {
+      officialDocDepartmentSelect.disabled = false;
+      officialDocDepartmentSelect.value = "";
+    }
+    updateBranchOptionsForDepartment(docDepartmentSelect?.value || "", docBranchSelect);
+    if (officialDocDepartmentSelect) {
+      updateBranchOptionsForDepartment(officialDocDepartmentSelect?.value || "", document.getElementById('officialDocBranchSelect'));
+    }
+  } else {
+    if (docDepartmentField) docDepartmentField.classList.add('hidden');
+    if (officialDocDepartmentField) officialDocDepartmentField.classList.add('hidden');
+    if (docDepartmentSelect) {
+      docDepartmentSelect.disabled = true;
+      docDepartmentSelect.value = currentUserDepartment || "";
+    }
+    if (officialDocDepartmentSelect) {
+      officialDocDepartmentSelect.disabled = true;
+      officialDocDepartmentSelect.value = currentUserDepartment || "";
+    }
+    updateBranchOptionsForDepartment(currentUserDepartment || "", docBranchSelect);
+    updateBranchOptionsForDepartment(currentUserDepartment || "", document.getElementById('officialDocBranchSelect'));
+  }
+}
+
+function updateBranchOptionsForDepartment(department, branchSelect) {
+  if (!branchSelect) return;
+  const currentValue = branchSelect.value;
+  branchSelect.innerHTML = '';
+  if (department === DEPARTMENTS.CSE) {
+    const allOption = document.createElement('option');
+    allOption.value = 'All Branches';
+    allOption.textContent = 'All CSE Branches';
+    branchSelect.appendChild(allOption);
+    CSE_BRANCHES.forEach(branch => {
+      const opt = document.createElement('option');
+      opt.value = branch;
+      opt.textContent = branch;
+      branchSelect.appendChild(opt);
+    });
+  } else if (department && ALL_DEPARTMENTS.includes(department)) {
+    const opt = document.createElement('option');
+    opt.value = department;
+    opt.textContent = department;
+    branchSelect.appendChild(opt);
+    const allOpt = document.createElement('option');
+    allOpt.value = 'All Branches';
+    allOpt.textContent = 'All Branches';
+    branchSelect.appendChild(allOpt);
+  } else {
+    const allOpt = document.createElement('option');
+    allOpt.value = 'All Branches';
+    allOpt.textContent = 'All Branches';
+    branchSelect.appendChild(allOpt);
+    CSE_BRANCHES.forEach(branch => {
+      const opt = document.createElement('option');
+      opt.value = branch;
+      opt.textContent = branch;
+      branchSelect.appendChild(opt);
+    });
+    ['ECE', 'EE', 'ME', 'CE', 'CHE'].forEach(dept => {
+      const opt = document.createElement('option');
+      opt.value = dept;
+      opt.textContent = dept;
+      branchSelect.appendChild(opt);
+    });
+  }
+  if (currentValue && branchSelect.querySelector(`option[value="${currentValue}"]`)) {
+    branchSelect.value = currentValue;
+  }
+}
+
+if (docDepartmentSelect) {
+  docDepartmentSelect.addEventListener('change', () => {
+    updateBranchOptionsForDepartment(docDepartmentSelect.value, docBranchSelect);
+  });
+}
+
+if (officialDocDepartmentSelect) {
+  officialDocDepartmentSelect.addEventListener('change', () => {
+    updateBranchOptionsForDepartment(officialDocDepartmentSelect.value, document.getElementById('officialDocBranchSelect'));
   });
 }
 
@@ -400,6 +548,7 @@ if (uploadDocBtn && universalDocumentInput) {
     }
     const docTitleInput = document.getElementById('docTitleInput');
     if (docTitleInput) docTitleInput.value = '';
+    setupDepartmentBranchSelectors();
     universalDocumentInput.click();
   });
 }
@@ -471,6 +620,7 @@ if (universalDocumentInput) {
       const nameWithoutExt = pendingUploadFile.name.replace(/\.[^.]+$/, '');
       docTitleInput.value = nameWithoutExt;
     }
+    setupDepartmentBranchSelectors();
     if (uploadPopup) uploadPopup.classList.remove('hidden');
   });
 }
@@ -495,7 +645,6 @@ function getFormDataForUpload(status) {
   const officialDocYearSelect = document.getElementById('officialDocYearSelect');
   const officialDocSessionSelect = document.getElementById('officialDocSessionSelect');
   const officialDocSemSelect = document.getElementById('officialDocSemSelect');
-  const officialDocBranchSelect = document.getElementById('officialDocBranchSelect');
 
   if (!categorySelect || !categorySelect.value) {
     showNotification("Please select a resource category.");
@@ -531,19 +680,26 @@ function getFormDataForUpload(status) {
   formData.append('category', finalCategory);
   formData.append('docDate', selectedDate);
   formData.append('status', status || 'published');
-  formData.append('department', currentUserDepartment || '');
+
+  if (isCollegeWideRole()) {
+    const selectedDept = docDepartmentSelect ? docDepartmentSelect.value : '';
+    formData.append('department', selectedDept);
+  } else {
+    formData.append('department', currentUserDepartment || '');
+  }
 
   if (finalCategory === 'University Paper') {
     formData.append('year', docSessionSelect ? docSessionSelect.value : '2024-25');
     formData.append('semester', docSemSelect ? docSemSelect.value : '1');
-    formData.append('branch', docBranchSelect ? docBranchSelect.value : 'All Branches');
+    formData.append('branch', docBranchSelect ? docBranchSelect.value : 'CSE-R');
     formData.append('paperType', docTypeSelect ? docTypeSelect.value : 'End Sem');
   } else {
     formData.append('officialDocType', officialDocTypeSelect ? officialDocTypeSelect.value : 'Notice');
     formData.append('year', officialDocYearSelect ? officialDocYearSelect.value : 'All Years');
     formData.append('session', officialDocSessionSelect ? officialDocSessionSelect.value : '2024-25');
     formData.append('semester', officialDocSemSelect ? officialDocSemSelect.value : '1');
-    formData.append('branch', officialDocBranchSelect ? officialDocBranchSelect.value : 'All Branches');
+    const officialBranchSelect = document.getElementById('officialDocBranchSelect');
+    formData.append('branch', officialBranchSelect ? officialBranchSelect.value : 'All Branches');
   }
 
   return formData;
@@ -713,10 +869,12 @@ function renderDraftList(drafts) {
     card.className = 'draft-item-card';
     const fileType = draft.fileType || draft.storageName ? draft.storageName.split('.').pop().toUpperCase() : 'Unknown';
     const createdAt = draft.draftCreatedAt ? new Date(draft.draftCreatedAt).toLocaleDateString() : new Date(draft.createdAt).toLocaleDateString();
+    const deptInfo = draft.department ? ` • ${draft.department}` : '';
+    const branchInfo = draft.branch && draft.branch !== draft.department ? ` • ${draft.branch}` : '';
     card.innerHTML = `
       <div class="draft-info">
         <h4>${draft.title}</h4>
-        <p>${draft.category || 'Uncategorized'} • ${fileType} • Uploaded: ${createdAt}</p>
+        <p>${draft.category || 'Uncategorized'}${deptInfo}${branchInfo} • ${fileType} • Uploaded: ${createdAt}</p>
         <span class="draft-status-badge">Draft</span>
       </div>
       <div class="draft-actions">
@@ -757,6 +915,10 @@ function openEditDocumentModal(doc) {
     showNotification("Access denied. Only authorized faculty and leadership roles can edit documents.");
     return;
   }
+  if (!userCanAccessResource(doc)) {
+    showNotification("Access denied. You don't have permission to edit this document.");
+    return;
+  }
   editingDocId = doc._id;
   if (editTitleInput) editTitleInput.value = doc.title || '';
   if (editDocDateInput) editDocDateInput.value = doc.docDate || '';
@@ -767,7 +929,7 @@ function openEditDocumentModal(doc) {
   if (isUniversity) {
     if (editDocSessionSelect) editDocSessionSelect.value = doc.year || '2024-25';
     if (editDocSemSelect) editDocSemSelect.value = doc.semester || '1';
-    if (editDocBranchSelect) editDocBranchSelect.value = doc.branch || 'All Branches';
+    if (editDocBranchSelect) editDocBranchSelect.value = doc.branch || 'CSE-R';
     if (editDocTypeSelect) editDocTypeSelect.value = doc.paperType || 'End Sem';
   } else {
     if (editOfficialDocTypeSelect) editOfficialDocTypeSelect.value = doc.officialDocType || 'Notice';
@@ -819,7 +981,7 @@ if (confirmEditBtn) {
     if (finalCategory === 'University Paper') {
       payload.year = editDocSessionSelect ? editDocSessionSelect.value : '2024-25';
       payload.semester = editDocSemSelect ? editDocSemSelect.value : '1';
-      payload.branch = editDocBranchSelect ? editDocBranchSelect.value : 'All Branches';
+      payload.branch = editDocBranchSelect ? editDocBranchSelect.value : 'CSE-R';
       payload.paperType = editDocTypeSelect ? editDocTypeSelect.value : 'End Sem';
       payload.officialDocType = '';
       payload.session = '';
@@ -919,15 +1081,20 @@ function handleUserSession(user) {
   activeUserEmail = user.email;
   currentUserRole = String(user.role || ROLES.STUDENT).toLowerCase();
   currentUserDepartment = user.department;
+  currentUserBranch = user.branch;
   currentUserPermissions = user.permissions || [];
   currentUserYear = user.year;
   currentUserSemester = user.semester;
-  currentUserBranch = user.branch;
 
   if (workspaceName) {
-    const displayName = currentUserDepartment
-      ? `${user.name} (${currentUserDepartment})`
-      : user.name;
+    let displayName = user.name;
+    if (currentUserDepartment) {
+      displayName += ` (${currentUserDepartment}`;
+      if (currentUserBranch && currentUserBranch !== currentUserDepartment) {
+        displayName += ` - ${currentUserBranch}`;
+      }
+      displayName += ')';
+    }
     workspaceName.textContent = displayName;
   }
 
@@ -941,6 +1108,7 @@ function handleUserSession(user) {
   const studentUser = isStudentRole(currentUserRole);
 
   renderActionButtons();
+  renderDepartmentBranchFilters();
 
   if (hasStaffAccess()) {
     addDraftTab();
@@ -972,6 +1140,77 @@ function handleUserSession(user) {
 
   fetchDocuments();
   fetchHistory();
+}
+
+function renderDepartmentBranchFilters() {
+  if (!departmentFilterContainer || !branchFilterContainer) return;
+  if (isUserLoggedIn && isCollegeWideRole()) {
+    departmentFilterContainer.classList.remove('hidden');
+    branchFilterContainer.classList.remove('hidden');
+    if (departmentFilterSelect) {
+      departmentFilterSelect.innerHTML = `
+        <option value="all">All Departments</option>
+        <option value="CSE">CSE</option>
+        <option value="ECE">ECE</option>
+        <option value="EE">EE</option>
+        <option value="ME">ME</option>
+        <option value="CE">CE</option>
+        <option value="CHE">CHE</option>
+      `;
+      departmentFilterSelect.value = currentSelectedDepartmentFilter;
+    }
+    updateBranchFilterOptions();
+  } else if (isUserLoggedIn && currentUserDepartment === DEPARTMENTS.CSE) {
+    departmentFilterContainer.classList.add('hidden');
+    branchFilterContainer.classList.remove('hidden');
+    if (branchFilterSelect) {
+      branchFilterSelect.innerHTML = `
+        <option value="all">All CSE Branches</option>
+        <option value="CSE-R">CSE-R</option>
+        <option value="CSE-A.I">CSE-A.I</option>
+        <option value="CSE-SF">CSE-SF</option>
+      `;
+      branchFilterSelect.value = currentSelectedBranchFilter;
+    }
+  } else {
+    departmentFilterContainer.classList.add('hidden');
+    branchFilterContainer.classList.add('hidden');
+  }
+}
+
+function updateBranchFilterOptions() {
+  if (!branchFilterSelect) return;
+  const selectedDept = departmentFilterSelect ? departmentFilterSelect.value : 'all';
+  if (selectedDept === 'CSE' || selectedDept === 'all') {
+    branchFilterSelect.innerHTML = `
+      <option value="all">All CSE Branches</option>
+      <option value="CSE-R">CSE-R</option>
+      <option value="CSE-A.I">CSE-A.I</option>
+      <option value="CSE-SF">CSE-SF</option>
+    `;
+  } else {
+    branchFilterSelect.innerHTML = `
+      <option value="all">All Branches</option>
+      <option value="${selectedDept}">${selectedDept}</option>
+    `;
+  }
+}
+
+if (departmentFilterSelect) {
+  departmentFilterSelect.addEventListener('change', () => {
+    currentSelectedDepartmentFilter = departmentFilterSelect.value;
+    updateBranchFilterOptions();
+    currentSelectedBranchFilter = 'all';
+    if (branchFilterSelect) branchFilterSelect.value = 'all';
+    fetchDocuments(searchInput ? searchInput.value.trim() : "");
+  });
+}
+
+if (branchFilterSelect) {
+  branchFilterSelect.addEventListener('change', () => {
+    currentSelectedBranchFilter = branchFilterSelect.value;
+    fetchDocuments(searchInput ? searchInput.value.trim() : "");
+  });
 }
 
 async function logHistory(title, documentId) {
@@ -1260,6 +1499,7 @@ if (searchInput) {
     let searchQuery = query;
 
     let filtered = cachedDocuments.filter(doc => {
+      if (!userCanAccessResource(doc)) return false;
       if (currentSelectedCategory === "drafts") {
         return doc.status === 'draft';
       }
@@ -1289,8 +1529,9 @@ if (searchInput) {
       const yearLower = (doc.year || '').toLowerCase();
       const semesterLower = (doc.semester || '').toLowerCase();
       const sessionLower = (doc.session || '').toLowerCase();
+      const departmentLower = (doc.department || '').toLowerCase();
 
-      const allText = `${titleLower} ${titleHindiLower} ${textLower} ${textHindiLower} ${officialTypeLower} ${paperTypeLower} ${categoryLower} ${branchLower} ${yearLower} ${semesterLower} ${sessionLower}`;
+      const allText = `${titleLower} ${titleHindiLower} ${textLower} ${textHindiLower} ${officialTypeLower} ${paperTypeLower} ${categoryLower} ${branchLower} ${yearLower} ${semesterLower} ${sessionLower} ${departmentLower}`;
 
       return allText.includes(searchLower);
     });
@@ -1310,10 +1551,12 @@ if (searchInput) {
         const isDraft = doc.status === 'draft';
         const draftBadge = isDraft ? '<span style="background: #f59e0b; color: #000; padding: 1px 6px; border-radius: 3px; font-size: 0.6rem; font-weight: 700; margin-left: 4px;">DRAFT</span>' : '';
         const hasContentMatch = (doc.extractedText || '').toLowerCase().includes(query) || (doc.extractedTextHindi || '').toLowerCase().includes(query);
+        const deptInfo = doc.department ? `• ${doc.department}` : '';
+        const branchInfo = doc.branch && doc.branch !== doc.department ? `• ${doc.branch}` : '';
         row.innerHTML = `
           <div class="suggestion-info">
             <span class="suggestion-title">${doc.title} ${draftBadge} ${hasContentMatch ? '📄' : ''}</span>
-            <span class="suggestion-meta">${doc.category} ${doc.department ? `• ${doc.department}` : ''} ${isDraft ? '• Draft' : ''}</span>
+            <span class="suggestion-meta">${doc.category} ${deptInfo} ${branchInfo} ${isDraft ? '• Draft' : ''}</span>
           </div>
           <div class="suggestion-actions">
             <button class="suggestion-view-btn" style="background:none; border:none; color:#a5b4fc; cursor:pointer; margin-right:8px;"><i class="fa-solid fa-eye"></i></button>
@@ -1676,6 +1919,18 @@ async function fetchDocuments(query = "") {
       url += `&branch=${encodeURIComponent(currentUserBranch)}`;
       if (currentUserSemester) url += `&semester=${encodeURIComponent(currentUserSemester)}`;
     }
+    if (isCollegeWideRole()) {
+      if (currentSelectedDepartmentFilter && currentSelectedDepartmentFilter !== 'all') {
+        url += `&department=${encodeURIComponent(currentSelectedDepartmentFilter)}`;
+      }
+      if (currentSelectedBranchFilter && currentSelectedBranchFilter !== 'all') {
+        url += `&branch=${encodeURIComponent(currentSelectedBranchFilter)}`;
+      }
+    } else if (currentUserDepartment === DEPARTMENTS.CSE) {
+      if (currentSelectedBranchFilter && currentSelectedBranchFilter !== 'all') {
+        url += `&branch=${encodeURIComponent(currentSelectedBranchFilter)}`;
+      }
+    }
     const response = await fetch(url, { headers: { "Authorization": `Bearer ${authToken}` } });
     if (!response.ok) {
       if (resultCount) resultCount.textContent = `0 items ready`;
@@ -1691,7 +1946,8 @@ async function fetchDocuments(query = "") {
     }
     let docs = await response.json();
     if (!Array.isArray(docs)) docs = docs.docs || [];
-    docs = docs.filter(doc => userCanAccessBranch(doc.branch));
+    docs = docs.filter(doc => userCanAccessResource(doc));
+    docs = docs.filter(doc => userCanAccessBranch(doc.branch, doc.department));
     if (query === "") cachedDocuments = docs;
 
     if (isDraftView) {
@@ -1867,6 +2123,7 @@ function renderActionButtons() {
     if (draftTab) draftTab.classList.add('hidden');
     if (draftsPageView) draftsPageView.classList.add('hidden');
   }
+  renderDepartmentBranchFilters();
 }
 
 window.addEventListener('DOMContentLoaded', async () => {

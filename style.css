@@ -384,6 +384,39 @@ body {
   background: rgba(255, 255, 255, 0.1);
 }
 
+.filter-selector-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(11, 15, 25, 0.4);
+  border: 1px solid var(--border-glass);
+  border-radius: 12px;
+}
+
+.filter-selector-container label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.filter-select {
+  flex: 1;
+  background: rgba(11, 15, 25, 0.6);
+  border: 1px solid var(--border-glass);
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+}
+
+.filter-select:focus {
+  border-color: var(--accent-glow);
+}
+
 .category-filter-table {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -855,6 +888,11 @@ body {
   border-color: var(--accent-glow);
 }
 
+.input-block select:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .modal-avatar-preview {
   width: 64px;
   height: 64px;
@@ -1069,6 +1107,13 @@ body {
   .draft-actions {
     width: 100%;
     justify-content: flex-start;
+  }
+  .filter-selector-container {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .filter-select {
+    width: 100%;
   }
 }
 
@@ -1886,13 +1931,15 @@ body.role-student #draftManagerBtn {
   visibility: hidden !important;
 }
 
-body.role-student #adminActionWrapper,
-body.role-student #mainUploadBtn,
-body.role-student #draftManagerBtn {
+body.role-student .filter-tab[data-category="drafts"] {
   display: none !important;
-  visibility: hidden !important;
 }
 
-body.role-student .filter-tab[data-category="drafts"] {
+.filter-selector-container.hidden {
+  display: none !important;
+}
+
+#departmentFilterContainer.hidden,
+#branchFilterContainer.hidden {
   display: none !important;
 }
