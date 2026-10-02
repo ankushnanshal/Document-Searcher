@@ -1860,3 +1860,39 @@ body {
   font-weight: 600;
   display: inline-block;
 }
+
+#adminActionWrapper.hidden,
+#adminActionWrapper.hidden #draftManagerBtn,
+#adminActionWrapper.hidden #mainUploadBtn {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+body.role-student #adminActionWrapper,
+body.role-student #mainUploadBtn,
+body.role-student #draftManagerBtn {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+#adminActionWrapper[data-hidden="true"] {
+  display: none !important;
+}
+
+#adminActionWrapper[data-hidden="true"],
+#mainUploadBtn[hidden],
+#draftManagerBtn[hidden] {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+body.role-student #adminActionWrapper,
+body.role-student #mainUploadBtn,
+body.role-student #draftManagerBtn {
+  display: none !important;
+  visibility: hidden !important;
+}
+
+body.role-student .filter-tab[data-category="drafts"] {
+  display: none !important;
+}

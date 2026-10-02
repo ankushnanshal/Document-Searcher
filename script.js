@@ -1,8 +1,10 @@
 const API_URL = "http://localhost:5000/api";
 
+document.body.classList.add('role-student');
+
 let currentMode = 'signin';
 let activeUserEmail = null;
-let currentUserRole = 'assistant_professor';
+let currentUserRole = 'student';
 let currentUserDepartment = null;
 let currentUserPermissions = [];
 let currentUserYear = null;
@@ -24,9 +26,11 @@ const ROLES = {
   DEAN: 'dean',
   HOD: 'hod',
   PROFESSOR: 'professor',
-  ASSISTANT_PROFESSOR: 'assistant_professor'
+  ASSISTANT_PROFESSOR: 'assistant_professor',
+  STUDENT: 'student'
 };
 
+const FACULTY_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN, ROLES.HOD, ROLES.PROFESSOR, ROLES.ASSISTANT_PROFESSOR];
 const COLLEGE_WIDE_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN];
 
 const profileMenuBtn = document.getElementById('profileMenuBtn');
@@ -108,6 +112,19 @@ const deleteConfirmModal = document.getElementById('deleteConfirmModal');
 const closeDeleteConfirmBtn = document.getElementById('closeDeleteConfirmBtn');
 const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
 const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+const adminActionWrapper = document.getElementById('adminActionWrapper');
+
+function isFacultyRole(role) {
+  return FACULTY_ROLES.includes(String(role || '').toLowerCase());
+}
+
+function isStudentRole(role) {
+  return String(role || ROLES.STUDENT).toLowerCase() === ROLES.STUDENT;
+}
+
+function hasStaffAccess() {
+  return isUserLoggedIn && isFacultyRole(currentUserRole);
+}
 
 function showNotification(message) {
   if (!notificationContainer) { alert(message); return; }
@@ -130,18 +147,47 @@ function isCollegeWideRole() {
   return COLLEGE_WIDE_ROLES.includes(currentUserRole);
 }
 
+function isFaculty() {
+  return FACULTY_ROLES.includes(currentUserRole);
+}
+
+function isStudent() {
+  return currentUserRole === ROLES.STUDENT;
+}
+
 function canManageDocuments() {
-  return currentUserPermissions.includes('create_document') ||
-         currentUserPermissions.includes('delete_document') ||
-         currentUserPermissions.includes('approve_document');
+  return hasStaffAccess();
 }
 
 function canApproveDocuments() {
-  return currentUserPermissions.includes('approve_document');
+  return hasStaffAccess() && currentUserPermissions.includes('approve_document');
+}
+
+function canManageDrafts() {
+  return hasStaffAccess();
 }
 
 function canManageUsers() {
   return currentUserRole === ROLES.ADMIN;
+}
+
+function canUploadDocuments() {
+  return hasStaffAccess();
+}
+
+function canEditDocuments() {
+  return hasStaffAccess();
+}
+
+function canDeleteDocuments() {
+  return hasStaffAccess();
+}
+
+function userCanAccessBranch(docBranch) {
+  if (COLLEGE_WIDE_ROLES.includes(currentUserRole)) return true;
+  if (!docBranch || docBranch === "All Branches" || docBranch === "") return true;
+  if (!currentUserDepartment) return true;
+  return docBranch === currentUserDepartment || docBranch === "All Branches";
 }
 
 function showDeleteConfirmModal(subject, index) {
@@ -283,7 +329,7 @@ if (updateProfileBtn && profileImageInput) {
 if (logoutBtn) {
   logoutBtn.addEventListener('click', () => {
     activeUserEmail = null;
-    currentUserRole = 'assistant_professor';
+    currentUserRole = 'student';
     currentUserDepartment = null;
     currentUserPermissions = [];
     currentUserYear = null;
@@ -295,8 +341,22 @@ if (logoutBtn) {
     localStorage.removeItem('token');
     if (workspaceName) workspaceName.textContent = 'My Workspace';
     if (authorizedActionsBlock) authorizedActionsBlock.classList.add('hidden');
-    if (uploadDocBtn) uploadDocBtn.classList.add('hidden');
-    if (draftManagerBtn) draftManagerBtn.classList.add('hidden');
+    document.body.classList.add('role-student');
+    if (adminActionWrapper) {
+      adminActionWrapper.classList.add('hidden');
+      adminActionWrapper.setAttribute('data-hidden', 'true');
+      adminActionWrapper.style.display = 'none';
+    }
+    if (uploadDocBtn) {
+      uploadDocBtn.classList.add('hidden');
+      uploadDocBtn.setAttribute('hidden', '');
+      uploadDocBtn.style.display = 'none';
+    }
+    if (draftManagerBtn) {
+      draftManagerBtn.classList.add('hidden');
+      draftManagerBtn.setAttribute('hidden', '');
+      draftManagerBtn.style.display = 'none';
+    }
     if (recommendedTab) recommendedTab.classList.add('hidden');
     if (searchSuggestions) searchSuggestions.classList.add('hidden');
     setDefaultAvatar(avatarContainer);
@@ -321,8 +381,8 @@ if (logoutBtn) {
 
 if (uploadDocBtn && universalDocumentInput) {
   uploadDocBtn.addEventListener('click', () => {
-    if (!canManageDocuments()) {
-      showNotification("Access denied. You don't have permission to upload documents.");
+    if (!canUploadDocuments()) {
+      showNotification("Access denied. Only authorized faculty and leadership roles can upload documents.");
       return;
     }
     if (docCategorySelect) docCategorySelect.value = "";
@@ -346,8 +406,8 @@ if (uploadDocBtn && universalDocumentInput) {
 
 if (draftManagerBtn) {
   draftManagerBtn.addEventListener('click', () => {
-    if (!canManageDocuments()) {
-      showNotification("Access denied. You don't have permission to manage drafts.");
+    if (!canManageDrafts()) {
+      showNotification("Access denied. Only authorized faculty and leadership roles can manage drafts.");
       return;
     }
     if (draftsPageView) {
@@ -489,52 +549,6 @@ function getFormDataForUpload(status) {
   return formData;
 }
 
-if (confirmUploadBtn) {
-  confirmUploadBtn.addEventListener('click', async () => {
-    if (!pendingUploadFile) {
-      showNotification("No file selected.");
-      return;
-    }
-
-    const formData = getFormDataForUpload('published');
-    if (!formData) return;
-
-    try {
-      const response = await fetch(`${API_URL}/documents/upload`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${authToken}`
-        },
-        body: formData
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        showNotification(data.message || "Document uploaded successfully!");
-        const docTitleInput = document.getElementById('docTitleInput');
-        if (docTitleInput) {
-          docTitleInput.value = '';
-        }
-        fetchDocuments(searchInput ? searchInput.value.trim() : "");
-        if (uploadPopup) {
-          uploadPopup.classList.add('hidden');
-        }
-        pendingUploadFile = null;
-        if (universalDocumentInput) {
-          universalDocumentInput.value = "";
-        }
-        fetchDrafts();
-      } else {
-        showNotification(data.message || "Upload failed.");
-      }
-    } catch (err) {
-      console.error("Upload error:", err);
-      showNotification("Network error uploading document.");
-    }
-  });
-}
-
 async function saveAsDraft() {
   if (!pendingUploadFile) {
     showNotification("No file selected.");
@@ -581,90 +595,67 @@ async function saveAsDraft() {
   }
 }
 
-function addDraftButtons() {
-  const uploadPopupActions = document.querySelector('#uploadPopup .modal-form');
-  if (!uploadPopupActions) return;
-
-  const existingDraftBtn = document.getElementById('saveDraftBtn');
-  const existingUploadBtn = document.getElementById('confirmUploadBtn');
-
-  if (existingDraftBtn && existingUploadBtn) {
-    existingDraftBtn.removeEventListener('click', saveAsDraft);
-    existingUploadBtn.removeEventListener('click', null);
+async function publishDocument() {
+  if (!pendingUploadFile) {
+    showNotification("No file selected.");
+    return;
   }
 
-  const parent = uploadPopupActions;
-  const existingButtons = parent.querySelectorAll('button');
-  existingButtons.forEach(btn => btn.remove());
+  const formData = getFormDataForUpload('published');
+  if (!formData) return;
 
-  const buttonContainer = document.createElement('div');
-  buttonContainer.style.cssText = 'display: flex; gap: 12px; margin-top: 8px;';
+  try {
+    const response = await fetch(`${API_URL}/documents/upload`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${authToken}`
+      },
+      body: formData
+    });
 
-  const uploadBtn = document.createElement('button');
-  uploadBtn.id = 'confirmUploadBtn';
-  uploadBtn.className = 'form-action-trigger';
-  uploadBtn.textContent = 'Upload / Publish';
-  uploadBtn.style.flex = '1';
+    const data = await response.json();
 
-  const draftBtn = document.createElement('button');
-  draftBtn.id = 'saveDraftBtn';
-  draftBtn.className = 'form-action-trigger';
-  draftBtn.textContent = 'Save as Draft';
-  draftBtn.style.flex = '1';
-  draftBtn.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
-
-  buttonContainer.appendChild(uploadBtn);
-  buttonContainer.appendChild(draftBtn);
-  parent.appendChild(buttonContainer);
-
-  document.getElementById('saveDraftBtn').addEventListener('click', saveAsDraft);
-  document.getElementById('confirmUploadBtn').addEventListener('click', async () => {
-    if (!pendingUploadFile) {
-      showNotification("No file selected.");
-      return;
-    }
-
-    const formData = getFormDataForUpload('published');
-    if (!formData) return;
-
-    try {
-      const response = await fetch(`${API_URL}/documents/upload`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${authToken}`
-        },
-        body: formData
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        showNotification(data.message || "Document uploaded successfully!");
-        const docTitleInput = document.getElementById('docTitleInput');
-        if (docTitleInput) {
-          docTitleInput.value = '';
-        }
-        fetchDocuments(searchInput ? searchInput.value.trim() : "");
-        if (uploadPopup) {
-          uploadPopup.classList.add('hidden');
-        }
-        pendingUploadFile = null;
-        if (universalDocumentInput) {
-          universalDocumentInput.value = "";
-        }
-        fetchDrafts();
-      } else {
-        showNotification(data.message || "Upload failed.");
+    if (response.ok) {
+      showNotification(data.message || "Document uploaded successfully!");
+      const docTitleInput = document.getElementById('docTitleInput');
+      if (docTitleInput) {
+        docTitleInput.value = '';
       }
-    } catch (err) {
-      console.error("Upload error:", err);
-      showNotification("Network error uploading document.");
+      fetchDocuments(searchInput ? searchInput.value.trim() : "");
+      if (uploadPopup) {
+        uploadPopup.classList.add('hidden');
+      }
+      pendingUploadFile = null;
+      if (universalDocumentInput) {
+        universalDocumentInput.value = "";
+      }
+      fetchDrafts();
+    } else {
+      showNotification(data.message || "Upload failed.");
     }
-  });
+  } catch (err) {
+    console.error("Upload error:", err);
+    showNotification("Network error uploading document.");
+  }
+}
+
+function setupUploadButtons() {
+  const saveDraftBtn = document.getElementById('saveDraftBtn');
+  const confirmUploadBtnReal = document.getElementById('confirmUploadBtn');
+
+  if (saveDraftBtn) {
+    saveDraftBtn.removeEventListener('click', saveAsDraft);
+    saveDraftBtn.addEventListener('click', saveAsDraft);
+  }
+
+  if (confirmUploadBtnReal) {
+    confirmUploadBtnReal.removeEventListener('click', publishDocument);
+    confirmUploadBtnReal.addEventListener('click', publishDocument);
+  }
 }
 
 async function fetchDrafts() {
-  if (!authToken || !canManageDocuments()) {
+  if (!authToken || !canManageDrafts()) {
     if (draftsContainer) {
       draftsContainer.innerHTML = '<span class="history-empty-state">No permission to view drafts.</span>';
     }
@@ -679,6 +670,7 @@ async function fetchDrafts() {
       draftCount = drafts ? drafts.length : 0;
       renderDrafts(drafts);
       renderDraftList(drafts);
+      updateDraftTabCount(drafts.length);
     } else {
       console.error("Failed to fetch drafts:", response.status);
     }
@@ -690,18 +682,21 @@ async function fetchDrafts() {
   }
 }
 
-function renderDrafts(drafts) {
+function updateDraftTabCount(count) {
   const draftTab = document.querySelector('.filter-tab[data-category="drafts"]');
   if (!draftTab) return;
-  const count = drafts ? drafts.length : 0;
   draftCount = count;
-  if (count > 0) {
+  if (count > 0 && canManageDrafts()) {
     draftTab.classList.remove('hidden');
     draftTab.innerHTML = `<i class="fa-solid fa-file-pen"></i> Drafts (${count})`;
   } else {
     draftTab.classList.add('hidden');
     draftTab.innerHTML = `<i class="fa-solid fa-file-pen"></i> Drafts (0)`;
   }
+}
+
+function renderDrafts(drafts) {
+  updateDraftTabCount(drafts ? drafts.length : 0);
 }
 
 function renderDraftList(drafts) {
@@ -758,6 +753,10 @@ function addDraftTab() {
 }
 
 function openEditDocumentModal(doc) {
+  if (!canEditDocuments()) {
+    showNotification("Access denied. Only authorized faculty and leadership roles can edit documents.");
+    return;
+  }
   editingDocId = doc._id;
   if (editTitleInput) editTitleInput.value = doc.title || '';
   if (editDocDateInput) editDocDateInput.value = doc.docDate || '';
@@ -806,6 +805,10 @@ if (editDocCategorySelect && editUniversityFields && editOfficialFields) {
 if (confirmEditBtn) {
   confirmEditBtn.addEventListener('click', async () => {
     if (!editingDocId) return;
+    if (!canEditDocuments()) {
+      showNotification("Access denied. Only authorized faculty and leadership roles can edit documents.");
+      return;
+    }
     const category = editDocCategorySelect ? editDocCategorySelect.value : 'University';
     const finalCategory = category === 'Official' ? 'Official Update' : 'University Paper';
     const payload = {
@@ -914,7 +917,7 @@ function handleUserSession(user) {
   if (!user) return;
   isUserLoggedIn = true;
   activeUserEmail = user.email;
-  currentUserRole = user.role;
+  currentUserRole = String(user.role || ROLES.STUDENT).toLowerCase();
   currentUserDepartment = user.department;
   currentUserPermissions = user.permissions || [];
   currentUserYear = user.year;
@@ -935,21 +938,14 @@ function handleUserSession(user) {
   if (signInBtn) signInBtn.classList.add('hidden');
   if (signUpBtn) signUpBtn.classList.add('hidden');
 
-  if (uploadDocBtn) {
-    if (canManageDocuments()) {
-      uploadDocBtn.classList.remove('hidden');
-      if (draftManagerBtn && currentUserRole !== ROLES.ASSISTANT_PROFESSOR) {
-        draftManagerBtn.classList.remove('hidden');
-      } else if (draftManagerBtn) {
-        draftManagerBtn.classList.add('hidden');
-      }
-      addDraftTab();
-      addDraftButtons();
-      fetchDrafts();
-    } else {
-      uploadDocBtn.classList.add('hidden');
-      if (draftManagerBtn) draftManagerBtn.classList.add('hidden');
-    }
+  const studentUser = isStudentRole(currentUserRole);
+
+  renderActionButtons();
+
+  if (hasStaffAccess()) {
+    addDraftTab();
+    setupUploadButtons();
+    fetchDrafts();
   }
 
   const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
@@ -959,7 +955,7 @@ function handleUserSession(user) {
   }
 
   if (recommendedTab) {
-    if (currentUserRole === ROLES.ASSISTANT_PROFESSOR && currentUserBranch) {
+    if (studentUser && currentUserBranch) {
       recommendedTab.classList.remove('hidden');
       filterTabs.forEach(t => t.classList.remove('active'));
       recommendedTab.classList.add('active');
@@ -976,7 +972,6 @@ function handleUserSession(user) {
 
   fetchDocuments();
   fetchHistory();
-  renderActionButtons();
 }
 
 async function logHistory(title, documentId) {
@@ -1352,7 +1347,7 @@ filterTabs.forEach(tab => {
     tab.classList.add('active');
     currentSelectedCategory = tab.getAttribute('data-category');
     const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
-    if (currentSelectedCategory === "drafts" && isUserLoggedIn && canManageDocuments()) {
+    if (currentSelectedCategory === "drafts" && isUserLoggedIn && canManageDrafts()) {
       if (academicActionBtn) academicActionBtn.classList.add('hidden');
       if (resultsMeta) resultsMeta.classList.remove('hidden');
       fetchDrafts();
@@ -1370,6 +1365,10 @@ filterTabs.forEach(tab => {
 });
 
 async function deleteDocument(id) {
+  if (!canDeleteDocuments()) {
+    showNotification("Access denied. Only authorized faculty and leadership roles can delete documents.");
+    return;
+  }
   try {
     const response = await fetch(`${API_URL}/documents/${id}`, {
       method: "DELETE",
@@ -1392,6 +1391,10 @@ async function deleteDocument(id) {
 }
 
 async function publishDraft(id) {
+  if (!canManageDrafts()) {
+    showNotification("Access denied. Only authorized faculty and leadership roles can publish drafts.");
+    return;
+  }
   try {
     const response = await fetch(`${API_URL}/documents/publish/${id}`, {
       method: "POST",
@@ -1414,6 +1417,10 @@ async function publishDraft(id) {
 }
 
 async function deleteDraft(id) {
+  if (!canManageDrafts()) {
+    showNotification("Access denied. Only authorized faculty and leadership roles can delete drafts.");
+    return;
+  }
   try {
     const response = await fetch(`${API_URL}/documents/draft/${id}`, {
       method: "DELETE",
@@ -1660,7 +1667,9 @@ async function fetchDocuments(query = "") {
 
   try {
     let url = `${API_URL}/documents/search?q=${encodeURIComponent(query)}`;
-    if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended" && currentSelectedCategory !== "drafts") {
+    if (currentSelectedCategory === "drafts") {
+      url += `&status=draft`;
+    } else if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended") {
       url += `&category=${encodeURIComponent(currentSelectedCategory)}`;
     }
     if (currentSelectedCategory === "recommended" && currentUserBranch) {
@@ -1682,6 +1691,7 @@ async function fetchDocuments(query = "") {
     }
     let docs = await response.json();
     if (!Array.isArray(docs)) docs = docs.docs || [];
+    docs = docs.filter(doc => userCanAccessBranch(doc.branch));
     if (query === "") cachedDocuments = docs;
 
     if (isDraftView) {
@@ -1779,10 +1789,10 @@ async function fetchDocuments(query = "") {
         <div class="doc-action-zone" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
           <button class="action-btn-link view-btn" style="background: rgba(99,102,241,0.1); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem;">View</button>
           ${hasFile ? `<a href="${doc.fileUrl}" target="_blank" rel="noopener" download class="action-btn-link get-btn" style="display: inline-flex; align-items: center; justify-content: center; background: var(--accent-gradient); color: #ffffff; padding: 6px 14px; border-radius: 6px; font-weight: 500; text-decoration: none; font-size: 0.9rem;">Get</a>` : `<button class="action-btn-link" disabled style="background: rgba(148,163,184,0.1); color: #64748b; border: 1px solid rgba(148,163,184,0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: not-allowed; font-size: 0.9rem;">Get</button>`}
-          ${canManageDocuments() && isDraft ? `<button class="action-btn-link publish-btn" style="background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Publish</button>` : ''}
-          ${canManageDocuments() && isDraft ? `<button class="action-btn-link delete-draft-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete Draft</button>` : ''}
-          ${canManageDocuments() && !isDraft ? `<button class="action-btn-link edit-btn" title="Edit" style="background: rgba(234,179,8,0.1); color: #fde047; border: 1px solid rgba(234,179,8,0.2); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;"><i class="fa-solid fa-pen"></i></button>` : ''}
-          ${currentUserRole === ROLES.ADMIN && !isDraft ? `<button class="action-btn-link delete-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete</button>` : ''}
+          ${canManageDrafts() && isDraft ? `<button class="action-btn-link publish-btn" style="background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Publish</button>` : ''}
+          ${canManageDrafts() && isDraft ? `<button class="action-btn-link delete-draft-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete Draft</button>` : ''}
+          ${canEditDocuments() && !isDraft ? `<button class="action-btn-link edit-btn" title="Edit" style="background: rgba(234,179,8,0.1); color: #fde047; border: 1px solid rgba(234,179,8,0.2); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;"><i class="fa-solid fa-pen"></i></button>` : ''}
+          ${canDeleteDocuments() && !isDraft ? `<button class="action-btn-link delete-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete</button>` : ''}
         </div>
       `;
       card.querySelector('.view-btn').addEventListener('click', () => openPreviewModal(doc.title, doc.fileUrl, doc._id));
@@ -1831,16 +1841,39 @@ async function fetchDocuments(query = "") {
   isLoading = false;
 }
 
+function setElementVisible(el, show, displayValue) {
+  if (!el) return;
+  if (show) {
+    el.classList.remove('hidden');
+    el.removeAttribute('hidden');
+    el.removeAttribute('data-hidden');
+    el.style.display = displayValue || '';
+  } else {
+    el.classList.add('hidden');
+    el.setAttribute('hidden', '');
+    el.setAttribute('data-hidden', 'true');
+    el.style.display = 'none';
+  }
+}
+
 function renderActionButtons() {
-  const adminButtons = document.querySelectorAll('.admin-only');
-  if (currentUserRole === ROLES.ADMIN) adminButtons.forEach(button => button.classList.remove('hidden'));
-  else adminButtons.forEach(button => button.classList.add('hidden'));
+  const staff = hasStaffAccess();
+  document.body.classList.toggle('role-student', !staff);
+  setElementVisible(document.getElementById('adminActionWrapper'), staff, 'flex');
+  setElementVisible(document.getElementById('mainUploadBtn'), staff);
+  setElementVisible(document.getElementById('draftManagerBtn'), staff);
+  if (!staff) {
+    const draftTab = document.querySelector('.filter-tab[data-category="drafts"]');
+    if (draftTab) draftTab.classList.add('hidden');
+    if (draftsPageView) draftsPageView.classList.add('hidden');
+  }
 }
 
 window.addEventListener('DOMContentLoaded', async () => {
+  document.body.classList.add('role-student');
   renderActionButtons();
   addDraftTab();
-  addDraftButtons();
+  setupUploadButtons();
   if (authToken) {
     try {
       const base64Url = authToken.split('.')[1];
@@ -1857,7 +1890,7 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (response.ok) {
         const user = await response.json();
         handleUserSession(user);
-        if (canManageDocuments()) {
+        if (canManageDrafts()) {
           fetchDrafts();
         }
       } else {

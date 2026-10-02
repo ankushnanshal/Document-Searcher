@@ -19,7 +19,7 @@
             </div>
             
             <div class="nav-actions">
-                <div id="adminActionWrapper" class="admin-only hidden" style="display:flex; align-items:center; gap:8px;">
+                <div id="adminActionWrapper" class="admin-only hidden">
                     <button id="draftManagerBtn" class="primary-upload-trigger" style="background: linear-gradient(135deg, #f59e0b, #d97706);">
                         <i class="fa-solid fa-file-pen"></i> Drafts
                     </button>
@@ -87,7 +87,7 @@
                             <i class="fa-solid fa-book-bookmark"></i> 
                             <span>Academic Resource</span>
                             <button class="tab-inline-action-btn" id="academicActionBtn" type="button" title="Add Academic Resource">
-                            <i class="fa-solid fa-plus"></i>
+                                <i class="fa-solid fa-plus"></i>
                             </button>
                         </div>
                         <div class="filter-tab hidden" id="recommendedTab" data-category="recommended">
@@ -186,6 +186,7 @@
                     <div class="input-block">
                         <label for="regSemSelect">Current Semester</label>
                         <select id="regSemSelect">
+                            <option value="All Semesters">All Semesters</option>
                             <option value="1">Semester 1</option>
                             <option value="2">Semester 2</option>
                             <option value="3">Semester 3</option>
@@ -256,6 +257,7 @@
                     <div class="input-block">
                         <label for="docSemSelect">Semester</label>
                         <select id="docSemSelect">
+                            <option value="All Semesters">All Semesters</option>
                             <option value="1">Semester 1</option>
                             <option value="2">Semester 2</option>
                             <option value="3">Semester 3</option>
@@ -347,6 +349,7 @@
                         <label for="officialDocSemSelect">Semester</label>
                         <select id="officialDocSemSelect">
                             <option value="" disabled selected>-- Select Semester --</option>
+                            <option value="All Semesters">All Semesters</option>
                             <option value="1">Semester 1</option>
                             <option value="2">Semester 2</option>
                             <option value="3">Semester 3</option>
@@ -420,6 +423,7 @@
                     <div class="input-block">
                         <label for="editDocSemSelect">Semester</label>
                         <select id="editDocSemSelect">
+                            <option value="All Semesters">All Semesters</option>
                             <option value="1">Semester 1</option>
                             <option value="2">Semester 2</option>
                             <option value="3">Semester 3</option>
@@ -508,6 +512,7 @@
                     <div class="input-block">
                         <label for="editOfficialDocSemSelect">Semester</label>
                         <select id="editOfficialDocSemSelect">
+                            <option value="All Semesters">All Semesters</option>
                             <option value="1">Semester 1</option>
                             <option value="2">Semester 2</option>
                             <option value="3">Semester 3</option>
@@ -581,6 +586,7 @@
                 <div class="input-block">
                     <label for="academicSemesterSelect">Semester</label>
                     <select id="academicSemesterSelect">
+                        <option value="All Semesters">All Semesters</option>
                         <option value="1">Semester 1</option>
                         <option value="2">Semester 2</option>
                         <option value="3">Semester 3</option>

@@ -21,7 +21,8 @@ const ROLES = {
   DEAN: 'dean',
   HOD: 'hod',
   PROFESSOR: 'professor',
-  ASSISTANT_PROFESSOR: 'assistant_professor'
+  ASSISTANT_PROFESSOR: 'assistant_professor',
+  STUDENT: 'student'
 };
 
 const DEPARTMENTS = {
@@ -31,8 +32,6 @@ const DEPARTMENTS = {
   CE: 'CE',
   EE: 'EE',
   CHE: 'CHE',
-  IT: 'IT',
-  MBA: 'MBA'
 };
 
 const PERMISSIONS = {
@@ -43,7 +42,8 @@ const PERMISSIONS = {
   APPROVE_DOCUMENT: 'approve_document',
   MANAGE_USERS: 'manage_users',
   MANAGE_DEPARTMENT: 'manage_department',
-  SUBMIT_DOCUMENT: 'submit_document'
+  SUBMIT_DOCUMENT: 'submit_document',
+  MANAGE_DRAFTS: 'manage_drafts'
 };
 
 const ROLE_PERMISSIONS = {
@@ -55,7 +55,8 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.APPROVE_DOCUMENT,
     PERMISSIONS.MANAGE_USERS,
     PERMISSIONS.MANAGE_DEPARTMENT,
-    PERMISSIONS.SUBMIT_DOCUMENT
+    PERMISSIONS.SUBMIT_DOCUMENT,
+    PERMISSIONS.MANAGE_DRAFTS
   ],
   [ROLES.DIRECTOR]: [
     PERMISSIONS.CREATE_DOCUMENT,
@@ -64,7 +65,8 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.VIEW_DOCUMENTS,
     PERMISSIONS.APPROVE_DOCUMENT,
     PERMISSIONS.MANAGE_DEPARTMENT,
-    PERMISSIONS.SUBMIT_DOCUMENT
+    PERMISSIONS.SUBMIT_DOCUMENT,
+    PERMISSIONS.MANAGE_DRAFTS
   ],
   [ROLES.DEAN]: [
     PERMISSIONS.CREATE_DOCUMENT,
@@ -73,7 +75,8 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.VIEW_DOCUMENTS,
     PERMISSIONS.APPROVE_DOCUMENT,
     PERMISSIONS.MANAGE_DEPARTMENT,
-    PERMISSIONS.SUBMIT_DOCUMENT
+    PERMISSIONS.SUBMIT_DOCUMENT,
+    PERMISSIONS.MANAGE_DRAFTS
   ],
   [ROLES.HOD]: [
     PERMISSIONS.CREATE_DOCUMENT,
@@ -82,7 +85,8 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.VIEW_DOCUMENTS,
     PERMISSIONS.APPROVE_DOCUMENT,
     PERMISSIONS.MANAGE_DEPARTMENT,
-    PERMISSIONS.SUBMIT_DOCUMENT
+    PERMISSIONS.SUBMIT_DOCUMENT,
+    PERMISSIONS.MANAGE_DRAFTS
   ],
   [ROLES.PROFESSOR]: [
     PERMISSIONS.CREATE_DOCUMENT,
@@ -91,21 +95,26 @@ const ROLE_PERMISSIONS = {
     PERMISSIONS.VIEW_DOCUMENTS,
     PERMISSIONS.APPROVE_DOCUMENT,
     PERMISSIONS.MANAGE_DEPARTMENT,
-    PERMISSIONS.SUBMIT_DOCUMENT
+    PERMISSIONS.SUBMIT_DOCUMENT,
+    PERMISSIONS.MANAGE_DRAFTS
   ],
   [ROLES.ASSISTANT_PROFESSOR]: [
     PERMISSIONS.CREATE_DOCUMENT,
     PERMISSIONS.EDIT_DOCUMENT,
     PERMISSIONS.DELETE_DOCUMENT,
     PERMISSIONS.VIEW_DOCUMENTS,
-    PERMISSIONS.SUBMIT_DOCUMENT
+    PERMISSIONS.SUBMIT_DOCUMENT,
+    PERMISSIONS.MANAGE_DRAFTS
+  ],
+  [ROLES.STUDENT]: [
+    PERMISSIONS.VIEW_DOCUMENTS
   ]
 };
 
-const COLLEGE_WIDE_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN, ROLES.HOD, ROLES.PROFESSOR, ROLES.ASSISTANT_PROFESSOR];
+const FACULTY_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN, ROLES.HOD, ROLES.PROFESSOR, ROLES.ASSISTANT_PROFESSOR];
+const COLLEGE_WIDE_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN];
 
 const DEMO_USERS = [
-  // --- GLOBAL ADMINISTRATIVE ACCOUNTS ---
   {
     name: 'Admin User',
     email: 'ankushadmin@gmail.com',
@@ -130,8 +139,6 @@ const DEMO_USERS = [
     department: null,
     permissions: ROLE_PERMISSIONS[ROLES.DEAN]
   },
-
-  // --- CSE DEPARTMENT ---
   {
     name: 'HOD CSE',
     email: 'hod.cse@college.gmail',
@@ -188,8 +195,6 @@ const DEMO_USERS = [
     department: DEPARTMENTS.CSE,
     permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   },
-
-  // --- ECE DEPARTMENT ---
   {
     name: 'HOD ECE',
     email: 'hod.ece@college.gmail',
@@ -246,8 +251,6 @@ const DEMO_USERS = [
     department: DEPARTMENTS.ECE,
     permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   },
-
-  // --- EE DEPARTMENT ---
   {
     name: 'HOD EE',
     email: 'hod.ee@college.gmail',
@@ -304,8 +307,6 @@ const DEMO_USERS = [
     department: DEPARTMENTS.EE,
     permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   },
-
-  // --- ME DEPARTMENT ---
   {
     name: 'HOD ME',
     email: 'hod.me@college.gmail',
@@ -362,8 +363,6 @@ const DEMO_USERS = [
     department: DEPARTMENTS.ME,
     permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   },
-
-  // --- CE DEPARTMENT ---
   {
     name: 'HOD CE',
     email: 'hod.ce@college.gmail',
@@ -420,8 +419,6 @@ const DEMO_USERS = [
     department: DEPARTMENTS.CE,
     permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   },
-
-  // --- CHE DEPARTMENT ---
   {
     name: 'HOD CHE',
     email: 'hod.che@college.gmail',
@@ -480,6 +477,30 @@ const DEMO_USERS = [
   }
 ];
 
+const STAFF_BY_EMAIL = new Map(DEMO_USERS.map(u => [u.email.toLowerCase().trim(), u]));
+
+function resolveAccess(email) {
+  const staff = STAFF_BY_EMAIL.get(String(email || '').toLowerCase().trim());
+  if (staff) {
+    return { role: staff.role, department: staff.department || null, permissions: ROLE_PERMISSIONS[staff.role] };
+  }
+  return { role: ROLES.STUDENT, department: null, permissions: ROLE_PERMISSIONS[ROLES.STUDENT] };
+}
+
+async function syncUserAccess(user) {
+  const access = resolveAccess(user.email);
+  const samePerms = Array.isArray(user.permissions) &&
+    user.permissions.length === access.permissions.length &&
+    access.permissions.every(p => user.permissions.includes(p));
+  if (user.role !== access.role || (user.department || null) !== access.department || !samePerms) {
+    user.role = access.role;
+    user.department = access.department;
+    user.permissions = access.permissions;
+    await user.save();
+  }
+  return user;
+}
+
 function createToken(user) {
   return jwt.sign(
     {
@@ -498,10 +519,23 @@ function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
   if (!token) return res.status(401).json({ message: 'Access token required.' });
-  jwt.verify(token, process.env.JWT_SECRET || 'change-this-secret', (err, user) => {
+  jwt.verify(token, process.env.JWT_SECRET || 'change-this-secret', async (err, decoded) => {
     if (err) return res.status(403).json({ message: 'Invalid or expired token.' });
-    req.user = user;
-    next();
+    try {
+      const dbUser = await mongoose.model('User').findById(decoded.id).select('email');
+      if (!dbUser) return res.status(401).json({ message: 'User no longer exists.' });
+      const access = resolveAccess(dbUser.email);
+      req.user = {
+        id: dbUser._id.toString(),
+        email: dbUser.email,
+        role: access.role,
+        department: access.department,
+        permissions: access.permissions
+      };
+      next();
+    } catch (e) {
+      res.status(500).json({ message: 'Authentication failed.' });
+    }
   });
 }
 
@@ -529,6 +563,12 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function requireFaculty(req, res, next) {
+  if (!req.user) return res.status(401).json({ message: 'Authentication required.' });
+  if (!FACULTY_ROLES.includes(req.user.role)) return res.status(403).json({ message: 'Faculty access required.' });
+  next();
+}
+
 function requireCollegeWideAccess(req, res, next) {
   if (!req.user) return res.status(401).json({ message: 'Authentication required.' });
   if (!COLLEGE_WIDE_ROLES.includes(req.user.role)) return res.status(403).json({ message: 'Access denied.' });
@@ -545,11 +585,46 @@ function canApproveDocuments(user) {
   return perms.includes(PERMISSIONS.APPROVE_DOCUMENT);
 }
 
+function canManageDocuments(user) {
+  const perms = user.permissions || ROLE_PERMISSIONS[user.role] || [];
+  return perms.includes(PERMISSIONS.CREATE_DOCUMENT) || perms.includes(PERMISSIONS.DELETE_DOCUMENT) || perms.includes(PERMISSIONS.APPROVE_DOCUMENT);
+}
+
+function canManageDrafts(user) {
+  const perms = user.permissions || ROLE_PERMISSIONS[user.role] || [];
+  return perms.includes(PERMISSIONS.MANAGE_DRAFTS);
+}
+
+function isFaculty(user) {
+  return FACULTY_ROLES.includes(user.role);
+}
+
+function isStudent(user) {
+  return user.role === ROLES.STUDENT;
+}
+
+function userCanAccessBranch(user, docBranch) {
+  if (COLLEGE_WIDE_ROLES.includes(user.role)) return true;
+  if (!docBranch || docBranch === "All Branches" || docBranch === "") return true;
+  if (!user.department) return true;
+  return docBranch === user.department || docBranch === "All Branches";
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "100mb" }));
 app.use(express.urlencoded({ extended: true, limit: "100mb" }));
-app.use(express.static(__dirname));
+const PUBLIC_FILES = ['index.html', 'script.js', 'style.css'];
+PUBLIC_FILES.forEach(file => {
+  app.get(`/${file}`, (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(path.join(__dirname, file));
+  });
+});
+app.get('/', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const PORT = process.env.PORT || 5000;
@@ -611,13 +686,21 @@ async function migrateLegacyData() {
       );
       console.log('Promoted ankushadmin@gmail.com to admin');
     }
+    const staffEmails = Array.from(STAFF_BY_EMAIL.keys());
+    const demoted = await db.collection('users').updateMany(
+      { email: { $nin: staffEmails }, $or: [{ role: { $ne: ROLES.STUDENT } }, { permissions: { $ne: ROLE_PERMISSIONS[ROLES.STUDENT] } }] },
+      { $set: { role: ROLES.STUDENT, department: null, permissions: ROLE_PERMISSIONS[ROLES.STUDENT] } }
+    );
+    if (demoted.modifiedCount > 0) {
+      console.log(`Reset ${demoted.modifiedCount} non-staff accounts to student`);
+    }
     const usersToFix = await db.collection('users').find({
-      role: { $in: [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN, ROLES.HOD, ROLES.PROFESSOR, ROLES.ASSISTANT_PROFESSOR] }
+      role: { $in: FACULTY_ROLES }
     }).toArray();
     for (const user of usersToFix) {
       const expectedPerms = ROLE_PERMISSIONS[user.role] || [];
       const currentPerms = user.permissions || [];
-      if (!currentPerms.includes(PERMISSIONS.CREATE_DOCUMENT)) {
+      if (!currentPerms.includes(PERMISSIONS.CREATE_DOCUMENT) || !currentPerms.includes(PERMISSIONS.MANAGE_DRAFTS)) {
         await db.collection('users').updateOne(
           { _id: user._id },
           { $set: { permissions: expectedPerms } }
@@ -690,6 +773,16 @@ async function seedDemoUsers() {
         });
         await user.save();
         console.log(`Seeded demo user: ${userData.email}`);
+      } else {
+        const expectedPerms = ROLE_PERMISSIONS[userData.role] || [];
+        const currentPerms = existingUser.permissions || [];
+        if (!currentPerms.includes(PERMISSIONS.MANAGE_DRAFTS) || !currentPerms.includes(PERMISSIONS.CREATE_DOCUMENT)) {
+          existingUser.permissions = expectedPerms;
+          existingUser.role = userData.role;
+          existingUser.department = userData.department;
+          await existingUser.save();
+          console.log(`Updated permissions for: ${userData.email}`);
+        }
       }
     }
   } catch (error) {
@@ -702,7 +795,7 @@ const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
   password: { type: String, required: true },
   avatar: { type: String, default: "" },
-  role: { type: String, enum: Object.values(ROLES), default: ROLES.ASSISTANT_PROFESSOR },
+  role: { type: String, enum: Object.values(ROLES), default: ROLES.STUDENT },
   department: { type: String, enum: [...Object.values(DEPARTMENTS), null], default: null },
   permissions: { type: [String], default: [] },
   year: { type: String, default: "" },
@@ -1876,16 +1969,16 @@ app.post("/api/auth/signup", async (req, res) => {
     const normalizedEmail = email.toLowerCase().trim();
     const existingUser = await User.findOne({ email: normalizedEmail });
     if (existingUser) return res.status(400).json({ message: "Email already registered." });
-    const demoUser = DEMO_USERS.find(u => u.email.toLowerCase() === normalizedEmail);
+    const access = resolveAccess(normalizedEmail);
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = new User({
       name,
       email: normalizedEmail,
       password: hashedPassword,
       avatar: avatar || "",
-      role: demoUser ? demoUser.role : ROLES.ASSISTANT_PROFESSOR,
-      department: demoUser ? demoUser.department : null,
-      permissions: demoUser ? demoUser.permissions : ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR],
+      role: access.role,
+      department: access.department,
+      permissions: access.permissions,
       year: year || "",
       semester: semester || "",
       branch: branch || ""
@@ -1912,17 +2005,7 @@ app.post("/api/auth/signin", async (req, res) => {
     if (!user) return res.status(400).json({ message: "Invalid email or password." });
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) return res.status(400).json({ message: "Invalid email or password." });
-    const demoUser = DEMO_USERS.find(u => u.email.toLowerCase() === normalizedEmail);
-    if (demoUser && user.role !== demoUser.role) {
-      user.role = demoUser.role;
-      user.department = demoUser.department;
-      user.permissions = demoUser.permissions;
-      await user.save();
-    }
-    if (!user.permissions || user.permissions.length === 0) {
-      user.permissions = ROLE_PERMISSIONS[user.role] || ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR];
-      await user.save();
-    }
+    await syncUserAccess(user);
     const token = createToken(user);
     res.status(200).json({
       token,
@@ -1939,6 +2022,7 @@ app.get("/api/auth/me", authenticateToken, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ message: "User not found." });
+    await syncUserAccess(user);
     res.status(200).json({
       name: user.name, email: user.email, avatar: user.avatar,
       role: user.role, department: user.department, permissions: user.permissions,
@@ -2014,7 +2098,7 @@ app.delete("/api/users/:id", authenticateToken, requireAdmin, async (req, res) =
   }
 });
 
-app.post("/api/documents/upload", authenticateToken, upload.single("file"), async (req, res) => {
+app.post("/api/documents/upload", authenticateToken, requireFaculty, upload.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: "No file uploaded." });
     const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
@@ -2096,12 +2180,19 @@ app.post("/api/documents/upload", authenticateToken, upload.single("file"), asyn
   }
 });
 
-app.get("/api/documents/drafts", authenticateToken, async (req, res) => {
+app.get("/api/documents/drafts", authenticateToken, requireFaculty, async (req, res) => {
   try {
+    if (!canManageDrafts(req.user)) {
+      return res.status(403).json({ message: "Access denied. Insufficient permissions." });
+    }
     let filter = { status: "draft" };
-    if (req.user.role === ROLES.ADMIN || COLLEGE_WIDE_ROLES.includes(req.user.role)) filter = { status: "draft" };
-    else if (req.user.department) filter = { status: "draft", $or: [{ department: req.user.department }, { uploadedBy: req.user.email }] };
-    else filter = { status: "draft", uploadedBy: req.user.email };
+    if (COLLEGE_WIDE_ROLES.includes(req.user.role)) {
+      filter = { status: "draft" };
+    } else if (req.user.department) {
+      filter = { status: "draft", department: req.user.department };
+    } else {
+      filter = { status: "draft", uploadedBy: req.user.email };
+    }
     const drafts = await Document.find(filter).sort({ draftCreatedAt: -1 });
     res.status(200).json(drafts);
   } catch (error) {
@@ -2167,11 +2258,10 @@ app.post("/api/documents/:id/reject", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/api/documents/publish/:id", authenticateToken, async (req, res) => {
+app.post("/api/documents/publish/:id", authenticateToken, requireFaculty, async (req, res) => {
   try {
-    const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
-    if (!userPermissions.includes(PERMISSIONS.CREATE_DOCUMENT) && !userPermissions.includes(PERMISSIONS.APPROVE_DOCUMENT)) {
-      return res.status(403).json({ message: "Access denied." });
+    if (!canManageDrafts(req.user)) {
+      return res.status(403).json({ message: "Access denied. Insufficient permissions." });
     }
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
@@ -2202,11 +2292,10 @@ app.post("/api/documents/publish/:id", authenticateToken, async (req, res) => {
   }
 });
 
-app.delete("/api/documents/draft/:id", authenticateToken, async (req, res) => {
+app.delete("/api/documents/draft/:id", authenticateToken, requireFaculty, async (req, res) => {
   try {
-    const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
-    if (!userPermissions.includes(PERMISSIONS.CREATE_DOCUMENT) && !userPermissions.includes(PERMISSIONS.DELETE_DOCUMENT)) {
-      return res.status(403).json({ message: "Access denied." });
+    if (!canManageDrafts(req.user)) {
+      return res.status(403).json({ message: "Access denied. Insufficient permissions." });
     }
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Draft not found." });
@@ -2226,7 +2315,7 @@ app.delete("/api/documents/draft/:id", authenticateToken, async (req, res) => {
   }
 });
 
-app.get("/api/documents/draft/:id", authenticateToken, async (req, res) => {
+app.get("/api/documents/draft/:id", authenticateToken, requireFaculty, async (req, res) => {
   try {
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Draft not found." });
@@ -2237,12 +2326,18 @@ app.get("/api/documents/draft/:id", authenticateToken, async (req, res) => {
   }
 });
 
-app.put("/api/documents/draft/:id", authenticateToken, async (req, res) => {
+app.put("/api/documents/draft/:id", authenticateToken, requireFaculty, async (req, res) => {
   try {
+    if (!canManageDrafts(req.user)) {
+      return res.status(403).json({ message: "Access denied. Insufficient permissions." });
+    }
     const { title, category, docDate, year, semester, branch, paperType, officialDocType, session } = req.body;
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Draft not found." });
     if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
+    if (!COLLEGE_WIDE_ROLES.includes(req.user.role) && doc.department !== req.user.department) {
+      return res.status(403).json({ message: "Access denied." });
+    }
     if (title !== undefined && title !== doc.title) {
       doc.title = title;
       const lang = detectLanguage(title);
@@ -2283,7 +2378,8 @@ app.put("/api/documents/draft/:id", authenticateToken, async (req, res) => {
 
 app.get("/api/documents/search", authenticateToken, async (req, res) => {
   try {
-    const { q, category, branch, semester, year, limit, department } = req.query;
+    const { q, category, branch, semester, year, limit, department, status } = req.query;
+    const staff = isFaculty(req.user);
     const filter = {};
     if (category) filter.category = category;
     if (branch) filter.branch = branch;
@@ -2294,10 +2390,10 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
     } else if (req.user.department) {
       filter.department = req.user.department;
     }
-    const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
-    const canSeeAll = userPermissions.includes(PERMISSIONS.APPROVE_DOCUMENT) || COLLEGE_WIDE_ROLES.includes(req.user.role);
-    if (!canSeeAll) {
+    if (!staff) {
       filter.status = "published";
+    } else if (status && ["draft", "published", "pending_approval"].includes(status)) {
+      filter.status = status;
     } else {
       filter.$or = [
         { status: "published" },
@@ -2308,13 +2404,52 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
     }
     const resultLimit = parseInt(limit) || SEARCH_RESULTS_LIMIT;
     if (!q || q.trim() === '') {
-      const docs = await Document.find(filter).sort({ createdAt: -1 }).limit(resultLimit);
+      let docs = await Document.find(filter).sort({ createdAt: -1 }).limit(resultLimit);
+      docs = docs.filter(doc => userCanAccessBranch(req.user, doc.branch));
       return res.status(200).json(docs);
     }
-    const results = await enhancedHybridSearch(q.trim(), filter, resultLimit);
+    let results = await enhancedHybridSearch(q.trim(), filter, resultLimit * 2);
+    results = results.filter(doc => userCanAccessBranch(req.user, doc.branch));
+    results = results.slice(0, resultLimit);
     res.status(200).json(results);
   } catch (error) {
     res.status(500).json({ message: "Search failed", error: error.message });
+  }
+});
+
+app.get("/api/documents/debug", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const total = await Document.countDocuments();
+    const chunks = await Chunk.countDocuments();
+    const sample = await Document.find().limit(5);
+    const chunkSample = await Chunk.find().limit(5);
+    res.json({
+      totalDocuments: total,
+      totalChunks: chunks,
+      sample: sample.map(d => ({
+        title: d.title, titleHindi: d.titleHindi, titleRomanized: d.titleRomanized,
+        hasExtractedText: !!d.extractedText, hasExtractedTextHindi: !!d.extractedTextHindi,
+        hasExtractedTextRomanized: !!d.extractedTextRomanized,
+        extractedTextLength: d.extractedText ? d.extractedText.length : 0,
+        language: d.language, category: d.category, year: d.year,
+        semester: d.semester, branch: d.branch, session: d.session,
+        officialDocType: d.officialDocType, pageCount: d.pageCount,
+        ocrApplied: d.ocrApplied, ocrConfidence: d.ocrConfidence,
+        isScanned: d.isScanned, processingStatus: d.processingStatus,
+        keywordsCount: d.keywords ? d.keywords.length : 0,
+        hasEmbedding: d.embedding && d.embedding.length > 0,
+        status: d.status || "published",
+        department: d.department
+      })),
+      chunkSample: chunkSample.map(c => ({
+        documentId: c.documentId, chunkIndex: c.chunkIndex,
+        textLength: c.text ? c.text.length : 0,
+        hasEmbedding: c.embedding && c.embedding.length > 0,
+        metadata: c.metadata
+      }))
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -2322,13 +2457,12 @@ app.get("/api/documents/:id", authenticateToken, async (req, res) => {
   try {
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
-    if (!COLLEGE_WIDE_ROLES.includes(req.user.role)) {
+    if (!userCanAccessBranch(req.user, doc.branch)) return res.status(403).json({ message: "Access denied." });
+    if (!COLLEGE_WIDE_ROLES.includes(req.user.role) && req.user.department) {
       if (doc.department && doc.department !== req.user.department) return res.status(403).json({ message: "Access denied." });
     }
-    if (doc.status === "draft") {
-      const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
-      const canView = userPermissions.includes(PERMISSIONS.CREATE_DOCUMENT) || doc.uploadedBy === req.user.email || doc.department === req.user.department;
-      if (!canView) return res.status(403).json({ message: "Access denied." });
+    if (doc.status && doc.status !== "published") {
+      if (!isFaculty(req.user)) return res.status(403).json({ message: "Access denied." });
     }
     res.status(200).json(doc);
   } catch (error) {
@@ -2336,11 +2470,10 @@ app.get("/api/documents/:id", authenticateToken, async (req, res) => {
   }
 });
 
-app.put("/api/documents/:id", authenticateToken, async (req, res) => {
+app.put("/api/documents/:id", authenticateToken, requireFaculty, async (req, res) => {
   try {
-    const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
-    if (!userPermissions.includes(PERMISSIONS.EDIT_DOCUMENT) && !userPermissions.includes(PERMISSIONS.CREATE_DOCUMENT)) {
-      return res.status(403).json({ message: "Access denied." });
+    if (!canManageDocuments(req.user)) {
+      return res.status(403).json({ message: "Access denied. Insufficient permissions." });
     }
     const { title, category, docDate, year, semester, branch, paperType, officialDocType, session } = req.body;
     const doc = await Document.findById(req.params.id);
@@ -2386,10 +2519,11 @@ app.put("/api/documents/:id", authenticateToken, async (req, res) => {
   }
 });
 
-app.delete("/api/documents/:id", authenticateToken, async (req, res) => {
+app.delete("/api/documents/:id", authenticateToken, requireFaculty, async (req, res) => {
   try {
-    const userPermissions = ROLE_PERMISSIONS[req.user.role] || [];
-    if (!userPermissions.includes(PERMISSIONS.DELETE_DOCUMENT)) return res.status(403).json({ message: "Access denied." });
+    if (!canManageDocuments(req.user)) {
+      return res.status(403).json({ message: "Access denied. Insufficient permissions." });
+    }
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
     if (!COLLEGE_WIDE_ROLES.includes(req.user.role)) {
@@ -2524,42 +2658,6 @@ app.post("/api/documents/reindex", authenticateToken, requireAdmin, async (req, 
   }
 });
 
-app.get("/api/documents/debug", authenticateToken, async (req, res) => {
-  try {
-    const total = await Document.countDocuments();
-    const chunks = await Chunk.countDocuments();
-    const sample = await Document.find().limit(5);
-    const chunkSample = await Chunk.find().limit(5);
-    res.json({
-      totalDocuments: total,
-      totalChunks: chunks,
-      sample: sample.map(d => ({
-        title: d.title, titleHindi: d.titleHindi, titleRomanized: d.titleRomanized,
-        hasExtractedText: !!d.extractedText, hasExtractedTextHindi: !!d.extractedTextHindi,
-        hasExtractedTextRomanized: !!d.extractedTextRomanized,
-        extractedTextLength: d.extractedText ? d.extractedText.length : 0,
-        language: d.language, category: d.category, year: d.year,
-        semester: d.semester, branch: d.branch, session: d.session,
-        officialDocType: d.officialDocType, pageCount: d.pageCount,
-        ocrApplied: d.ocrApplied, ocrConfidence: d.ocrConfidence,
-        isScanned: d.isScanned, processingStatus: d.processingStatus,
-        keywordsCount: d.keywords ? d.keywords.length : 0,
-        hasEmbedding: d.embedding && d.embedding.length > 0,
-        status: d.status || "published",
-        department: d.department
-      })),
-      chunkSample: chunkSample.map(c => ({
-        documentId: c.documentId, chunkIndex: c.chunkIndex,
-        textLength: c.text ? c.text.length : 0,
-        hasEmbedding: c.embedding && c.embedding.length > 0,
-        metadata: c.metadata
-      }))
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 app.get("/api/status", async (req, res) => {
   const docCount = await Document.countDocuments().catch(() => 0);
   const chunkCount = await Chunk.countDocuments().catch(() => 0);
@@ -2579,7 +2677,8 @@ app.get("/api/status", async (req, res) => {
       chatbot: !!(genAI || openai),
       drafts: true,
       roleBasedAccess: true,
-      departmentIsolation: true
+      departmentIsolation: true,
+      branchAccessControl: true
     },
     roles: Object.values(ROLES),
     departments: Object.values(DEPARTMENTS),
@@ -2607,6 +2706,7 @@ app.listen(PORT, async () => {
   console.log(`Role-based access control: Enabled`);
   console.log(`Departments: ${Object.values(DEPARTMENTS).join(', ')}`);
   console.log(`Drafts feature: Enabled`);
+  console.log(`Branch-based access control: Enabled`);
   const docCount = await Document.countDocuments().catch(() => 0);
   const chunkCount = await Chunk.countDocuments().catch(() => 0);
   const userCount = await User.countDocuments().catch(() => 0);
