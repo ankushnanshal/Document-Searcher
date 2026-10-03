@@ -442,8 +442,8 @@ function isCollegeWideRole(user) {
 
 function userCanAccessResource(user, resource) {
   if (isCollegeWideRole(user)) return true;
-  if (!user.department) return false;
   if (!resource.department) return true;
+  if (!user.department) return false;
   return resource.department === user.department;
 }
 
@@ -452,6 +452,7 @@ function userCanAccessBranch(user, resourceBranch, resourceDepartment) {
   if (!resourceBranch || resourceBranch === 'All Branches' || resourceBranch === '') return true;
   if (!user.department) return false;
   const normalizedDept = resourceDepartment || getDepartmentFromBranch(resourceBranch);
+  if (!normalizedDept) return true;
   if (normalizedDept === user.department) return true;
   if (user.department === DEPARTMENTS.CSE && CSE_BRANCHES.includes(resourceBranch)) return true;
   return false;
@@ -611,6 +612,18 @@ async function migrateLegacyData() {
       { department: { $exists: false } },
       { $set: { department: null } }
     );
+    const orphanDocs = await db.collection('documents').updateMany(
+      {
+        $and: [
+          { $or: [ { branch: "All Branches" }, { branch: "" }, { branch: null } ] },
+          { department: { $ne: null } }
+        ]
+      },
+      { $set: { department: null } }
+    );
+    if (orphanDocs.modifiedCount > 0) {
+      console.log(`Cleared department on ${orphanDocs.modifiedCount} All-Branches documents`);
+    }
   } catch (e) {
     console.log("Legacy migration warning:", e.message);
   }
@@ -2057,6 +2070,9 @@ app.post("/api/documents/upload", authenticateToken, requireFaculty, upload.sing
         docBranch = 'CSE-R';
       }
     }
+    if (docBranch === 'All Branches' || docBranch === '') {
+      docDepartment = null;
+    }
     let finalTitle = (title && title.trim()) ? title.trim() : req.file.originalname;
     if (!finalTitle.trim()) finalTitle = req.file.originalname;
     const fileUrl = `${req.protocol}://${req.get("host")}/uploads/documents/${req.file.filename}`;
@@ -2362,17 +2378,7 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
     if (category) filter.category = category;
     if (semester) filter.semester = semester;
     if (year) filter.year = year;
-    if (isCollegeWideRole(req.user)) {
-      if (department) filter.department = department;
-      if (branch && branch !== 'All Branches') filter.branch = branch;
-    } else if (req.user.department) {
-      filter.department = req.user.department;
-      if (req.user.department === DEPARTMENTS.CSE && branch && branch !== 'All Branches') {
-        if (CSE_BRANCHES.includes(branch)) filter.branch = branch;
-      } else if (branch && branch !== 'All Branches' && req.user.department !== DEPARTMENTS.CSE) {
-        filter.branch = req.user.department;
-      }
-    }
+
     if (!staff) {
       filter.status = "published";
     } else if (status && ["draft", "published", "pending_approval"].includes(status)) {
@@ -2385,14 +2391,38 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
         { status: "" }
       ];
     }
+
     const resultLimit = parseInt(limit) || SEARCH_RESULTS_LIMIT;
+
+    const applyVisibility = (docs) => docs.filter(doc =>
+      userCanAccessResource(req.user, doc) && userCanAccessBranch(req.user, doc.branch, doc.department)
+    );
+
+    const applyUserFilters = (docs) => {
+      let out = docs;
+      if (isCollegeWideRole(req.user)) {
+        if (department && department !== 'all') out = out.filter(d => d.department === department);
+        if (branch && branch !== 'all' && branch !== 'All Branches') {
+          out = out.filter(d => d.branch === branch || d.branch === 'All Branches' || !d.branch);
+        }
+      } else if (req.user.department === DEPARTMENTS.CSE) {
+        if (branch && branch !== 'all' && branch !== 'All Branches') {
+          out = out.filter(d => d.branch === branch || d.branch === 'All Branches' || !d.branch);
+        }
+      }
+      return out;
+    };
+
     if (!q || q.trim() === '') {
-      let docs = await Document.find(filter).sort({ createdAt: -1 }).limit(resultLimit);
-      docs = docs.filter(doc => userCanAccessResource(req.user, doc));
-      return res.status(200).json(docs);
+      let docs = await Document.find(filter).sort({ createdAt: -1 }).limit(resultLimit * 5);
+      docs = applyVisibility(docs);
+      docs = applyUserFilters(docs);
+      return res.status(200).json(docs.slice(0, resultLimit));
     }
-    let results = await enhancedHybridSearch(q.trim(), filter, resultLimit * 2);
-    results = results.filter(doc => userCanAccessResource(req.user, doc));
+
+    let results = await enhancedHybridSearch(q.trim(), filter, resultLimit * 3);
+    results = applyVisibility(results);
+    results = applyUserFilters(results);
     results = results.slice(0, resultLimit);
     res.status(200).json(results);
   } catch (error) {

@@ -210,28 +210,31 @@ function canDeleteDocuments() {
   return hasStaffAccess();
 }
 
-function userCanAccessResource(doc) {
-  if (isCollegeWideRole()) return true;
-  if (!currentUserDepartment) return false;
-  if (!doc.department) return true;
-  return doc.department === currentUserDepartment;
-}
-
-function userCanAccessBranch(docBranch, docDepartment) {
-  if (isCollegeWideRole()) return true;
-  if (!docBranch || docBranch === "All Branches" || docBranch === "") return true;
-  if (!currentUserDepartment) return false;
-  const normalizedDept = docDepartment || getDepartmentFromBranch(docBranch);
-  if (normalizedDept === currentUserDepartment) return true;
-  if (currentUserDepartment === DEPARTMENTS.CSE && CSE_BRANCHES.includes(docBranch)) return true;
-  return false;
-}
-
 function getDepartmentFromBranch(branch) {
   if (!branch) return null;
   if (CSE_BRANCHES.includes(branch)) return DEPARTMENTS.CSE;
   if (ALL_DEPARTMENTS.includes(branch)) return branch;
   return null;
+}
+
+function userCanAccessResource(doc) {
+  if (!isUserLoggedIn) return false;
+  if (isCollegeWideRole()) return true;
+  if (!doc.department) return true;
+  if (!currentUserDepartment) return false;
+  return doc.department === currentUserDepartment;
+}
+
+function userCanAccessBranch(docBranch, docDepartment) {
+  if (!isUserLoggedIn) return false;
+  if (isCollegeWideRole()) return true;
+  if (!docBranch || docBranch === "All Branches" || docBranch === "") return true;
+  if (!currentUserDepartment) return false;
+  const normalizedDept = docDepartment || getDepartmentFromBranch(docBranch);
+  if (!normalizedDept) return true;
+  if (normalizedDept === currentUserDepartment) return true;
+  if (currentUserDepartment === DEPARTMENTS.CSE && CSE_BRANCHES.includes(docBranch)) return true;
+  return false;
 }
 
 function showDeleteConfirmModal(subject, index) {
