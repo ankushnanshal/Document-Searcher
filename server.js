@@ -122,6 +122,15 @@ const ROLE_PERMISSIONS = {
 const FACULTY_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN, ROLES.HOD, ROLES.PROFESSOR, ROLES.ASSISTANT_PROFESSOR];
 const COLLEGE_WIDE_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN];
 
+const APPROVAL_CHAIN = {
+  [ROLES.ASSISTANT_PROFESSOR]: [ROLES.PROFESSOR, ROLES.HOD, ROLES.DEAN, ROLES.DIRECTOR],
+  [ROLES.PROFESSOR]: [ROLES.HOD, ROLES.DEAN, ROLES.DIRECTOR],
+  [ROLES.HOD]: [ROLES.DEAN, ROLES.DIRECTOR],
+  [ROLES.DEAN]: [ROLES.DIRECTOR],
+  [ROLES.DIRECTOR]: [],
+  [ROLES.ADMIN]: []
+};
+
 const DEMO_USERS = [
   {
     name: 'Admin User',
@@ -340,6 +349,20 @@ function normalizeBranchForResource(branch, department) {
     if (branch.includes('SF')) return 'CSE-SF';
   }
   return branch;
+}
+
+function getApprovalChain(role) {
+  return APPROVAL_CHAIN[role] || [];
+}
+
+function requiresApproval(role) {
+  const chain = getApprovalChain(role);
+  return chain.length > 0;
+}
+
+function canApproveRole(approverRole, submitterRole) {
+  const chain = getApprovalChain(submitterRole);
+  return chain.includes(approverRole);
 }
 
 async function syncUserAccess(user) {
@@ -769,13 +792,16 @@ const documentSchema = new mongoose.Schema({
   processingError: { type: String, default: "" },
   pageTexts: { type: [String], default: [] },
   fullTextSearchScore: { type: Number, default: 0 },
-  status: { type: String, enum: ["draft", "pending_approval", "approved", "rejected", "published"], default: "published" },
+  status: { type: String, enum: ["draft", "pending_approval", "approved", "rejected", "published"], default: "pending_approval" },
   approvalStage: { type: String, default: "" },
+  approvalChain: { type: [String], default: [] },
+  currentApprovalIndex: { type: Number, default: 0 },
   approvedBy: { type: String, default: "" },
   approvedAt: { type: Date, default: null },
   rejectedBy: { type: String, default: "" },
   rejectedAt: { type: Date, default: null },
   rejectionReason: { type: String, default: "" },
+  approvalComments: { type: [{ user: String, role: String, comment: String, timestamp: Date, action: String }], default: [] },
   draftCreatedAt: { type: Date, default: null },
   publishedAt: { type: Date, default: null }
 });
@@ -1039,7 +1065,7 @@ function buildIndexedDocument(title, extractedText, fileUrl, fileType, uploadedB
     ocrConfidence: ocrConfidence || 0,
     ocrApplied: ocrApplied || false,
     isScanned: isScanned || false,
-    status: status || "published"
+    status: status || "pending_approval"
   };
 }
 
@@ -2043,7 +2069,17 @@ app.post("/api/documents/upload", authenticateToken, requireFaculty, upload.sing
       return res.status(403).json({ message: "Access denied. You don't have permission to upload documents." });
     }
     const { title, category, docDate, year, semester, branch, paperType, officialDocType, session, status, department } = req.body;
-    const docStatus = status === "draft" ? "draft" : "published";
+    let docStatus = "pending_approval";
+    if (status === "draft") docStatus = "draft";
+    else if (status === "published") {
+      if (req.user.role === ROLES.ADMIN || req.user.role === ROLES.DIRECTOR) {
+        docStatus = "published";
+      } else {
+        docStatus = "pending_approval";
+      }
+    } else if (req.user.role === ROLES.ADMIN || req.user.role === ROLES.DIRECTOR) {
+      docStatus = "published";
+    }
     let docDepartment;
     let docBranch;
     if (isCollegeWideRole(req.user)) {
@@ -2099,8 +2135,16 @@ app.post("/api/documents/upload", authenticateToken, requireFaculty, upload.sing
     );
     docData.processingStatus = "completed";
     docData.pageCount = extractionResult.totalPages || 0;
-    if (docStatus === "draft") docData.draftCreatedAt = new Date();
-    else docData.publishedAt = new Date();
+    if (docStatus === "draft") {
+      docData.draftCreatedAt = new Date();
+    } else if (docStatus === "pending_approval") {
+      const chain = getApprovalChain(req.user.role);
+      docData.approvalChain = chain;
+      docData.currentApprovalIndex = 0;
+      docData.approvalStage = chain.length > 0 ? chain[0] : "";
+    } else {
+      docData.publishedAt = new Date();
+    }
     const newDoc = new Document(docData);
     await newDoc.save();
     const textToChunk = (extractedText || docData.textContent || finalTitle);
@@ -2123,7 +2167,7 @@ app.post("/api/documents/upload", authenticateToken, requireFaculty, upload.sing
       }
     } catch (e) {}
     res.status(201).json({
-      message: docStatus === "draft" ? "Document saved as draft successfully." : "Document uploaded and indexed successfully.",
+      message: docStatus === "draft" ? "Document saved as draft successfully." : (docStatus === "pending_approval" ? "Document submitted for approval." : "Document uploaded successfully."),
       id: newDoc._id, fileUrl, status: docStatus,
       department: docDepartment, branch: docBranch,
       language: docData.language,
@@ -2163,16 +2207,18 @@ app.get("/api/documents/drafts", authenticateToken, requireFaculty, async (req, 
   }
 });
 
-app.get("/api/documents/pending-approval", authenticateToken, async (req, res) => {
+app.get("/api/documents/pending-approval", authenticateToken, requireFaculty, async (req, res) => {
   try {
     if (!canApproveDocuments(req.user)) return res.status(403).json({ message: "Access denied." });
     let filter = { status: "pending_approval" };
-    if (req.user.role === ROLES.HOD && req.user.department) {
-      filter.department = req.user.department;
-      filter.approvalStage = "hod";
+    if (req.user.role === ROLES.ADMIN || req.user.role === ROLES.DIRECTOR) {
+      filter = { status: "pending_approval" };
+    } else {
+      filter.approvalStage = req.user.role;
+      if (!isCollegeWideRole(req.user) && req.user.department) {
+        filter.department = req.user.department;
+      }
     }
-    else if (req.user.role === ROLES.DEAN) filter.approvalStage = { $in: ["dean", "hod"] };
-    else if (req.user.role === ROLES.DIRECTOR) filter.approvalStage = { $in: ["director", "dean", "hod"] };
     const pendingDocs = await Document.find(filter).sort({ createdAt: -1 });
     res.status(200).json(pendingDocs);
   } catch (error) {
@@ -2180,49 +2226,88 @@ app.get("/api/documents/pending-approval", authenticateToken, async (req, res) =
   }
 });
 
-app.post("/api/documents/:id/approve", authenticateToken, async (req, res) => {
+app.post("/api/documents/:id/approve", authenticateToken, requireFaculty, async (req, res) => {
   try {
     if (!canApproveDocuments(req.user)) return res.status(403).json({ message: "Access denied." });
+    const { comment } = req.body;
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
     if (doc.status !== "pending_approval") return res.status(400).json({ message: "Document is not pending approval." });
-    if (req.user.role === ROLES.HOD) {
-      if (!isCollegeWideRole(req.user) && doc.department !== req.user.department) {
-        return res.status(403).json({ message: "Access denied. You can only approve documents from your department." });
-      }
-      if (doc.approvalStage !== "hod") return res.status(400).json({ message: "Not at HOD stage." });
-      doc.approvalStage = "dean";
-    } else if (req.user.role === ROLES.DEAN) {
-      if (doc.approvalStage !== "dean") return res.status(400).json({ message: "Not at Dean stage." });
-      doc.approvalStage = "director";
-    } else if (req.user.role === ROLES.DIRECTOR) {
-      if (doc.approvalStage !== "director") return res.status(400).json({ message: "Not at Director stage." });
-      doc.status = "published"; doc.approvalStage = ""; doc.publishedAt = new Date();
-    } else if (req.user.role === ROLES.ADMIN) {
-      doc.status = "published"; doc.approvalStage = ""; doc.publishedAt = new Date();
+    const submitterRole = doc.uploadedByRole;
+    if (!canApproveRole(req.user.role, submitterRole) && req.user.role !== ROLES.ADMIN) {
+      return res.status(403).json({ message: "Access denied. You are not authorized to approve this document." });
     }
-    doc.approvedBy = req.user.email; doc.approvedAt = new Date();
+    if (!isCollegeWideRole(req.user) && doc.department && doc.department !== req.user.department) {
+      return res.status(403).json({ message: "Access denied. You can only approve documents from your department." });
+    }
+    if (doc.approvalChain && doc.approvalChain.length > 0) {
+      const currentStage = doc.approvalChain[doc.currentApprovalIndex];
+      if (req.user.role !== ROLES.ADMIN && req.user.role !== ROLES.DIRECTOR && currentStage && currentStage !== req.user.role) {
+        return res.status(400).json({ message: "Not your turn to approve." });
+      }
+    }
+    doc.approvalComments.push({
+      user: req.user.email,
+      role: req.user.role,
+      comment: comment || "",
+      timestamp: new Date(),
+      action: "approved"
+    });
+    if (req.user.role === ROLES.ADMIN || req.user.role === ROLES.DIRECTOR) {
+      doc.status = "published";
+      doc.approvalStage = "";
+      doc.publishedAt = new Date();
+      doc.approvedBy = req.user.email;
+      doc.approvedAt = new Date();
+    } else if (doc.approvalChain && doc.currentApprovalIndex + 1 < doc.approvalChain.length) {
+      doc.currentApprovalIndex += 1;
+      doc.approvalStage = doc.approvalChain[doc.currentApprovalIndex];
+      doc.approvedBy = req.user.email;
+      doc.approvedAt = new Date();
+    } else {
+      doc.status = "published";
+      doc.approvalStage = "";
+      doc.publishedAt = new Date();
+      doc.approvedBy = req.user.email;
+      doc.approvedAt = new Date();
+    }
     await doc.save();
-    res.status(200).json({ message: "Document approved successfully.", status: doc.status, approvalStage: doc.approvalStage });
+    res.status(200).json({ message: "Document approved successfully.", status: doc.status, approvalStage: doc.approvalStage, currentApprovalIndex: doc.currentApprovalIndex });
   } catch (error) {
     res.status(500).json({ message: "Server error while approving document." });
   }
 });
 
-app.post("/api/documents/:id/reject", authenticateToken, async (req, res) => {
+app.post("/api/documents/:id/reject", authenticateToken, requireFaculty, async (req, res) => {
   try {
     if (!canApproveDocuments(req.user)) return res.status(403).json({ message: "Access denied." });
     const { reason } = req.body;
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
     if (doc.status !== "pending_approval") return res.status(400).json({ message: "Document is not pending approval." });
-    if (req.user.role === ROLES.HOD && !isCollegeWideRole(req.user) && doc.department !== req.user.department) {
+    const submitterRole = doc.uploadedByRole;
+    if (!canApproveRole(req.user.role, submitterRole) && req.user.role !== ROLES.ADMIN) {
+      return res.status(403).json({ message: "Access denied. You are not authorized to reject this document." });
+    }
+    if (!isCollegeWideRole(req.user) && doc.department && doc.department !== req.user.department) {
       return res.status(403).json({ message: "Access denied." });
     }
-    doc.status = "rejected"; doc.rejectedBy = req.user.email; doc.rejectedAt = new Date();
+    doc.status = "draft";
+    doc.rejectedBy = req.user.email;
+    doc.rejectedAt = new Date();
     doc.rejectionReason = reason || "No reason provided";
+    doc.approvalComments.push({
+      user: req.user.email,
+      role: req.user.role,
+      comment: reason || "No reason provided",
+      timestamp: new Date(),
+      action: "rejected"
+    });
+    doc.approvalStage = "";
+    doc.currentApprovalIndex = 0;
+    doc.draftCreatedAt = new Date();
     await doc.save();
-    res.status(200).json({ message: "Document rejected successfully." });
+    res.status(200).json({ message: "Document rejected. It has been moved to drafts with your feedback.", status: doc.status });
   } catch (error) {
     res.status(500).json({ message: "Server error while rejecting document." });
   }
@@ -2239,11 +2324,22 @@ app.post("/api/documents/publish/:id", authenticateToken, requireFaculty, async 
       return res.status(403).json({ message: "Access denied." });
     }
     if (doc.status !== "draft") return res.status(400).json({ message: "Document is not a draft." });
-    doc.status = "published"; doc.draftCreatedAt = null; doc.publishedAt = new Date();
+    if (req.user.role === ROLES.ADMIN || req.user.role === ROLES.DIRECTOR) {
+      doc.status = "published";
+      doc.draftCreatedAt = null;
+      doc.publishedAt = new Date();
+    } else {
+      const chain = getApprovalChain(req.user.role);
+      doc.status = "pending_approval";
+      doc.approvalChain = chain;
+      doc.currentApprovalIndex = 0;
+      doc.approvalStage = chain.length > 0 ? chain[0] : "";
+      doc.draftCreatedAt = null;
+    }
     await doc.save();
     await Chunk.updateMany(
       { documentId: doc._id },
-      { $set: { "metadata.status": "published" } }
+      { $set: { "metadata.status": doc.status } }
     );
     const textToChunk = (doc.extractedText || doc.textContent || doc.title);
     const textChunks = chunkText(textToChunk);
@@ -2255,7 +2351,7 @@ app.post("/api/documents/publish/:id", authenticateToken, requireFaculty, async 
           branch: doc.branch, semester: doc.semester, year: doc.year,
           session: doc.session, officialDocType: doc.officialDocType,
           paperType: doc.paperType, department: doc.department || "",
-          status: "published"
+          status: doc.status
         };
         const embeddedChunks = await embedDocumentChunks(doc, textChunks, metadata);
         if (embeddedChunks.length > 0) await Chunk.insertMany(embeddedChunks);
@@ -2382,6 +2478,9 @@ app.get("/api/documents/search", authenticateToken, async (req, res) => {
     if (!staff) {
       filter.status = "published";
     } else if (status && ["draft", "published", "pending_approval"].includes(status)) {
+      if (status === "draft" && !canManageDrafts(req.user)) {
+        return res.status(403).json({ message: "Access denied. Insufficient permissions for drafts." });
+      }
       filter.status = status;
     } else {
       filter.$or = [
@@ -2712,6 +2811,7 @@ app.get("/api/status", async (req, res) => {
       chunkOverlap: CHUNK_OVERLAP,
       chatbot: !!(genAI || openai),
       drafts: true,
+      approvalWorkflow: true,
       roleBasedAccess: true,
       departmentIsolation: true,
       branchAccessControl: true,
@@ -2742,6 +2842,7 @@ app.listen(PORT, async () => {
   console.log(`Embedding model: ${EMBEDDING_MODEL}`);
   console.log(`Chunk size: ${CHUNK_SIZE}, Overlap: ${CHUNK_OVERLAP}`);
   console.log(`Role-based access control: Enabled`);
+  console.log(`Approval workflow: Enabled`);
   console.log(`Departments: ${Object.values(DEPARTMENTS).join(', ')}`);
   console.log(`CSE Branches: ${CSE_BRANCHES.join(', ')}`);
   console.log(`Drafts feature: Enabled`);
