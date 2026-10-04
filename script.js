@@ -10,6 +10,7 @@ let currentUserBranch = null;
 let currentUserPermissions = [];
 let currentUserYear = null;
 let currentUserSemester = null;
+let currentUserName = "";
 let tempSignupAvatarBase64 = "";
 let pendingUploadFile = null;
 let currentSelectedCategory = "all";
@@ -22,8 +23,6 @@ let isLoading = false;
 let draftCount = 0;
 let pendingDeleteData = null;
 let pendingApprovalCount = 0;
-let currentApproveDocId = null;
-let currentRejectDocId = null;
 
 const ROLES = {
   ADMIN: 'admin',
@@ -45,19 +44,20 @@ const DEPARTMENTS = {
 };
 
 const CSE_BRANCHES = ['CSE-R', 'CSE-A.I', 'CSE-SF'];
-
 const ALL_DEPARTMENTS = ['CSE', 'ECE', 'EE', 'ME', 'CE', 'CHE'];
-
 const FACULTY_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN, ROLES.HOD, ROLES.PROFESSOR, ROLES.ASSISTANT_PROFESSOR];
 const COLLEGE_WIDE_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN];
+const DIRECT_DELETE_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN];
+const REQUEST_DELETE_ROLES = [ROLES.HOD, ROLES.PROFESSOR, ROLES.ASSISTANT_PROFESSOR];
 
-const APPROVAL_CHAIN = {
-  [ROLES.ASSISTANT_PROFESSOR]: [ROLES.PROFESSOR, ROLES.HOD, ROLES.DEAN, ROLES.DIRECTOR],
-  [ROLES.PROFESSOR]: [ROLES.HOD, ROLES.DEAN, ROLES.DIRECTOR],
-  [ROLES.HOD]: [ROLES.DEAN, ROLES.DIRECTOR],
-  [ROLES.DEAN]: [ROLES.DIRECTOR],
-  [ROLES.DIRECTOR]: [],
-  [ROLES.ADMIN]: []
+const ROLE_DISPLAY = {
+  admin: 'Admin',
+  director: 'Director',
+  dean: 'Dean',
+  hod: 'HOD',
+  professor: 'Professor',
+  assistant_professor: 'Assistant Professor',
+  student: 'Student'
 };
 
 const profileMenuBtn = document.getElementById('profileMenuBtn');
@@ -134,10 +134,6 @@ const recentActivityList = document.getElementById('recentActivityList');
 const fullHistoryContainer = document.getElementById('fullHistoryContainer');
 const historyCountText = document.getElementById('historyCountText');
 const navBrandHome = document.getElementById('navBrandHome');
-const academicActionBtn = document.getElementById('academicActionBtn');
-const academicModal = document.getElementById('academicModal');
-const closeAcademicModalBtn = document.getElementById('closeAcademicModalBtn');
-const submitAcademicDetailsBtn = document.getElementById('submitAcademicDetailsBtn');
 const resultsMeta = document.getElementById('resultsMeta');
 const deleteConfirmModal = document.getElementById('deleteConfirmModal');
 const closeDeleteConfirmBtn = document.getElementById('closeDeleteConfirmBtn');
@@ -173,58 +169,7 @@ function canApproveDocuments() {
   return hasStaffAccess() && currentUserPermissions.includes('approve_document');
 }
 
-function getApprovalChain(role) {
-  return APPROVAL_CHAIN[role] || [];
-}
-
-function requiresApproval(role) {
-  const chain = getApprovalChain(role);
-  return chain.length > 0;
-}
-
-function canApproveRole(approverRole, submitterRole) {
-  const chain = getApprovalChain(submitterRole);
-  return chain.includes(approverRole) || approverRole === ROLES.ADMIN;
-}
-
-function showNotification(message) {
-  if (!notificationContainer) { alert(message); return; }
-  const toast = document.createElement('div');
-  toast.className = 'toast';
-  toast.innerText = message;
-  notificationContainer.appendChild(toast);
-  setTimeout(() => { toast.remove(); }, 3000);
-}
-
-function setDefaultAvatar(container) {
-  if (container) container.innerHTML = '<i class="fa-solid fa-user"></i>';
-}
-
-function setAvatarImage(container, base64Str) {
-  if (container) container.innerHTML = `<img src="${base64Str}" alt="Profile">`;
-}
-
-function isFaculty() {
-  return FACULTY_ROLES.includes(currentUserRole);
-}
-
-function isStudent() {
-  return currentUserRole === ROLES.STUDENT;
-}
-
-function canManageDocuments() {
-  return hasStaffAccess();
-}
-
 function canManageDrafts() {
-  return hasStaffAccess();
-}
-
-function canManageUsers() {
-  return currentUserRole === ROLES.ADMIN;
-}
-
-function canUploadDocuments() {
   return hasStaffAccess();
 }
 
@@ -232,15 +177,38 @@ function canEditDocuments() {
   return hasStaffAccess();
 }
 
-function canDeleteDocuments() {
+function canUploadDocuments() {
   return hasStaffAccess();
 }
 
-function getDepartmentFromBranch(branch) {
-  if (!branch) return null;
-  if (CSE_BRANCHES.includes(branch)) return DEPARTMENTS.CSE;
-  if (ALL_DEPARTMENTS.includes(branch)) return branch;
-  return null;
+function isResourceOwner(doc) {
+  if (!doc || !doc.uploadedBy || !activeUserEmail) return false;
+  return doc.uploadedBy.toLowerCase() === activeUserEmail.toLowerCase();
+}
+
+function canDirectlyDelete(doc) {
+  if (!doc || !isUserLoggedIn) return false;
+  if (DIRECT_DELETE_ROLES.includes(currentUserRole)) return true;
+  if (isResourceOwner(doc)) return true;
+  return false;
+}
+
+function canRequestDelete(doc) {
+  if (!doc || !isUserLoggedIn) return false;
+  if (canDirectlyDelete(doc)) return false;
+  if (!REQUEST_DELETE_ROLES.includes(currentUserRole)) return false;
+  return true;
+}
+
+function canCollegeWideRequestDelete(doc) {
+  if (!doc || !isUserLoggedIn) return false;
+  if (!COLLEGE_WIDE_ROLES.includes(currentUserRole)) return false;
+  if (isResourceOwner(doc)) return false;
+  return true;
+}
+
+function getRoleDisplay(role) {
+  return ROLE_DISPLAY[role] || role;
 }
 
 function userCanAccessResource(doc) {
@@ -263,12 +231,39 @@ function userCanAccessBranch(docBranch, docDepartment) {
   return false;
 }
 
-function showInputModal(title, placeholder, defaultValue, onSubmit) {
+function getDepartmentFromBranch(branch) {
+  if (!branch) return null;
+  if (CSE_BRANCHES.includes(branch)) return DEPARTMENTS.CSE;
+  if (ALL_DEPARTMENTS.includes(branch)) return branch;
+  return null;
+}
+
+function showNotification(message, type) {
+  if (!notificationContainer) { alert(message); return; }
+  const toast = document.createElement('div');
+  toast.className = 'toast';
+  if (type === 'error') toast.style.borderLeftColor = '#ef4444';
+  if (type === 'success') toast.style.borderLeftColor = '#4ade80';
+  toast.style.borderLeft = '3px solid #6366f1';
+  toast.innerText = message;
+  notificationContainer.appendChild(toast);
+  setTimeout(() => { toast.remove(); }, 3500);
+}
+
+function setDefaultAvatar(container) {
+  if (container) container.innerHTML = '<i class="fa-solid fa-user"></i>';
+}
+
+function setAvatarImage(container, base64Str) {
+  if (container) container.innerHTML = `<img src="${base64Str}" alt="Profile">`;
+}
+
+function showInputModal(title, placeholder, defaultValue, onSubmit, requireValue) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay custom-input-modal';
   modal.style.zIndex = '5000';
   modal.innerHTML = `
-    <div class="modal-glass-card" style="max-width: 480px;">
+    <div class="modal-glass-card" style="max-width: 520px;">
       <div class="modal-top-bar">
         <h3>${title}</h3>
         <button class="modal-dismiss-icon">&times;</button>
@@ -285,7 +280,6 @@ function showInputModal(title, placeholder, defaultValue, onSubmit) {
     </div>
   `;
   document.body.appendChild(modal);
-
   const textarea = modal.querySelector('.custom-input-textarea');
   const closeBtn = modal.querySelector('.modal-dismiss-icon');
   const cancelBtn = modal.querySelector('.custom-cancel-btn');
@@ -302,6 +296,10 @@ function showInputModal(title, placeholder, defaultValue, onSubmit) {
 
   submitBtn.addEventListener('click', () => {
     const value = textarea.value;
+    if (requireValue && (!value || !value.trim())) {
+      showNotification("This field is required.", "error");
+      return;
+    }
     closeModal();
     setTimeout(() => onSubmit(value), 200);
   });
@@ -345,6 +343,482 @@ if (deleteConfirmModal) {
         closeDeleteConfirmModal();
       }
     });
+  }
+}
+
+function showDeleteResourceConfirm(doc, onConfirm) {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.style.zIndex = '6000';
+  modal.innerHTML = `
+    <div class="modal-glass-card delete-confirm-card" style="max-width: 460px;">
+      <div class="modal-top-bar" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: 12px;">
+        <h3 style="color: #ef4444; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
+          <i class="fa-solid fa-trash-can"></i> Delete Resource
+        </h3>
+        <button class="modal-dismiss-icon" style="color: #94a3b8;">&times;</button>
+      </div>
+      <div style="padding: 16px 0; text-align: center;">
+        <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(239, 68, 68, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto;">
+          <i class="fa-solid fa-exclamation-triangle" style="font-size: 2rem; color: #ef4444;"></i>
+        </div>
+        <p style="color: #e2e8f0; margin-bottom: 8px; font-size: 1rem; font-weight: 500;">Are you sure you want to permanently delete "${doc.title}"?</p>
+        <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 16px;">This action cannot be undone. The file, chunks, and embeddings will be permanently removed.</p>
+        <div class="input-block" style="text-align: left;">
+          <label style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 6px; display: block;">Reason for deletion (optional)</label>
+          <input type="text" class="delete-reason-input" placeholder="e.g., Outdated content" style="width: 100%; background: rgba(11, 15, 27, 0.6); border: 1px solid var(--border-glass); padding: 10px 14px; border-radius: 8px; color: var(--text-primary); font-size: 0.9rem; outline: none;">
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--border-glass);">
+        <button class="del-cancel-btn form-action-trigger" style="background: rgba(255,255,255,0.08); padding: 10px 28px; font-size: 0.9rem; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1);">Cancel</button>
+        <button class="del-confirm-btn form-action-trigger" style="background: #ef4444; padding: 10px 28px; font-size: 0.9rem;">Delete</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  const closeBtn = modal.querySelector('.modal-dismiss-icon');
+  const cancelBtn = modal.querySelector('.del-cancel-btn');
+  const confirmBtn = modal.querySelector('.del-confirm-btn');
+  const reasonInput = modal.querySelector('.delete-reason-input');
+  const close = () => {
+    modal.style.animation = 'fadeOut 0.2s ease';
+    setTimeout(() => modal.remove(), 180);
+  };
+  closeBtn.addEventListener('click', close);
+  cancelBtn.addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+  confirmBtn.addEventListener('click', () => {
+    const reason = reasonInput.value.trim();
+    close();
+    setTimeout(() => onConfirm(reason), 200);
+  });
+  reasonInput.focus();
+}
+
+function showRequestDeleteModal(doc) {
+  const isCollegeWide = COLLEGE_WIDE_ROLES.includes(currentUserRole);
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.style.zIndex = '6000';
+  let targetOptions = '';
+  if (isCollegeWide) {
+    targetOptions = `
+      <option value="UPLOADER_APPROVAL">Original Uploader (${doc.uploadedByName || doc.uploadedBy})</option>
+    `;
+  } else if (REQUEST_DELETE_ROLES.includes(currentUserRole)) {
+    targetOptions = `
+      <option value="UPLOADER_APPROVAL">Original Uploader (${doc.uploadedByName || doc.uploadedBy})</option>
+      <option value="HIGHER_AUTHORITY_APPROVAL">Dean / Director / Admin</option>
+    `;
+  }
+  modal.innerHTML = `
+    <div class="modal-glass-card" style="max-width: 540px;">
+      <div class="modal-top-bar" style="border-bottom: 1px solid rgba(251, 191, 36, 0.2); padding-bottom: 12px;">
+        <h3 style="color: #fbbf24; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
+          <i class="fa-solid fa-paper-plane"></i> Request Resource Deletion
+        </h3>
+        <button class="modal-dismiss-icon" style="color: #94a3b8;">&times;</button>
+      </div>
+      <div class="modal-form">
+        <div style="background: rgba(251,191,36,0.08); border-left: 3px solid #fbbf24; padding: 12px; border-radius: 6px; margin-bottom: 16px;">
+          <p style="color: #fbbf24; font-size: 0.8rem; font-weight: 600; margin-bottom: 4px;">Note:</p>
+          <p style="color: #e2e8f0; font-size: 0.85rem;">You cannot directly delete this resource because you are not the original uploader. A deletion request will be sent for approval.</p>
+        </div>
+        <div class="input-block">
+          <label style="color: #94a3b8; font-size: 0.8rem;">Resource Name</label>
+          <input type="text" value="${doc.title}" disabled style="width: 100%; background: rgba(11, 15, 27, 0.4); border: 1px solid var(--border-glass); padding: 10px 14px; border-radius: 8px; color: #94a3b8; font-size: 0.9rem;">
+        </div>
+        <div class="input-block">
+          <label style="color: #94a3b8; font-size: 0.8rem;">Original Uploader</label>
+          <input type="text" value="${doc.uploadedByName || doc.uploadedBy}" disabled style="width: 100%; background: rgba(11, 15, 27, 0.4); border: 1px solid var(--border-glass); padding: 10px 14px; border-radius: 8px; color: #94a3b8; font-size: 0.9rem;">
+        </div>
+        <div class="input-block">
+          <label style="color: #94a3b8; font-size: 0.8rem;">Your Role</label>
+          <input type="text" value="${getRoleDisplay(currentUserRole)}" disabled style="width: 100%; background: rgba(11, 15, 27, 0.4); border: 1px solid var(--border-glass); padding: 10px 14px; border-radius: 8px; color: #94a3b8; font-size: 0.9rem;">
+        </div>
+        <div class="input-block">
+          <label style="color: #94a3b8; font-size: 0.8rem;">Send Request To</label>
+          <select class="req-target-select" style="width: 100%; background: rgba(11, 15, 27, 0.6); border: 1px solid var(--border-glass); padding: 10px 14px; border-radius: 8px; color: var(--text-primary); font-size: 0.9rem; outline: none;">
+            ${targetOptions}
+          </select>
+        </div>
+        <div class="input-block req-authority-block hidden">
+          <label style="color: #94a3b8; font-size: 0.8rem;">Select Higher Authority</label>
+          <select class="req-authority-select" style="width: 100%; background: rgba(11, 15, 27, 0.6); border: 1px solid var(--border-glass); padding: 10px 14px; border-radius: 8px; color: var(--text-primary); font-size: 0.9rem; outline: none;">
+            <option value="dean">Dean</option>
+            <option value="director">Director</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+        <div class="input-block">
+          <label style="color: #94a3b8; font-size: 0.8rem;">Reason for deletion <span style="color: #ef4444;">*</span></label>
+          <textarea class="req-comment-textarea" placeholder="Explain why this resource should be deleted..." rows="4" style="width: 100%; background: rgba(11, 15, 27, 0.6); border: 1px solid var(--border-glass); padding: 12px 14px; border-radius: 10px; color: var(--text-primary); font-size: 0.9rem; outline: none; resize: vertical; font-family: inherit;"></textarea>
+        </div>
+        <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;">
+          <button class="req-cancel-btn form-action-trigger" style="background: rgba(255,255,255,0.08); padding: 12px 24px; font-size: 0.9rem; color: #94a3b8;">Cancel</button>
+          <button class="req-submit-btn form-action-trigger" style="background: linear-gradient(135deg, #f59e0b, #d97706); padding: 12px 24px; font-size: 0.9rem;">Send Delete Request</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  const targetSelect = modal.querySelector('.req-target-select');
+  const authorityBlock = modal.querySelector('.req-authority-block');
+  const authoritySelect = modal.querySelector('.req-authority-select');
+  const commentArea = modal.querySelector('.req-comment-textarea');
+  const closeBtn = modal.querySelector('.modal-dismiss-icon');
+  const cancelBtn = modal.querySelector('.req-cancel-btn');
+  const submitBtn = modal.querySelector('.req-submit-btn');
+
+  if (targetSelect) {
+    targetSelect.addEventListener('change', () => {
+      if (targetSelect.value === 'HIGHER_AUTHORITY_APPROVAL') {
+        authorityBlock.classList.remove('hidden');
+      } else {
+        authorityBlock.classList.add('hidden');
+      }
+    });
+  }
+
+  const close = () => {
+    modal.style.animation = 'fadeOut 0.2s ease';
+    setTimeout(() => modal.remove(), 180);
+  };
+
+  closeBtn.addEventListener('click', close);
+  cancelBtn.addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+  submitBtn.addEventListener('click', async () => {
+    const comment = commentArea.value.trim();
+    if (!comment) {
+      showNotification("Reason for deletion is mandatory.", "error");
+      return;
+    }
+    const requestType = targetSelect ? targetSelect.value : 'UPLOADER_APPROVAL';
+    let targetAuthority;
+    if (requestType === 'HIGHER_AUTHORITY_APPROVAL') {
+      targetAuthority = authoritySelect.value;
+    } else {
+      targetAuthority = doc.uploadedBy;
+    }
+    try {
+      const response = await fetch(`${API_URL}/deletion-requests`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({
+          resourceId: doc._id,
+          comment,
+          targetAuthority,
+          requestType
+        })
+      });
+      const data = await response.json();
+      if (response.ok) {
+        showNotification("Deletion request sent successfully.", "success");
+        close();
+        fetchDeletionRequests();
+        fetchNotifications();
+      } else {
+        showNotification(data.message || "Failed to send request.", "error");
+      }
+    } catch (e) {
+      showNotification("Network error sending request.", "error");
+    }
+  });
+  commentArea.focus();
+}
+
+function showDeletionRequestsModal() {
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.style.zIndex = '5500';
+  modal.innerHTML = `
+    <div class="modal-glass-card" style="max-width: 800px; width: 90%; max-height: 85vh; display: flex; flex-direction: column;">
+      <div class="modal-top-bar" style="border-bottom: 1px solid var(--border-glass); padding-bottom: 12px;">
+        <h3 style="color: #fbbf24; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
+          <i class="fa-solid fa-inbox"></i> Deletion Requests
+        </h3>
+        <button class="modal-dismiss-icon" style="color: #94a3b8;">&times;</button>
+      </div>
+      <div style="display: flex; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border-glass);">
+        <button class="req-tab active" data-tab="incoming" style="background: rgba(99,102,241,0.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); padding: 8px 16px; border-radius: 8px; font-size: 0.85rem; cursor: pointer;">Incoming</button>
+        <button class="req-tab" data-tab="outgoing" style="background: transparent; color: #94a3b8; border: 1px solid var(--border-glass); padding: 8px 16px; border-radius: 8px; font-size: 0.85rem; cursor: pointer;">Outgoing</button>
+      </div>
+      <div class="req-content" style="flex: 1; overflow-y: auto; padding: 16px 0;">
+        <div style="text-align: center; color: #94a3b8; padding: 40px;">Loading...</div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  const closeBtn = modal.querySelector('.modal-dismiss-icon');
+  const content = modal.querySelector('.req-content');
+  const tabs = modal.querySelectorAll('.req-tab');
+  const close = () => {
+    modal.style.animation = 'fadeOut 0.2s ease';
+    setTimeout(() => modal.remove(), 180);
+  };
+  closeBtn.addEventListener('click', close);
+  modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => {
+        t.classList.remove('active');
+        t.style.background = 'transparent';
+        t.style.color = '#94a3b8';
+        t.style.borderColor = 'var(--border-glass)';
+      });
+      tab.classList.add('active');
+      tab.style.background = 'rgba(99,102,241,0.15)';
+      tab.style.color = '#a5b4fc';
+      tab.style.borderColor = 'rgba(99,102,241,0.3)';
+      loadRequestTab(tab.dataset.tab, content);
+    });
+  });
+
+  loadRequestTab('incoming', content);
+}
+
+async function loadRequestTab(tab, container) {
+  container.innerHTML = '<div style="text-align: center; color: #94a3b8; padding: 40px;">Loading...</div>';
+  try {
+    const url = tab === 'incoming' ? `${API_URL}/deletion-requests/incoming` : `${API_URL}/deletion-requests/outgoing`;
+    const response = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
+    if (!response.ok) throw new Error("Failed to fetch");
+    const requests = await response.json();
+    renderRequestList(requests, container, tab);
+  } catch (e) {
+    container.innerHTML = '<div style="text-align: center; color: #ef4444; padding: 40px;">Failed to load requests.</div>';
+  }
+}
+
+function renderRequestList(requests, container, tab) {
+  if (!requests || requests.length === 0) {
+    container.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 40px;">No ${tab} requests.</div>`;
+    return;
+  }
+  container.innerHTML = '';
+  requests.forEach(req => {
+    const card = document.createElement('div');
+    card.style.cssText = 'background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 12px; padding: 16px; margin-bottom: 12px;';
+    let actionButtons = '';
+    if (tab === 'incoming') {
+      actionButtons = `
+        <button class="req-approve-btn" style="background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 500;"><i class="fa-solid fa-check"></i> Approve Delete</button>
+        <button class="req-reject-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 500;"><i class="fa-solid fa-xmark"></i> Reject Request</button>
+      `;
+    } else {
+      actionButtons = `
+        <button class="req-cancel-req-btn" style="background: rgba(148,163,184,0.1); color: #94a3b8; border: 1px solid var(--border-glass); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">Cancel Request</button>
+      `;
+    }
+    card.innerHTML = `
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+        <div>
+          <h4 style="color: #f1f5f9; font-size: 1rem; font-weight: 600; margin-bottom: 4px;">${req.resourceName}</h4>
+          <p style="color: #94a3b8; font-size: 0.8rem;">Requested by: ${req.requesterName || req.requestedBy} (${getRoleDisplay(req.requesterRole)})</p>
+          <p style="color: #94a3b8; font-size: 0.8rem;">Original Uploader: ${req.originalUploaderName || req.originalUploader}</p>
+          <p style="color: #94a3b8; font-size: 0.8rem;">Target: ${req.targetAuthority}</p>
+          <p style="color: #94a3b8; font-size: 0.8rem;">Type: ${req.requestType === 'UPLOADER_APPROVAL' ? 'Original Uploader' : 'Higher Authority'}</p>
+          <p style="color: #94a3b8; font-size: 0.8rem;">Date: ${new Date(req.createdAt).toLocaleString()}</p>
+        </div>
+        <span style="background: #3b82f6; color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 600;">${req.status.toUpperCase()}</span>
+      </div>
+      <div style="background: rgba(251,191,36,0.08); border-left: 3px solid #fbbf24; padding: 10px; border-radius: 4px; margin-bottom: 12px;">
+        <p style="color: #fbbf24; font-size: 0.75rem; font-weight: 600; margin-bottom: 4px;">Reason:</p>
+        <p style="color: #e2e8f0; font-size: 0.85rem;">${req.comment}</p>
+      </div>
+      <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;">
+        ${actionButtons}
+      </div>
+    `;
+    container.appendChild(card);
+
+    const approveBtn = card.querySelector('.req-approve-btn');
+    const rejectBtn = card.querySelector('.req-reject-btn');
+    const cancelReqBtn = card.querySelector('.req-cancel-req-btn');
+
+    if (approveBtn) approveBtn.addEventListener('click', () => handleApproveRequest(req._id));
+    if (rejectBtn) rejectBtn.addEventListener('click', () => handleRejectRequest(req._id));
+    if (cancelReqBtn) cancelReqBtn.addEventListener('click', () => handleCancelRequest(req._id));
+  });
+}
+
+async function handleApproveRequest(requestId) {
+  showInputModal(
+    "Approve Deletion Request",
+    "Optional response comment...",
+    "",
+    async (responseComment) => {
+      try {
+        const response = await fetch(`${API_URL}/deletion-requests/${requestId}/approve`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ responseComment })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          showNotification("Request approved. Resource deleted.", "success");
+          fetchDocuments(searchInput ? searchInput.value.trim() : "");
+          fetchNotifications();
+          const reqContent = document.querySelector('.req-content');
+          if (reqContent) {
+            const activeTab = document.querySelector('.req-tab.active');
+            if (activeTab) loadRequestTab(activeTab.dataset.tab, reqContent);
+          }
+        } else {
+          showNotification(data.message || "Approval failed.", "error");
+        }
+      } catch (e) {
+        showNotification("Network error.", "error");
+      }
+    },
+    false
+  );
+}
+
+async function handleRejectRequest(requestId) {
+  showInputModal(
+    "Reject Deletion Request",
+    "Optional response comment...",
+    "",
+    async (responseComment) => {
+      try {
+        const response = await fetch(`${API_URL}/deletion-requests/${requestId}/reject`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${authToken}`
+          },
+          body: JSON.stringify({ responseComment })
+        });
+        const data = await response.json();
+        if (response.ok) {
+          showNotification("Request rejected.", "success");
+          fetchNotifications();
+          const reqContent = document.querySelector('.req-content');
+          if (reqContent) {
+            const activeTab = document.querySelector('.req-tab.active');
+            if (activeTab) loadRequestTab(activeTab.dataset.tab, reqContent);
+          }
+        } else {
+          showNotification(data.message || "Rejection failed.", "error");
+        }
+      } catch (e) {
+        showNotification("Network error.", "error");
+      }
+    },
+    false
+  );
+}
+
+async function handleCancelRequest(requestId) {
+  try {
+    const response = await fetch(`${API_URL}/deletion-requests/${requestId}/cancel`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    const data = await response.json();
+    if (response.ok) {
+      showNotification("Request cancelled.", "success");
+      const reqContent = document.querySelector('.req-content');
+      if (reqContent) {
+        const activeTab = document.querySelector('.req-tab.active');
+        if (activeTab) loadRequestTab(activeTab.dataset.tab, reqContent);
+      }
+    } else {
+      showNotification(data.message || "Cancel failed.", "error");
+    }
+  } catch (e) {
+    showNotification("Network error.", "error");
+  }
+}
+
+async function fetchDeletionRequests() {
+  if (!isUserLoggedIn) return;
+  try {
+    const response = await fetch(`${API_URL}/deletion-requests/pending-count`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    if (response.ok) {
+      const data = await response.json();
+      updateRequestTabBadge(data.count);
+    }
+  } catch (e) {
+    console.error("Error fetching deletion requests count:", e);
+  }
+}
+
+function updateRequestTabBadge(count) {
+  let reqTab = document.querySelector('.filter-tab[data-category="deletion_requests"]');
+  if (!reqTab && isUserLoggedIn && hasStaffAccess()) {
+    const filterContainer = document.querySelector('.category-filter-table');
+    if (filterContainer) {
+      reqTab = document.createElement('div');
+      reqTab.className = 'filter-tab';
+      reqTab.setAttribute('data-category', 'deletion_requests');
+      reqTab.innerHTML = `<i class="fa-solid fa-inbox"></i> Deletion Requests${count > 0 ? ` (${count})` : ''}`;
+      filterContainer.appendChild(reqTab);
+      reqTab.addEventListener('click', () => {
+        filterTabs.forEach(t => t.classList.remove('active'));
+        reqTab.classList.add('active');
+        currentSelectedCategory = 'deletion_requests';
+        fetchDocuments(searchInput ? searchInput.value.trim() : "");
+        if (searchSuggestions) searchSuggestions.classList.add('hidden');
+      });
+    }
+  } else if (reqTab) {
+    reqTab.innerHTML = `<i class="fa-solid fa-inbox"></i> Deletion Requests${count > 0 ? ` (${count})` : ''}`;
+  }
+}
+
+async function fetchNotifications() {
+  if (!isUserLoggedIn) return;
+  try {
+    const response = await fetch(`${API_URL}/notifications`, {
+      headers: { 'Authorization': `Bearer ${authToken}` }
+    });
+    if (response.ok) {
+      await response.json();
+      const unreadResp = await fetch(`${API_URL}/notifications/unread-count`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (unreadResp.ok) {
+        const data = await unreadResp.json();
+        updateNotificationBadge(data.count);
+      }
+    }
+  } catch (e) {
+    console.error("Error fetching notifications:", e);
+  }
+}
+
+function updateNotificationBadge(count) {
+  let badge = document.getElementById('notificationBadge');
+  const dropdown = document.getElementById('authDropdown');
+  if (!dropdown) return;
+  if (count > 0) {
+    if (!badge) {
+      badge = document.createElement('div');
+      badge.id = 'notificationBadge';
+      badge.style.cssText = 'position: absolute; top: -6px; right: -6px; background: #ef4444; color: white; font-size: 0.65rem; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 5px; z-index: 10;';
+      const wrapper = profileMenuBtn || document.querySelector('.auth-wrapper');
+      if (wrapper) {
+        wrapper.style.position = 'relative';
+        wrapper.appendChild(badge);
+      }
+    }
+    badge.textContent = count > 99 ? '99+' : count;
+    badge.style.display = 'flex';
+  } else if (badge) {
+    badge.style.display = 'none';
   }
 }
 
@@ -403,6 +877,9 @@ if (profileMenuBtn && authDropdown) {
   profileMenuBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     authDropdown.classList.toggle('hidden');
+    if (!authDropdown.classList.contains('hidden') && isUserLoggedIn) {
+      fetchNotifications();
+    }
   });
   document.addEventListener('click', () => authDropdown.classList.add('hidden'));
   authDropdown.addEventListener('click', (e) => e.stopPropagation());
@@ -467,6 +944,7 @@ if (logoutBtn) {
     currentUserPermissions = [];
     currentUserYear = null;
     currentUserSemester = null;
+    currentUserName = "";
     cachedDocuments = [];
     authToken = null;
     isUserLoggedIn = false;
@@ -507,15 +985,19 @@ if (logoutBtn) {
     if (mainDashboardView) mainDashboardView.classList.remove('hidden');
     if (historyPageView) historyPageView.classList.add('hidden');
     if (draftsPageView) draftsPageView.classList.add('hidden');
-    if (academicActionBtn) academicActionBtn.classList.add('hidden');
     if (resultsMeta) resultsMeta.classList.remove('hidden');
-    const academicCards = resultsGrid.querySelectorAll('.classroom-card');
-    academicCards.forEach(card => card.remove());
     removePendingApprovalTab();
+    removeDeletionRequestsTab();
+    updateNotificationBadge(0);
     fetchDocuments();
     renderActionButtons();
     renderDepartmentBranchFilters();
   });
+}
+
+function removeDeletionRequestsTab() {
+  const tab = document.querySelector('.filter-tab[data-category="deletion_requests"]');
+  if (tab) tab.remove();
 }
 
 function setupDepartmentBranchSelectors() {
@@ -613,7 +1095,7 @@ if (officialDocDepartmentSelect) {
 if (uploadDocBtn && universalDocumentInput) {
   uploadDocBtn.addEventListener('click', () => {
     if (!canUploadDocuments()) {
-      showNotification("Access denied. Only authorized faculty and leadership roles can upload documents.");
+      showNotification("Access denied. Only authorized faculty and leadership roles can upload documents.", "error");
       return;
     }
     if (docCategorySelect) docCategorySelect.value = "";
@@ -639,7 +1121,7 @@ if (uploadDocBtn && universalDocumentInput) {
 if (draftManagerBtn) {
   draftManagerBtn.addEventListener('click', () => {
     if (!canManageDrafts()) {
-      showNotification("Access denied. Only authorized faculty and leadership roles can manage drafts.");
+      showNotification("Access denied.", "error");
       return;
     }
     if (draftsPageView) {
@@ -663,7 +1145,7 @@ if (refreshDraftsBtn) {
   refreshDraftsBtn.addEventListener('click', () => {
     fetchDrafts();
     fetchPendingApprovals();
-    showNotification("Drafts refreshed.");
+    showNotification("Drafts refreshed.", "success");
   });
 }
 
@@ -684,12 +1166,12 @@ if (profileImageInput) {
         const data = await response.json();
         if (response.ok) {
           setAvatarImage(avatarContainer, data.avatar);
-          showNotification(data.message);
+          showNotification(data.message, "success");
         } else {
-          showNotification(data.message);
+          showNotification(data.message, "error");
         }
       } catch (err) {
-        showNotification("Network error processing avatar update.");
+        showNotification("Network error processing avatar update.", "error");
       }
     };
     reader.readAsDataURL(e.target.files[0]);
@@ -732,7 +1214,7 @@ function getFormDataForUpload(status) {
   const officialDocSemSelect = document.getElementById('officialDocSemSelect');
 
   if (!categorySelect || !categorySelect.value) {
-    showNotification("Please select a resource category.");
+    showNotification("Please select a resource category.", "error");
     return null;
   }
 
@@ -749,19 +1231,11 @@ function getFormDataForUpload(status) {
   }
 
   let customTitle = '';
-  if (docTitleInput) {
-    customTitle = docTitleInput.value.trim();
-  }
+  if (docTitleInput) customTitle = docTitleInput.value.trim();
 
   const formData = new FormData();
   formData.append('file', pendingUploadFile);
-
-  if (customTitle && customTitle.length > 0) {
-    formData.append('title', customTitle);
-  } else {
-    formData.append('title', pendingUploadFile.name);
-  }
-
+  formData.append('title', (customTitle && customTitle.length > 0) ? customTitle : pendingUploadFile.name);
   formData.append('category', finalCategory);
   formData.append('docDate', selectedDate);
   formData.append('status', status || 'pending_approval');
@@ -792,103 +1266,73 @@ function getFormDataForUpload(status) {
 
 async function saveAsDraft() {
   if (!pendingUploadFile) {
-    showNotification("No file selected.");
+    showNotification("No file selected.", "error");
     return;
   }
-
   const formData = getFormDataForUpload('draft');
   if (!formData) return;
-
   try {
     const response = await fetch(`${API_URL}/documents/upload`, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${authToken}`
-      },
+      headers: { "Authorization": `Bearer ${authToken}` },
       body: formData
     });
-
     const data = await response.json();
-
     if (response.ok) {
-      showNotification("Document saved as draft successfully!");
+      showNotification("Document saved as draft successfully!", "success");
       const docTitleInput = document.getElementById('docTitleInput');
-      if (docTitleInput) {
-        docTitleInput.value = '';
-      }
-      if (uploadPopup) {
-        uploadPopup.classList.add('hidden');
-      }
+      if (docTitleInput) docTitleInput.value = '';
+      if (uploadPopup) uploadPopup.classList.add('hidden');
       pendingUploadFile = null;
-      if (universalDocumentInput) {
-        universalDocumentInput.value = "";
-      }
+      if (universalDocumentInput) universalDocumentInput.value = "";
       fetchDrafts();
-      if (currentSelectedCategory === 'drafts') {
-        fetchDocuments(searchInput ? searchInput.value.trim() : "");
-      }
+      if (currentSelectedCategory === 'drafts') fetchDocuments(searchInput ? searchInput.value.trim() : "");
     } else {
-      showNotification(data.message || "Failed to save draft.");
+      showNotification(data.message || "Failed to save draft.", "error");
     }
   } catch (err) {
-    console.error("Draft save error:", err);
-    showNotification("Network error saving draft.");
+    showNotification("Network error saving draft.", "error");
   }
 }
 
 async function publishDocument() {
   if (!pendingUploadFile) {
-    showNotification("No file selected.");
+    showNotification("No file selected.", "error");
     return;
   }
-
   const formData = getFormDataForUpload('pending_approval');
   if (!formData) return;
-
   try {
     const response = await fetch(`${API_URL}/documents/upload`, {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${authToken}`
-      },
+      headers: { "Authorization": `Bearer ${authToken}` },
       body: formData
     });
-
     const data = await response.json();
-
     if (response.ok) {
-      showNotification(data.message || "Document submitted for approval!");
+      showNotification(data.message || "Document submitted for approval!", "success");
       const docTitleInput = document.getElementById('docTitleInput');
-      if (docTitleInput) {
-        docTitleInput.value = '';
-      }
+      if (docTitleInput) docTitleInput.value = '';
       fetchDocuments(searchInput ? searchInput.value.trim() : "");
-      if (uploadPopup) {
-        uploadPopup.classList.add('hidden');
-      }
+      if (uploadPopup) uploadPopup.classList.add('hidden');
       pendingUploadFile = null;
-      if (universalDocumentInput) {
-        universalDocumentInput.value = "";
-      }
+      if (universalDocumentInput) universalDocumentInput.value = "";
       fetchPendingApprovals();
     } else {
-      showNotification(data.message || "Upload failed.");
+      showNotification(data.message || "Upload failed.", "error");
     }
   } catch (err) {
-    console.error("Upload error:", err);
-    showNotification("Network error uploading document.");
+    showNotification("Network error uploading document.", "error");
   }
 }
 
 function setupUploadButtons() {
   const saveDraftBtn = document.getElementById('saveDraftBtn');
   const confirmUploadBtnReal = document.getElementById('confirmUploadBtn');
-
   if (saveDraftBtn) {
     saveDraftBtn.removeEventListener('click', saveAsDraft);
     saveDraftBtn.addEventListener('click', saveAsDraft);
   }
-
   if (confirmUploadBtnReal) {
     confirmUploadBtnReal.removeEventListener('click', publishDocument);
     confirmUploadBtnReal.addEventListener('click', publishDocument);
@@ -897,9 +1341,7 @@ function setupUploadButtons() {
 
 async function fetchDrafts() {
   if (!authToken || !canManageDrafts()) {
-    if (draftsContainer) {
-      draftsContainer.innerHTML = '<span class="history-empty-state">No permission to view drafts.</span>';
-    }
+    if (draftsContainer) draftsContainer.innerHTML = '<span class="history-empty-state">No permission to view drafts.</span>';
     return;
   }
   try {
@@ -912,14 +1354,9 @@ async function fetchDrafts() {
       renderDrafts(drafts);
       renderDraftList(drafts);
       updateDraftTabCount(drafts.length);
-    } else {
-      console.error("Failed to fetch drafts:", response.status);
     }
   } catch (err) {
     console.error("Error fetching drafts:", err);
-    if (draftsContainer) {
-      draftsContainer.innerHTML = '<span class="history-empty-state">Error loading drafts. Please try again.</span>';
-    }
   }
 }
 
@@ -937,15 +1374,10 @@ async function fetchPendingApprovals() {
       const pending = await response.json();
       pendingApprovalCount = pending ? pending.length : 0;
       updatePendingApprovalTabCount(pendingApprovalCount);
-      renderPendingApprovals(pending);
-    } else {
-      pendingApprovalCount = 0;
-      updatePendingApprovalTabCount(0);
+      if (currentSelectedCategory === 'pending_approval') renderPendingApprovals(pending);
     }
   } catch (err) {
     console.error("Error fetching pending approvals:", err);
-    pendingApprovalCount = 0;
-    updatePendingApprovalTabCount(0);
   }
 }
 
@@ -996,47 +1428,12 @@ function renderPendingApprovals(pending) {
     return;
   }
   if (resultCount) resultCount.textContent = `${pending.length} item${pending.length !== 1 ? 's' : ''} pending`;
-  pending.forEach((doc) => {
-    const card = document.createElement('div');
-    card.className = 'document-row-card';
-    const submitterRole = doc.uploadedByRole || 'unknown';
-    const chain = getApprovalChain(submitterRole);
-    const currentStage = doc.approvalStage || 'unknown';
-    let pillsHtml = `<span style="background: rgba(251,191,36,0.15); color: #fbbf24; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.category || 'University Paper'}</span>`;
-    pillsHtml += `<span style="background: #3b82f6; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">PENDING</span>`;
-    pillsHtml += `<span style="background: rgba(168,85,247,0.15); color: #c084fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Submitted by: ${submitterRole}</span>`;
-    if (doc.department) {
-      pillsHtml += `<span style="background: rgba(74,222,128,0.15); color: #4ade80; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.department}</span>`;
-    }
-    card.innerHTML = `
-      <div class="doc-body-details">
-        <h3>${doc.title} <span style="background: #3b82f6; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; margin-left: 4px;">PENDING APPROVAL</span></h3>
-        <p>Category: ${doc.category}</p>
-        ${doc.year ? `<p>Session: ${doc.year}</p>` : ''}
-        ${doc.semester ? `<p>Semester: ${doc.semester}</p>` : ''}
-        ${doc.branch ? `<p>Branch: ${doc.branch}</p>` : ''}
-        ${doc.department ? `<p>Department: ${doc.department}</p>` : ''}
-        ${doc.docDate ? `<p>Date: ${doc.docDate}</p>` : ''}
-        <p style="color: #fbbf24; font-size: 0.8rem; margin-top: 4px;">Current Stage: ${currentStage}</p>
-        <p style="color: #94a3b8; font-size: 0.75rem;">Chain: ${chain.join(' → ') || 'None'}</p>
-        <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;">${pillsHtml}</div>
-      </div>
-      <div class="doc-action-zone" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-        <button class="action-btn-link view-btn" style="background: rgba(99,102,241,0.1); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem;">View</button>
-        <button class="action-btn-link approve-btn" style="background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Approve</button>
-        <button class="action-btn-link reject-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Reject</button>
-      </div>
-    `;
-    card.querySelector('.view-btn').addEventListener('click', () => openPreviewModal(doc.title, doc.fileUrl, doc._id));
-    card.querySelector('.approve-btn').addEventListener('click', () => approveDocument(doc._id));
-    card.querySelector('.reject-btn').addEventListener('click', () => rejectDocument(doc._id));
-    resultsGrid.appendChild(card);
-  });
+  pending.forEach((doc) => renderDocumentCard(doc, resultsGrid, true));
 }
 
 async function approveDocument(id) {
   if (!canApproveDocuments()) {
-    showNotification("Access denied.");
+    showNotification("Access denied.", "error");
     return;
   }
   showInputModal(
@@ -1055,15 +1452,15 @@ async function approveDocument(id) {
         });
         const data = await response.json();
         if (response.ok) {
-          showNotification(data.message || "Document approved successfully.");
+          showNotification(data.message || "Document approved successfully.", "success");
           fetchDocuments(searchInput ? searchInput.value.trim() : "");
           fetchPendingApprovals();
           fetchDrafts();
         } else {
-          showNotification(data.message || "Approval failed.");
+          showNotification(data.message || "Approval failed.", "error");
         }
       } catch (err) {
-        showNotification("Network error approving document.");
+        showNotification("Network error approving document.", "error");
       }
     }
   );
@@ -1071,7 +1468,7 @@ async function approveDocument(id) {
 
 async function rejectDocument(id) {
   if (!canApproveDocuments()) {
-    showNotification("Access denied.");
+    showNotification("Access denied.", "error");
     return;
   }
   showInputModal(
@@ -1080,7 +1477,7 @@ async function rejectDocument(id) {
     "",
     async (reason) => {
       if (!reason || !reason.trim()) {
-        showNotification("Rejection reason is required.");
+        showNotification("Rejection reason is required.", "error");
         return;
       }
       try {
@@ -1094,17 +1491,18 @@ async function rejectDocument(id) {
         });
         const data = await response.json();
         if (response.ok) {
-          showNotification(data.message || "Document rejected and moved to drafts.");
+          showNotification(data.message || "Document rejected and moved to drafts.", "success");
           fetchDocuments(searchInput ? searchInput.value.trim() : "");
           fetchPendingApprovals();
           fetchDrafts();
         } else {
-          showNotification(data.message || "Rejection failed.");
+          showNotification(data.message || "Rejection failed.", "error");
         }
       } catch (err) {
-        showNotification("Network error rejecting document.");
+        showNotification("Network error rejecting document.", "error");
       }
-    }
+    },
+    true
   );
 }
 
@@ -1157,7 +1555,6 @@ function renderDraftList(drafts) {
       </div>
     `;
     draftsContainer.appendChild(card);
-
     card.querySelector('.draft-action-open').addEventListener('click', () => openEditDocumentModal(draft));
     card.querySelector('.draft-action-publish').addEventListener('click', () => publishDraft(draft._id));
     card.querySelector('.draft-action-delete').addEventListener('click', () => deleteDraft(draft._id));
@@ -1185,11 +1582,11 @@ function addDraftTab() {
 
 function openEditDocumentModal(doc) {
   if (!canEditDocuments()) {
-    showNotification("Access denied. Only authorized faculty and leadership roles can edit documents.");
+    showNotification("Access denied.", "error");
     return;
   }
   if (!userCanAccessResource(doc)) {
-    showNotification("Access denied. You don't have permission to edit this document.");
+    showNotification("Access denied.", "error");
     return;
   }
   editingDocId = doc._id;
@@ -1241,7 +1638,7 @@ if (confirmEditBtn) {
   confirmEditBtn.addEventListener('click', async () => {
     if (!editingDocId) return;
     if (!canEditDocuments()) {
-      showNotification("Access denied. Only authorized faculty and leadership roles can edit documents.");
+      showNotification("Access denied.", "error");
       return;
     }
     const category = editDocCategorySelect ? editDocCategorySelect.value : 'University';
@@ -1270,10 +1667,9 @@ if (confirmEditBtn) {
       if (branchSelect) payload.branch = branchSelect.value || 'All Branches';
       payload.paperType = '';
     }
-    if (!payload.title) { showNotification("Title cannot be empty."); return; }
-    const url = `${API_URL}/documents/${editingDocId}`;
+    if (!payload.title) { showNotification("Title cannot be empty.", "error"); return; }
     try {
-      const response = await fetch(url, {
+      const response = await fetch(`${API_URL}/documents/${editingDocId}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -1283,16 +1679,16 @@ if (confirmEditBtn) {
       });
       const data = await response.json();
       if (response.ok) {
-        showNotification("Document updated successfully!");
+        showNotification("Document updated successfully!", "success");
         if (editPopup) editPopup.classList.add('hidden');
         editingDocId = null;
         fetchDocuments(searchInput ? searchInput.value.trim() : "");
         fetchDrafts();
       } else {
-        showNotification(data.message || "Update failed.");
+        showNotification(data.message || "Update failed.", "error");
       }
     } catch (err) {
-      showNotification("Network error updating document.");
+      showNotification("Network error updating document.", "error");
     }
   });
 }
@@ -1340,10 +1736,10 @@ if (authForm) {
         if (authModal) authModal.classList.add('hidden');
         authForm.reset();
       } else {
-        showNotification(data.message || "Authentication failed.");
+        showNotification(data.message || "Authentication failed.", "error");
       }
     } catch (err) {
-      showNotification("Connection error. Is the backend server running?");
+      showNotification("Connection error. Is the backend server running?", "error");
     }
   });
 }
@@ -1352,6 +1748,7 @@ function handleUserSession(user) {
   if (!user) return;
   isUserLoggedIn = true;
   activeUserEmail = user.email;
+  currentUserName = user.name || "";
   currentUserRole = String(user.role || ROLES.STUDENT).toLowerCase();
   currentUserDepartment = user.department;
   currentUserBranch = user.branch;
@@ -1382,20 +1779,15 @@ function handleUserSession(user) {
 
   renderActionButtons();
   renderDepartmentBranchFilters();
+  updateRequestTabBadge(0);
+  fetchDeletionRequests();
+  fetchNotifications();
 
   if (hasStaffAccess()) {
     addDraftTab();
     setupUploadButtons();
     fetchDrafts();
-    if (canApproveDocuments()) {
-      fetchPendingApprovals();
-    }
-  }
-
-  const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
-  if (academicActionBtn) {
-    if (isAdminEmail && currentSelectedCategory === "Academic Resource") academicActionBtn.classList.remove('hidden');
-    else academicActionBtn.classList.add('hidden');
+    if (canApproveDocuments()) fetchPendingApprovals();
   }
 
   if (recommendedTab) {
@@ -1513,7 +1905,6 @@ async function fetchHistory() {
       headers: { "Authorization": `Bearer ${authToken}` }
     });
     const data = await response.json();
-
     if (recentActivityList) {
       recentActivityList.innerHTML = '';
       const recent = data.slice(0, 5);
@@ -1531,9 +1922,7 @@ async function fetchHistory() {
         });
       }
     }
-
     if (historyCountText) historyCountText.textContent = `${data.length} items recorded`;
-
     if (fullHistoryContainer) {
       fullHistoryContainer.innerHTML = data.length === 0
         ? '<span class="history-empty-state">No download or viewing history found.</span>'
@@ -1559,11 +1948,11 @@ if (clearHistoryBtn) {
         headers: { "Authorization": `Bearer ${authToken}` }
       });
       if (response.ok) {
-        showNotification("History cleared");
+        showNotification("History cleared", "success");
         fetchHistory();
       }
     } catch (err) {
-      showNotification("Failed to clear history");
+      showNotification("Failed to clear history", "error");
     }
   });
 }
@@ -1598,142 +1987,39 @@ function openPreviewModal(title, fileUrl, docId) {
   previewModalTitle.textContent = title;
   previewContainer.innerHTML = '';
   previewModal.classList.remove('hidden');
-
   if (!fileUrl) {
     const pre = document.createElement('pre');
     pre.textContent = "Preview unavailable for this asset.";
     pre.style.color = '#94a3b8';
-    pre.style.display = 'block';
     previewContainer.appendChild(pre);
     return;
   }
-
   const lowerTitle = title.toLowerCase();
   const fileExtension = fileUrl.split('.').pop().toLowerCase().split('?')[0];
-
   if (lowerTitle.endsWith('.pdf') || fileExtension === 'pdf') {
     const iframe = document.createElement('iframe');
     iframe.src = fileUrl;
-    iframe.style.width = '100%';
-    iframe.style.height = '70vh';
-    iframe.style.border = 'none';
-    iframe.style.borderRadius = '8px';
-    iframe.style.display = 'block';
+    iframe.style.cssText = 'width:100%;height:70vh;border:none;border-radius:8px;display:block;';
     previewContainer.appendChild(iframe);
-  } else if (lowerTitle.endsWith('.png') || lowerTitle.endsWith('.jpg') || lowerTitle.endsWith('.jpeg') ||
-             lowerTitle.endsWith('.gif') || lowerTitle.endsWith('.webp') || lowerTitle.endsWith('.tiff') ||
-             fileExtension === 'png' || fileExtension === 'jpg' || fileExtension === 'jpeg' ||
-             fileExtension === 'gif' || fileExtension === 'webp' || fileExtension === 'tiff') {
+  } else if (['png','jpg','jpeg','gif','webp','tiff'].includes(fileExtension) ||
+             lowerTitle.endsWith('.png') || lowerTitle.endsWith('.jpg') || lowerTitle.endsWith('.jpeg')) {
     const img = document.createElement('img');
     img.src = fileUrl;
-    img.style.maxWidth = '100%';
-    img.style.maxHeight = '70vh';
-    img.style.objectFit = 'contain';
-    img.style.borderRadius = '8px';
-    img.style.display = 'block';
+    img.style.cssText = 'max-width:100%;max-height:70vh;object-fit:contain;border-radius:8px;display:block;';
     previewContainer.appendChild(img);
-  } else if (lowerTitle.endsWith('.txt') || lowerTitle.endsWith('.csv') || lowerTitle.endsWith('.json') ||
-             lowerTitle.endsWith('.md') || fileExtension === 'txt' || fileExtension === 'csv' ||
-             fileExtension === 'json' || fileExtension === 'md') {
+  } else if (['txt','csv','json','md'].includes(fileExtension)) {
     const iframe = document.createElement('iframe');
     iframe.src = fileUrl;
-    iframe.style.width = '100%';
-    iframe.style.height = '70vh';
-    iframe.style.border = 'none';
-    iframe.style.borderRadius = '8px';
-    iframe.style.backgroundColor = '#ffffff';
-    iframe.style.display = 'block';
+    iframe.style.cssText = 'width:100%;height:70vh;border:none;border-radius:8px;background:#fff;display:block;';
     previewContainer.appendChild(iframe);
-  } else if (lowerTitle.endsWith('.docx') || lowerTitle.endsWith('.doc') ||
-             fileExtension === 'docx' || fileExtension === 'doc') {
-    const wrapper = document.createElement('div');
-    wrapper.style.display = 'flex';
-    wrapper.style.flexDirection = 'column';
-    wrapper.style.alignItems = 'center';
-    wrapper.style.justifyContent = 'center';
-    wrapper.style.padding = '40px 20px';
-    wrapper.style.gap = '20px';
-    wrapper.style.color = '#e2e8f0';
-    wrapper.style.textAlign = 'center';
-    wrapper.innerHTML = `
-      <i class="fa-solid fa-file-word" style="font-size: 4rem; color: #2b5797;"></i>
-      <h3 style="color: #f1f5f9; font-weight: 600;">Microsoft Word Document</h3>
-      <p style="color: #94a3b8; max-width: 400px; margin: 0 auto;">Word documents cannot be previewed directly in the browser.</p>
-      <div style="display: flex; gap: 16px; margin-top: 12px;">
-        <a href="${fileUrl}" target="_blank" rel="noopener" style="background: var(--accent-gradient); color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
-          <i class="fa-solid fa-download"></i> Download
-        </a>
-        <a href="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}" target="_blank" rel="noopener" style="background: rgba(255,255,255,0.08); color: #e2e8f0; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-glass);">
-          <i class="fa-solid fa-eye"></i> View Online
-        </a>
-      </div>
-    `;
-    previewContainer.appendChild(wrapper);
-  } else if (lowerTitle.endsWith('.xlsx') || lowerTitle.endsWith('.xls') ||
-             fileExtension === 'xlsx' || fileExtension === 'xls') {
-    const wrapper = document.createElement('div');
-    wrapper.style.display = 'flex';
-    wrapper.style.flexDirection = 'column';
-    wrapper.style.alignItems = 'center';
-    wrapper.style.justifyContent = 'center';
-    wrapper.style.padding = '40px 20px';
-    wrapper.style.gap = '20px';
-    wrapper.style.color = '#e2e8f0';
-    wrapper.style.textAlign = 'center';
-    wrapper.innerHTML = `
-      <i class="fa-solid fa-file-excel" style="font-size: 4rem; color: #217346;"></i>
-      <h3 style="color: #f1f5f9; font-weight: 600;">Excel Spreadsheet</h3>
-      <p style="color: #94a3b8; max-width: 400px; margin: 0 auto;">Excel documents cannot be previewed directly in the browser.</p>
-      <div style="display: flex; gap: 16px; margin-top: 12px;">
-        <a href="${fileUrl}" target="_blank" rel="noopener" style="background: var(--accent-gradient); color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
-          <i class="fa-solid fa-download"></i> Download
-        </a>
-        <a href="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}" target="_blank" rel="noopener" style="background: rgba(255,255,255,0.08); color: #e2e8f0; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-glass);">
-          <i class="fa-solid fa-eye"></i> View Online
-        </a>
-      </div>
-    `;
-    previewContainer.appendChild(wrapper);
-  } else if (lowerTitle.endsWith('.pptx') || lowerTitle.endsWith('.ppt') ||
-             fileExtension === 'pptx' || fileExtension === 'ppt') {
-    const wrapper = document.createElement('div');
-    wrapper.style.display = 'flex';
-    wrapper.style.flexDirection = 'column';
-    wrapper.style.alignItems = 'center';
-    wrapper.style.justifyContent = 'center';
-    wrapper.style.padding = '40px 20px';
-    wrapper.style.gap = '20px';
-    wrapper.style.color = '#e2e8f0';
-    wrapper.style.textAlign = 'center';
-    wrapper.innerHTML = `
-      <i class="fa-solid fa-file-powerpoint" style="font-size: 4rem; color: #d24726;"></i>
-      <h3 style="color: #f1f5f9; font-weight: 600;">PowerPoint Presentation</h3>
-      <p style="color: #94a3b8; max-width: 400px; margin: 0 auto;">PowerPoint documents cannot be previewed directly in the browser.</p>
-      <div style="display: flex; gap: 16px; margin-top: 12px;">
-        <a href="${fileUrl}" target="_blank" rel="noopener" style="background: var(--accent-gradient); color: white; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px;">
-          <i class="fa-solid fa-download"></i> Download
-        </a>
-        <a href="https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(fileUrl)}" target="_blank" rel="noopener" style="background: rgba(255,255,255,0.08); color: #e2e8f0; padding: 12px 28px; border-radius: 10px; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 8px; border: 1px solid var(--border-glass);">
-          <i class="fa-solid fa-eye"></i> View Online
-        </a>
-      </div>
-    `;
-    previewContainer.appendChild(wrapper);
   } else {
     const wrapper = document.createElement('div');
-    wrapper.style.display = 'flex';
-    wrapper.style.flexDirection = 'column';
-    wrapper.style.alignItems = 'center';
-    wrapper.style.justifyContent = 'center';
-    wrapper.style.padding = '40px 20px';
-    wrapper.style.gap = '16px';
-    wrapper.style.color = '#94a3b8';
-    wrapper.style.textAlign = 'center';
+    wrapper.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;gap:16px;color:#94a3b8;text-align:center;';
     wrapper.innerHTML = `
-      <i class="fa-solid fa-file" style="font-size: 3rem; color: #64748b;"></i>
-      <p style="color: #94a3b8; max-width: 400px;">Preview not supported for this file type.</p>
-      <a href="${fileUrl}" target="_blank" rel="noopener" style="background: var(--accent-gradient); color: white; padding: 10px 24px; border-radius: 8px; text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 8px; margin-top: 8px;">
-        <i class="fa-solid fa-arrow-up-right-from-square"></i> Open file in new tab
+      <i class="fa-solid fa-file" style="font-size:3rem;color:#64748b;"></i>
+      <p style="color:#94a3b8;max-width:400px;">Preview not supported for this file type.</p>
+      <a href="${fileUrl}" target="_blank" rel="noopener" style="background:var(--accent-gradient);color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:500;display:inline-flex;align-items:center;gap:8px;">
+        <i class="fa-solid fa-arrow-up-right-from-square"></i> Open in new tab
       </a>
     `;
     previewContainer.appendChild(wrapper);
@@ -1764,24 +2050,16 @@ if (searchInput) {
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
     }
   });
-
   searchInput.addEventListener('input', () => {
     const query = searchInput.value.trim().toLowerCase();
     if (!query || cachedDocuments.length === 0) {
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
       return;
     }
-
-    let searchQuery = query;
-
     let filtered = cachedDocuments.filter(doc => {
       if (!userCanAccessResource(doc)) return false;
-      if (currentSelectedCategory === "drafts") {
-        return doc.status === 'draft';
-      }
-      if (currentSelectedCategory === "pending_approval") {
-        return doc.status === 'pending_approval';
-      }
+      if (currentSelectedCategory === "drafts") return doc.status === 'draft';
+      if (currentSelectedCategory === "pending_approval") return doc.status === 'pending_approval';
       if (currentSelectedCategory === "recommended") {
         if (currentUserBranch) {
           const matchesBranch = doc.branch === currentUserBranch || doc.branch === "All Branches";
@@ -1794,32 +2072,14 @@ if (searchInput) {
       }
       return true;
     });
-
     filtered = filtered.filter(doc => {
-      const searchLower = searchQuery.toLowerCase();
-      const titleLower = (doc.title || '').toLowerCase();
-      const titleHindiLower = (doc.titleHindi || '').toLowerCase();
-      const textLower = (doc.extractedText || '').toLowerCase();
-      const textHindiLower = (doc.extractedTextHindi || '').toLowerCase();
-      const officialTypeLower = (doc.officialDocType || '').toLowerCase();
-      const paperTypeLower = (doc.paperType || '').toLowerCase();
-      const categoryLower = (doc.category || '').toLowerCase();
-      const branchLower = (doc.branch || '').toLowerCase();
-      const yearLower = (doc.year || '').toLowerCase();
-      const semesterLower = (doc.semester || '').toLowerCase();
-      const sessionLower = (doc.session || '').toLowerCase();
-      const departmentLower = (doc.department || '').toLowerCase();
-
-      const allText = `${titleLower} ${titleHindiLower} ${textLower} ${textHindiLower} ${officialTypeLower} ${paperTypeLower} ${categoryLower} ${branchLower} ${yearLower} ${semesterLower} ${sessionLower} ${departmentLower}`;
-
-      return allText.includes(searchLower);
+      const allText = `${doc.title || ''} ${doc.titleHindi || ''} ${doc.extractedText || ''} ${doc.extractedTextHindi || ''} ${doc.officialDocType || ''} ${doc.paperType || ''} ${doc.category || ''} ${doc.branch || ''} ${doc.year || ''} ${doc.semester || ''} ${doc.session || ''} ${doc.department || ''}`.toLowerCase();
+      return allText.includes(query);
     });
-
     if (filtered.length === 0) {
       if (searchSuggestions) searchSuggestions.classList.add('hidden');
       return;
     }
-
     if (searchSuggestions) {
       searchSuggestions.innerHTML = '';
       const displayCount = Math.min(filtered.length, 10);
@@ -1830,18 +2090,15 @@ if (searchInput) {
         const isDraft = doc.status === 'draft';
         const isPending = doc.status === 'pending_approval';
         let statusBadge = '';
-        if (isDraft) statusBadge = '<span style="background: #f59e0b; color: #000; padding: 1px 6px; border-radius: 3px; font-size: 0.6rem; font-weight: 700; margin-left: 4px;">DRAFT</span>';
-        if (isPending) statusBadge = '<span style="background: #3b82f6; color: #fff; padding: 1px 6px; border-radius: 3px; font-size: 0.6rem; font-weight: 700; margin-left: 4px;">PENDING</span>';
-        const hasContentMatch = (doc.extractedText || '').toLowerCase().includes(query) || (doc.extractedTextHindi || '').toLowerCase().includes(query);
-        const deptInfo = doc.department ? `• ${doc.department}` : '';
-        const branchInfo = doc.branch && doc.branch !== doc.department ? `• ${doc.branch}` : '';
+        if (isDraft) statusBadge = '<span style="background:#f59e0b;color:#000;padding:1px 6px;border-radius:3px;font-size:0.6rem;font-weight:700;margin-left:4px;">DRAFT</span>';
+        if (isPending) statusBadge = '<span style="background:#3b82f6;color:#fff;padding:1px 6px;border-radius:3px;font-size:0.6rem;font-weight:700;margin-left:4px;">PENDING</span>';
         row.innerHTML = `
           <div class="suggestion-info">
-            <span class="suggestion-title">${doc.title} ${statusBadge} ${hasContentMatch ? '📄' : ''}</span>
-            <span class="suggestion-meta">${doc.category} ${deptInfo} ${branchInfo} ${isDraft ? '• Draft' : ''} ${isPending ? '• Pending' : ''}</span>
+            <span class="suggestion-title">${doc.title} ${statusBadge}</span>
+            <span class="suggestion-meta">${doc.category}</span>
           </div>
           <div class="suggestion-actions">
-            <button class="suggestion-view-btn" style="background:none; border:none; color:#a5b4fc; cursor:pointer; margin-right:8px;"><i class="fa-solid fa-eye"></i></button>
+            <button class="suggestion-view-btn" style="background:none;border:none;color:#a5b4fc;cursor:pointer;margin-right:8px;"><i class="fa-solid fa-eye"></i></button>
             <a href="${doc.fileUrl}" target="_blank" rel="noopener" download="${doc.title}" class="suggestion-action-btn"><i class="fa-solid fa-download"></i></a>
           </div>
         `;
@@ -1860,7 +2117,6 @@ if (searchInput) {
       searchSuggestions.classList.remove('hidden');
     }
   });
-
   document.addEventListener('click', (e) => {
     if (searchSuggestions && !e.target.closest('.search-container')) searchSuggestions.classList.add('hidden');
   });
@@ -1871,58 +2127,52 @@ filterTabs.forEach(tab => {
     filterTabs.forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
     currentSelectedCategory = tab.getAttribute('data-category');
-    const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
     if (currentSelectedCategory === "drafts" && isUserLoggedIn && canManageDrafts()) {
-      if (academicActionBtn) academicActionBtn.classList.add('hidden');
       if (resultsMeta) resultsMeta.classList.remove('hidden');
       fetchDrafts();
     } else if (currentSelectedCategory === "pending_approval" && isUserLoggedIn && canApproveDocuments()) {
-      if (academicActionBtn) academicActionBtn.classList.add('hidden');
       if (resultsMeta) resultsMeta.classList.remove('hidden');
       fetchPendingApprovals();
-    } else if (currentSelectedCategory === "Academic Resource" && isAdminEmail && isUserLoggedIn) {
-      if (academicActionBtn) academicActionBtn.classList.remove('hidden');
+    } else if (currentSelectedCategory === "deletion_requests") {
       if (resultsMeta) resultsMeta.classList.add('hidden');
+      showDeletionRequestsModal();
     } else {
-      if (academicActionBtn) academicActionBtn.classList.add('hidden');
       if (resultsMeta) resultsMeta.classList.remove('hidden');
-      if (academicModal) academicModal.classList.add('hidden');
     }
     fetchDocuments(searchInput ? searchInput.value.trim() : "");
     if (searchSuggestions) searchSuggestions.classList.add('hidden');
   });
 });
 
-async function deleteDocument(id) {
-  if (!canDeleteDocuments()) {
-    showNotification("Access denied. Only authorized faculty and leadership roles can delete documents.");
-    return;
-  }
+async function deleteDocument(id, reason) {
   try {
     const response = await fetch(`${API_URL}/documents/${id}`, {
       method: "DELETE",
       headers: {
         "Content-Type": "application/json",
         "Authorization": `Bearer ${authToken}`
-      }
+      },
+      body: JSON.stringify({ reason: reason || "" })
     });
     const data = await response.json();
     if (response.ok) {
-      showNotification("Removed successfully");
+      showNotification("Resource deleted successfully.", "success");
       fetchDocuments(searchInput ? searchInput.value.trim() : "");
       fetchDrafts();
       fetchPendingApprovals();
+      fetchNotifications();
+      fetchDeletionRequests();
     } else {
-      showNotification(data.message);
+      showNotification(data.message || "Deletion failed.", "error");
     }
   } catch (err) {
-    showNotification("Failed to send drop request.");
+    showNotification("Network error during deletion.", "error");
   }
 }
 
 async function publishDraft(id) {
   if (!canManageDrafts()) {
-    showNotification("Access denied. Only authorized faculty and leadership roles can submit drafts.");
+    showNotification("Access denied.", "error");
     return;
   }
   try {
@@ -1932,21 +2182,21 @@ async function publishDraft(id) {
     });
     const data = await response.json();
     if (response.ok) {
-      showNotification("Draft submitted for approval!");
+      showNotification("Draft submitted for approval!", "success");
       fetchDocuments(searchInput ? searchInput.value.trim() : "");
       fetchDrafts();
       fetchPendingApprovals();
     } else {
-      showNotification(data.message || "Failed to submit draft.");
+      showNotification(data.message || "Failed to submit draft.", "error");
     }
   } catch (err) {
-    showNotification("Network error submitting draft.");
+    showNotification("Network error submitting draft.", "error");
   }
 }
 
 async function deleteDraft(id) {
   if (!canManageDrafts()) {
-    showNotification("Access denied. Only authorized faculty and leadership roles can delete drafts.");
+    showNotification("Access denied.", "error");
     return;
   }
   try {
@@ -1956,230 +2206,112 @@ async function deleteDraft(id) {
     });
     const data = await response.json();
     if (response.ok) {
-      showNotification("Draft deleted successfully.");
+      showNotification("Draft deleted successfully.", "success");
       fetchDrafts();
-      if (currentSelectedCategory === 'drafts') {
-        fetchDocuments(searchInput ? searchInput.value.trim() : "");
-      }
+      if (currentSelectedCategory === 'drafts') fetchDocuments(searchInput ? searchInput.value.trim() : "");
     } else {
-      showNotification(data.message || "Failed to delete draft.");
+      showNotification(data.message || "Failed to delete draft.", "error");
     }
   } catch (err) {
-    showNotification("Network error deleting draft.");
+    showNotification("Network error deleting draft.", "error");
   }
 }
 
-function viewAcademicCard(cardData) {
-  const modal = document.createElement('div');
-  modal.className = 'modal-overlay';
-  modal.style.zIndex = '3000';
-  modal.innerHTML = `
-    <div class="modal-glass-card" style="max-width: 500px;">
-      <div class="modal-top-bar"><h3>${cardData.subject}</h3><button class="modal-dismiss-icon" onclick="this.closest('.modal-overlay').remove()">&times;</button></div>
-      <div style="display: flex; flex-direction: column; gap: 12px; padding: 8px 0;">
-        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-glass);">
-          <span style="color: var(--text-secondary);">Branch</span><span style="font-weight: 500;">${cardData.branch}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-glass);">
-          <span style="color: var(--text-secondary);">Semester</span><span style="font-weight: 500;">Semester ${cardData.semester}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border-glass);">
-          <span style="color: var(--text-secondary);">Teacher</span><span style="font-weight: 500;">${cardData.teacher}</span>
-        </div>
-        <div style="display: flex; justify-content: space-between; padding: 8px 0;">
-          <span style="color: var(--text-secondary);">Status</span><span style="font-weight: 500; color: #4ade80;">Active</span>
-        </div>
-      </div>
-      <div style="margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end;">
-        <button onclick="this.closest('.modal-overlay').remove()" class="form-action-trigger" style="background: rgba(255,255,255,0.1); padding: 8px 20px;">Close</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(modal);
-}
-
-function deleteAcademicCard(subject) {
-  if (activeUserEmail !== 'ankushadmin@gmail.com') { showNotification('Only admins can delete academic resources.'); return; }
-  const confirmModal = document.createElement('div');
-  confirmModal.className = 'modal-overlay';
-  confirmModal.style.zIndex = '3000';
-  confirmModal.innerHTML = `
-    <div class="modal-glass-card" style="max-width: 400px;">
-      <div class="modal-top-bar"><h3 style="color: #ef4444;">Delete Academic Resource</h3><button class="modal-dismiss-icon" onclick="this.closest('.modal-overlay').remove()">&times;</button></div>
-      <div style="padding: 16px 0; text-align: center;">
-        <i class="fa-solid fa-triangle-exclamation" style="font-size: 3rem; color: #ef4444; margin-bottom: 12px;"></i>
-        <p style="color: var(--text-secondary); margin-bottom: 8px;">Are you sure you want to delete "<strong>${subject}</strong>"?</p>
-        <p style="color: var(--text-secondary); font-size: 0.85rem;">This action cannot be undone.</p>
-      </div>
-      <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;">
-        <button onclick="this.closest('.modal-overlay').remove()" class="form-action-trigger" style="background: rgba(255,255,255,0.1); padding: 10px 24px;">Cancel</button>
-        <button id="confirmAcademicDeleteBtn" class="form-action-trigger" style="background: #ef4444; padding: 10px 24px;">Delete</button>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(confirmModal);
-  confirmModal.querySelector('#confirmAcademicDeleteBtn').addEventListener('click', function() {
-    let savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-    savedCards = savedCards.filter(card => card.subject !== subject);
-    localStorage.setItem('academicCards', JSON.stringify(savedCards));
-    fetchDocuments(searchInput ? searchInput.value.trim() : "");
-    showNotification("Academic card deleted.");
-    confirmModal.remove();
-  });
-}
-
-function editAcademicCard(cardData, index) {
-  const subjectInput = document.getElementById('academicSubjectInput');
-  const branchSelect = document.getElementById('academicBranchSelect');
-  const semesterSelect = document.getElementById('academicSemesterSelect');
-  const teacherInput = document.getElementById('academicTeacherInput');
-  if (subjectInput) subjectInput.value = cardData.subject;
-  if (branchSelect) branchSelect.value = cardData.branch;
-  if (semesterSelect) semesterSelect.value = cardData.semester;
-  if (teacherInput) teacherInput.value = cardData.teacher;
-  academicModal.classList.remove('hidden');
-  const originalSubmit = submitAcademicDetailsBtn.onclick;
-  submitAcademicDetailsBtn.onclick = (e) => {
-    e.preventDefault();
-    const subject = subjectInput.value.trim();
-    const branch = branchSelect.value;
-    const semester = semesterSelect.value;
-    const teacher = teacherInput.value.trim();
-    if (!subject || !teacher) { showNotification('Please fill out all fields.'); return; }
-    let savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-    savedCards[index] = {
-      subject, branch, semester, teacher,
-      firstLetter: teacher.charAt(0).toUpperCase() || '?',
-      avatarBgColor: getAvatarColor(teacher),
-      chosenTheme: cardData.chosenTheme || ['banner-blue', 'banner-teal', 'banner-slate'][Math.floor(Math.random() * 3)]
-    };
-    localStorage.setItem('academicCards', JSON.stringify(savedCards));
-    fetchDocuments(searchInput ? searchInput.value.trim() : "");
-    academicModal.classList.add('hidden');
-    showNotification('Academic card updated.');
-    submitAcademicDetailsBtn.onclick = originalSubmit;
-  };
-}
-
-function pinAcademicCard(index) {
-  let savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-  const card = savedCards.splice(index, 1)[0];
-  savedCards.unshift(card);
-  localStorage.setItem('academicCards', JSON.stringify(savedCards));
-  fetchDocuments(searchInput ? searchInput.value.trim() : "");
-  showNotification('Card pinned.');
-}
-
-function moveAcademicCard(index) {
-  let savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-  const card = savedCards.splice(index, 1)[0];
-  showInputModal(
-    "Move Card",
-    `Enter new position (0 to ${savedCards.length}):`,
-    String(savedCards.length),
-    (newIndex) => {
-      if (newIndex !== null && !isNaN(newIndex) && newIndex >= 0 && newIndex <= savedCards.length) {
-        savedCards.splice(parseInt(newIndex), 0, card);
-        localStorage.setItem('academicCards', JSON.stringify(savedCards));
-        fetchDocuments(searchInput ? searchInput.value.trim() : "");
-        showNotification('Card moved.');
-      } else {
-        showNotification('Invalid position.');
-      }
-    }
-  );
-}
-
-function copyAcademicCard(cardData) {
-  const text = `${cardData.subject}\n${cardData.branch} | ${cardData.semester} SEM\nTeacher: ${cardData.teacher}`;
-  navigator.clipboard.writeText(text).then(() => showNotification('Card details copied.')).catch(() => showNotification('Could not copy.'));
-}
-
-function shareAcademicCard(cardData) {
-  if (navigator.share) {
-    navigator.share({ title: cardData.subject, text: `${cardData.subject}\n${cardData.branch} | ${cardData.semester} SEM\nTeacher: ${cardData.teacher}` }).catch(() => {});
-  } else { copyAcademicCard(cardData); }
-}
-
-function showCardMenu(e, cardData, index, isUpper) {
-  e.stopPropagation();
-  const existingMenu = document.querySelector('.card-context-menu');
-  if (existingMenu) existingMenu.remove();
-  const menu = document.createElement('div');
-  menu.className = 'card-context-menu';
-  menu.style.cssText = `position:fixed;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:6px 0;min-width:180px;box-shadow:0 8px 24px rgba(0,0,0,0.5);z-index:9999;color:#e2e8f0;`;
-  let x = e.clientX || e.pageX || 0;
-  let y = e.clientY || e.pageY || 0;
-  menu.style.left = Math.min(x, window.innerWidth - 200) + 'px';
-  menu.style.top = Math.min(y, window.innerHeight - 300) + 'px';
-  let options = [];
-  const isAdmin = activeUserEmail === 'ankushadmin@gmail.com';
-  if (isUpper) {
-    options = [
-      { label: '👁️ View', action: () => { viewAcademicCard(cardData); menu.remove(); } },
-      { label: '✏️ Edit', action: () => { editAcademicCard(cardData, index); menu.remove(); } },
-      { label: '📌 Pin', action: () => { pinAcademicCard(index); menu.remove(); } },
-    ];
-    if (isAdmin) options.push({ label: '🗑️ Delete', action: () => { deleteAcademicCard(cardData.subject); menu.remove(); } });
-  } else {
-    options = [
-      { label: '👁️ View', action: () => { viewAcademicCard(cardData); menu.remove(); } },
-      { label: '📌 Pin', action: () => { pinAcademicCard(index); menu.remove(); } },
-      { label: '📂 Move', action: () => { moveAcademicCard(index); menu.remove(); } },
-      { label: '🔗 Share', action: () => { shareAcademicCard(cardData); menu.remove(); } }
-    ];
+async function renderDocumentCard(doc, container, isPendingView) {
+  const card = document.createElement('div');
+  card.className = 'document-row-card';
+  const isDraft = doc.status === 'draft';
+  const isPending = doc.status === 'pending_approval';
+  const owner = isResourceOwner(doc);
+  const canDel = canDirectlyDelete(doc);
+  const canReq = canRequestDelete(doc);
+  const canCWReq = canCollegeWideRequestDelete(doc);
+  let pillsHtml = `<span style="background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.category || 'University Paper'}</span>`;
+  if (isDraft) pillsHtml += `<span style="background:#f59e0b;color:#000;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;">DRAFT</span>`;
+  if (isPending) pillsHtml += `<span style="background:#3b82f6;color:#fff;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;">PENDING</span>`;
+  if (owner) pillsHtml += `<span style="background:rgba(74,222,128,0.15);color:#4ade80;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;">YOUR UPLOAD</span>`;
+  if (doc.department) pillsHtml += `<span style="background:rgba(74,222,128,0.15);color:#4ade80;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;">${doc.department}</span>`;
+  if (doc.branch) pillsHtml += `<span style="background:rgba(99,102,241,0.15);color:#a5b4fc;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;">${doc.branch}</span>`;
+  let approvalInfo = '';
+  if (isPending) {
+    approvalInfo = `<p style="color:#fbbf24;font-size:0.8rem;margin-top:4px;">Stage: ${doc.approvalStage || 'pending'}</p>`;
   }
-  options.forEach(opt => {
-    const item = document.createElement('div');
-    item.style.cssText = `padding:8px 16px;cursor:pointer;font-size:0.85rem;transition:background 0.15s;display:flex;align-items:center;gap:8px;`;
-    if (opt.label.includes('Delete')) item.style.color = '#ef4444';
-    item.textContent = opt.label;
-    item.onmouseover = () => item.style.background = '#334155';
-    item.onmouseout = () => { item.style.background = 'transparent'; if (opt.label.includes('Delete')) item.style.color = '#ef4444'; };
-    item.onclick = (ev) => { ev.stopPropagation(); opt.action(); };
-    menu.appendChild(item);
-  });
-  document.body.appendChild(menu);
-  setTimeout(() => {
-    document.addEventListener('click', function removeMenu(e) {
-      if (!menu.contains(e.target)) { menu.remove(); document.removeEventListener('click', removeMenu); }
-    });
-  }, 10);
-}
-
-function setupCardEventListeners() {
-  resultsGrid.addEventListener('click', function(e) {
-    const upperBtn = e.target.closest('.upper-menu-btn');
-    if (upperBtn) {
-      e.stopPropagation();
-      const card = upperBtn.closest('.classroom-card');
-      if (!card) return;
-      const subject = card.getAttribute('data-subject');
-      const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-      const cardData = savedCards.find(c => c.subject === subject);
-      const cardIndex = savedCards.findIndex(c => c.subject === subject);
-      if (cardData) showCardMenu(e, cardData, cardIndex, true);
-      return;
-    }
-    const lowerBtn = e.target.closest('.lower-menu-btn');
-    if (lowerBtn) {
-      e.stopPropagation();
-      const card = lowerBtn.closest('.classroom-card');
-      if (!card) return;
-      const subject = card.getAttribute('data-subject');
-      const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-      const cardData = savedCards.find(c => c.subject === subject);
-      const cardIndex = savedCards.findIndex(c => c.subject === subject);
-      if (cardData) showCardMenu(e, cardData, cardIndex, false);
-      return;
-    }
-  });
+  let rejectionInfo = '';
+  if (doc.rejectionReason && doc.status === 'draft') {
+    rejectionInfo = `<p style="color:#fca5a5;font-size:0.8rem;margin-top:4px;padding:6px;background:rgba(239,68,68,0.1);border-radius:4px;">Rejected: ${doc.rejectionReason}</p>`;
+  }
+  let actionButtons = `<button class="action-btn-link view-btn" style="background:rgba(99,102,241,0.1);color:#a5b4fc;border:1px solid rgba(99,102,241,0.2);padding:6px 14px;border-radius:6px;font-weight:500;cursor:pointer;font-size:0.9rem;">View</button>`;
+  if (doc.fileUrl) {
+    actionButtons += `<a href="${doc.fileUrl}" target="_blank" rel="noopener" download class="action-btn-link get-btn" style="display:inline-flex;align-items:center;justify-content:center;background:var(--accent-gradient);color:#ffffff;padding:6px 14px;border-radius:6px;font-weight:500;text-decoration:none;font-size:0.9rem;">Get</a>`;
+  }
+  if (canManageDrafts() && isDraft) {
+    actionButtons += `<button class="action-btn-link publish-btn" style="background:rgba(74,222,128,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.2);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.9rem;">Submit for Approval</button>`;
+  }
+  if (canApproveDocuments() && isPending) {
+    actionButtons += `<button class="action-btn-link approve-btn" style="background:rgba(74,222,128,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.2);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.9rem;">Approve</button>`;
+    actionButtons += `<button class="action-btn-link reject-btn" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.9rem;">Reject</button>`;
+  }
+  if (canEditDocuments() && !isPending) {
+    actionButtons += `<button class="action-btn-link edit-btn" title="Edit" style="background:rgba(234,179,8,0.1);color:#fde047;border:1px solid rgba(234,179,8,0.2);padding:6px 10px;border-radius:6px;cursor:pointer;font-size:0.9rem;"><i class="fa-solid fa-pen"></i></button>`;
+  }
+  let deleteTooltip = "";
+  let deleteClass = "";
+  if (canDel && !isPending && !isDraft) {
+    deleteTooltip = "Delete this resource";
+    deleteClass = "delete-btn";
+  } else if ((canReq || canCWReq) && !isPending && !isDraft) {
+    deleteTooltip = "Request deletion of this resource";
+    deleteClass = "req-delete-btn";
+  }
+  if (deleteTooltip) {
+    actionButtons += `<button class="action-btn-link ${deleteClass}" title="${deleteTooltip}" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.9rem;"><i class="fa-solid fa-trash"></i> Delete</button>`;
+  }
+  if (canCWReq && !isPending && !isDraft) {
+    actionButtons += `<button class="action-btn-link req-delete-cw-btn" title="Request deletion from uploader" style="background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.2);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.9rem;"><i class="fa-solid fa-paper-plane"></i> Request Delete from Uploader</button>`;
+  }
+  card.innerHTML = `
+    <div class="doc-body-details">
+      <h3>${doc.title} ${isDraft ? '<span style="background:#f59e0b;color:#000;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700;margin-left:4px;">DRAFT</span>' : ''} ${isPending ? '<span style="background:#3b82f6;color:#fff;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700;margin-left:4px;">PENDING</span>' : ''}</h3>
+      <p>Category: ${doc.category} ${doc.pageCount ? `• ${doc.pageCount} pages` : ''}</p>
+      ${doc.year ? `<p>Session: ${doc.year}</p>` : ''}
+      ${doc.semester ? `<p>Semester: ${doc.semester}</p>` : ''}
+      ${doc.branch ? `<p>Branch: ${doc.branch}</p>` : ''}
+      ${doc.officialDocType ? `<p>Doc Type: ${doc.officialDocType}</p>` : ''}
+      ${doc.paperType ? `<p>Type: ${doc.paperType}</p>` : ''}
+      ${doc.department ? `<p>Department: ${doc.department}</p>` : ''}
+      ${doc.docDate ? `<p>Date: ${doc.docDate}</p>` : ''}
+      ${doc.uploadedByName || doc.uploadedBy ? `<p>Uploaded By: ${doc.uploadedByName || doc.uploadedBy}</p>` : ''}
+      ${approvalInfo}
+      ${rejectionInfo}
+      <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;">${pillsHtml}</div>
+    </div>
+    <div class="doc-action-zone" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      ${actionButtons}
+    </div>
+  `;
+  container.appendChild(card);
+  card.querySelector('.view-btn').addEventListener('click', () => openPreviewModal(doc.title, doc.fileUrl, doc._id));
+  const getBtn = card.querySelector('.get-btn');
+  if (getBtn) getBtn.addEventListener('click', () => logHistory(doc.title, doc._id));
+  const editBtn = card.querySelector('.edit-btn');
+  if (editBtn) editBtn.addEventListener('click', () => openEditDocumentModal(doc));
+  const deleteBtn = card.querySelector('.delete-btn');
+  if (deleteBtn) deleteBtn.addEventListener('click', () => showDeleteResourceConfirm(doc, (reason) => deleteDocument(doc._id, reason)));
+  const reqDeleteBtn = card.querySelector('.req-delete-btn');
+  if (reqDeleteBtn) reqDeleteBtn.addEventListener('click', () => showRequestDeleteModal(doc));
+  const reqDeleteCWBtn = card.querySelector('.req-delete-cw-btn');
+  if (reqDeleteCWBtn) reqDeleteCWBtn.addEventListener('click', () => showRequestDeleteModal(doc));
+  const publishBtn = card.querySelector('.publish-btn');
+  if (publishBtn) publishBtn.addEventListener('click', () => publishDraft(doc._id));
+  const approveBtn = card.querySelector('.approve-btn');
+  if (approveBtn) approveBtn.addEventListener('click', () => approveDocument(doc._id));
+  const rejectBtn = card.querySelector('.reject-btn');
+  if (rejectBtn) rejectBtn.addEventListener('click', () => rejectDocument(doc._id));
 }
 
 async function fetchDocuments(query = "") {
   if (isLoading) return;
   isLoading = true;
-  const shouldRenderAcademic = isUserLoggedIn && currentSelectedCategory === "Academic Resource";
   const isDraftView = currentSelectedCategory === "drafts";
   const isPendingView = currentSelectedCategory === "pending_approval";
 
@@ -2188,15 +2320,6 @@ async function fetchDocuments(query = "") {
     if (resultsGrid) {
       const documentCards = resultsGrid.querySelectorAll('.document-row-card');
       documentCards.forEach(card => card.remove());
-      const academicCards = resultsGrid.querySelectorAll('.classroom-card');
-      academicCards.forEach(card => card.remove());
-      if (shouldRenderAcademic) { renderAcademicCards(); setupCardEventListeners(); }
-      else if (currentSelectedCategory === "Academic Resource") {
-        const emptyMsg = document.createElement('span');
-        emptyMsg.className = 'history-empty-state';
-        emptyMsg.textContent = 'Please login to view academic resources.';
-        resultsGrid.appendChild(emptyMsg);
-      }
     }
     isLoading = false;
     return;
@@ -2210,9 +2333,8 @@ async function fetchDocuments(query = "") {
 
   try {
     let url = `${API_URL}/documents/search?q=${encodeURIComponent(query)}`;
-    if (currentSelectedCategory === "drafts") {
-      url += `&status=draft`;
-    } else if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended" && currentSelectedCategory !== "pending_approval") {
+    if (currentSelectedCategory === "drafts") url += `&status=draft`;
+    else if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended" && currentSelectedCategory !== "pending_approval" && currentSelectedCategory !== "deletion_requests") {
       url += `&category=${encodeURIComponent(currentSelectedCategory)}`;
     }
     if (currentSelectedCategory === "recommended" && currentUserBranch) {
@@ -2220,16 +2342,10 @@ async function fetchDocuments(query = "") {
       if (currentUserSemester) url += `&semester=${encodeURIComponent(currentUserSemester)}`;
     }
     if (isCollegeWideRole()) {
-      if (currentSelectedDepartmentFilter && currentSelectedDepartmentFilter !== 'all') {
-        url += `&department=${encodeURIComponent(currentSelectedDepartmentFilter)}`;
-      }
-      if (currentSelectedBranchFilter && currentSelectedBranchFilter !== 'all') {
-        url += `&branch=${encodeURIComponent(currentSelectedBranchFilter)}`;
-      }
+      if (currentSelectedDepartmentFilter && currentSelectedDepartmentFilter !== 'all') url += `&department=${encodeURIComponent(currentSelectedDepartmentFilter)}`;
+      if (currentSelectedBranchFilter && currentSelectedBranchFilter !== 'all') url += `&branch=${encodeURIComponent(currentSelectedBranchFilter)}`;
     } else if (currentUserDepartment === DEPARTMENTS.CSE) {
-      if (currentSelectedBranchFilter && currentSelectedBranchFilter !== 'all') {
-        url += `&branch=${encodeURIComponent(currentSelectedBranchFilter)}`;
-      }
+      if (currentSelectedBranchFilter && currentSelectedBranchFilter !== 'all') url += `&branch=${encodeURIComponent(currentSelectedBranchFilter)}`;
     }
     const response = await fetch(url, { headers: { "Authorization": `Bearer ${authToken}` } });
     if (!response.ok) {
@@ -2250,17 +2366,14 @@ async function fetchDocuments(query = "") {
     docs = docs.filter(doc => userCanAccessBranch(doc.branch, doc.department));
     if (query === "") cachedDocuments = docs;
 
-    if (isDraftView) {
-      docs = docs.filter(doc => doc.status === 'draft');
-    } else if (isPendingView) {
-      docs = docs.filter(doc => doc.status === 'pending_approval');
-    } else if (currentSelectedCategory === "recommended" && currentUserBranch) {
+    if (isDraftView) docs = docs.filter(doc => doc.status === 'draft');
+    else if (currentSelectedCategory === "recommended" && currentUserBranch) {
       docs = docs.filter(doc => {
         const matchesBranch = doc.branch === currentUserBranch || doc.branch === "All Branches";
         const matchesSem = !currentUserSemester || String(doc.semester) === String(currentUserSemester);
         return doc.category === "University Paper" && matchesBranch && matchesSem;
       });
-    } else if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended" && currentSelectedCategory !== "drafts" && currentSelectedCategory !== "pending_approval") {
+    } else if (currentSelectedCategory !== "all" && currentSelectedCategory !== "recommended" && currentSelectedCategory !== "drafts" && currentSelectedCategory !== "pending_approval" && currentSelectedCategory !== "deletion_requests") {
       docs = docs.filter(doc => doc.category === currentSelectedCategory);
     }
 
@@ -2271,12 +2384,11 @@ async function fetchDocuments(query = "") {
     if (!resultsGrid) { isLoading = false; return; }
     const documentCards = resultsGrid.querySelectorAll('.document-row-card');
     documentCards.forEach(card => card.remove());
-    if (!shouldRenderAcademic && !isDraftView && !isPendingView) {
+    if (!isDraftView && !isPendingView) {
       const academicCards = resultsGrid.querySelectorAll('.classroom-card');
       academicCards.forEach(card => card.remove());
     }
-    const isAdmin = currentUserRole === ROLES.ADMIN;
-    if (docs.length === 0 && !shouldRenderAcademic) {
+    if (docs.length === 0) {
       const emptyMsg = document.createElement('span');
       emptyMsg.className = 'history-empty-state';
       if (isDraftView) emptyMsg.textContent = 'No drafts saved.';
@@ -2284,129 +2396,10 @@ async function fetchDocuments(query = "") {
       else emptyMsg.textContent = query ? `No documents found matching "${query}"` : 'No documents available.';
       resultsGrid.appendChild(emptyMsg);
     }
-    docs.forEach((doc) => {
-      const card = document.createElement('div');
-      card.className = 'document-row-card';
-      const isDraft = doc.status === 'draft';
-      const isPending = doc.status === 'pending_approval';
-      let pillsHtml = `<span style="background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.category || 'University Paper'}</span>`;
-      if (isDraft) {
-        pillsHtml += `<span style="background: #f59e0b; color: #000; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">DRAFT</span>`;
-      }
-      if (isPending) {
-        pillsHtml += `<span style="background: #3b82f6; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">PENDING</span>`;
-      }
-      if (doc.department) {
-        pillsHtml += `<span style="background: rgba(74,222,128,0.15); color: #4ade80; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.department}</span>`;
-      }
-      if (doc.category === 'University Paper') {
-        if (doc.branch) pillsHtml += `<span style="background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.branch}</span>`;
-        if (doc.semester) pillsHtml += `<span style="background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Semester ${doc.semester}</span>`;
-        if (doc.paperType) pillsHtml += `<span style="background: rgba(168,85,247,0.15); color: #c084fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.paperType}</span>`;
-        if (doc.year) pillsHtml += `<span style="background: rgba(234,179,8,0.15); color: #fde047; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Session: ${doc.year}</span>`;
-      } else {
-        if (doc.officialDocType) pillsHtml += `<span style="background: rgba(168,85,247,0.15); color: #c084fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.officialDocType}</span>`;
-        if (doc.year && doc.year !== 'All Years') pillsHtml += `<span style="background: rgba(234,179,8,0.15); color: #fde047; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.year}</span>`;
-        if (doc.semester && doc.semester !== 'All Semesters') pillsHtml += `<span style="background: rgba(234,179,8,0.15); color: #fde047; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Semester ${doc.semester}</span>`;
-        if (doc.branch && doc.branch !== 'All Branches') pillsHtml += `<span style="background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.branch}</span>`;
-        if (doc.session) pillsHtml += `<span style="background: rgba(234,179,8,0.15); color: #fde047; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Session: ${doc.session}</span>`;
-      }
-      if (doc.ocrApplied) pillsHtml += `<span style="background: rgba(74,222,128,0.15); color: #4ade80; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">OCR</span>`;
-      if (doc.isScanned) pillsHtml += `<span style="background: rgba(251,146,60,0.15); color: #fb923c; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Scanned</span>`;
-      if (doc.ocrConfidence && doc.ocrConfidence > 0) pillsHtml += `<span style="background: rgba(148,163,184,0.15); color: #94a3b8; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.ocrConfidence}%</span>`;
-      if (doc.relevanceScore && doc.relevanceScore > 0) pillsHtml += `<span style="background: rgba(251,191,36,0.15); color: #fbbf24; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">Score: ${doc.relevanceScore}</span>`;
-      const hasFile = !!doc.fileUrl;
-      let relevanceInfo = '';
-      const searchLower = (query || '').toLowerCase();
-      const textLower = (doc.extractedText || '').toLowerCase();
-      const textHindiLower = (doc.extractedTextHindi || '').toLowerCase();
-      if (query && textLower.includes(searchLower)) {
-        relevanceInfo = `<span style="color: #4ade80; font-size: 0.75rem; margin-left: 8px;">✓ Content match</span>`;
-      }
-      if (query && textHindiLower.includes(searchLower)) {
-        relevanceInfo = `<span style="color: #4ade80; font-size: 0.75rem; margin-left: 8px;">✓ Hindi content match</span>`;
-      }
-      let approvalInfo = '';
-      if (isPending) {
-        const submitterRole = doc.uploadedByRole || 'unknown';
-        const currentStage = doc.approvalStage || 'unknown';
-        const chain = getApprovalChain(submitterRole);
-        approvalInfo = `<p style="color: #fbbf24; font-size: 0.8rem; margin-top: 4px;">Stage: ${currentStage} | Chain: ${chain.join(' → ') || 'None'}</p>`;
-      }
-      let rejectionInfo = '';
-      if (doc.rejectionReason && doc.status === 'draft') {
-        rejectionInfo = `<p style="color: #fca5a5; font-size: 0.8rem; margin-top: 4px; padding: 6px; background: rgba(239,68,68,0.1); border-radius: 4px;">Rejected: ${doc.rejectionReason}</p>`;
-      }
-      card.innerHTML = `
-        <div class="doc-body-details">
-          <h3>${doc.title} ${relevanceInfo} ${isDraft ? '<span style="background: #f59e0b; color: #000; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; margin-left: 4px;">DRAFT</span>' : ''} ${isPending ? '<span style="background: #3b82f6; color: #fff; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 700; margin-left: 4px;">PENDING</span>' : ''}</h3>
-          <p>Category: ${doc.category} ${doc.pageCount ? `• ${doc.pageCount} pages` : ''}</p>
-          ${doc.category === 'University Paper' && doc.year ? `<p>Session: ${doc.year}</p>` : ''}
-          ${doc.category === 'University Paper' && doc.semester ? `<p>Semester: ${doc.semester}</p>` : ''}
-          ${doc.category === 'University Paper' && doc.branch ? `<p>Branch: ${doc.branch}</p>` : ''}
-          ${doc.category === 'University Paper' && doc.paperType ? `<p>Type: ${doc.paperType}</p>` : ''}
-          ${doc.category === 'Official Update' && doc.officialDocType ? `<p>Doc Type: ${doc.officialDocType}</p>` : ''}
-          ${doc.category === 'Official Update' && doc.year && doc.year !== 'All Years' ? `<p>Year: ${doc.year}</p>` : ''}
-          ${doc.category === 'Official Update' && doc.session ? `<p>Session: ${doc.session}</p>` : ''}
-          ${doc.category === 'Official Update' && doc.semester && doc.semester !== 'All Semesters' ? `<p>Semester: ${doc.semester}</p>` : ''}
-          ${doc.category === 'Official Update' && doc.branch && doc.branch !== 'All Branches' ? `<p>Branch: ${doc.branch}</p>` : ''}
-          ${doc.department ? `<p>Department: ${doc.department}</p>` : ''}
-          ${doc.docDate ? `<p>Date: ${doc.docDate}</p>` : ''}
-          ${approvalInfo}
-          ${rejectionInfo}
-          ${!hasFile ? `<p style="color:#ef4444; font-size:0.8rem;">File missing on storage — re-upload required.</p>` : ''}
-          ${query && doc.extractedText ? `<p style="color: #94a3b8; font-size: 0.75rem; margin-top: 4px;">📄 Content: ${doc.extractedText.substring(0, 150)}${doc.extractedText.length > 150 ? '...' : ''}</p>` : ''}
-          ${query && doc.extractedTextHindi ? `<p style="color: #94a3b8; font-size: 0.75rem; margin-top: 2px;">📄 Hindi: ${doc.extractedTextHindi.substring(0, 150)}${doc.extractedTextHindi.length > 150 ? '...' : ''}</p>` : ''}
-          <div style="margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px;">${pillsHtml}</div>
-        </div>
-        <div class="doc-action-zone" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-          <button class="action-btn-link view-btn" style="background: rgba(99,102,241,0.1); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: pointer; font-size: 0.9rem;">View</button>
-          ${hasFile ? `<a href="${doc.fileUrl}" target="_blank" rel="noopener" download class="action-btn-link get-btn" style="display: inline-flex; align-items: center; justify-content: center; background: var(--accent-gradient); color: #ffffff; padding: 6px 14px; border-radius: 6px; font-weight: 500; text-decoration: none; font-size: 0.9rem;">Get</a>` : `<button class="action-btn-link" disabled style="background: rgba(148,163,184,0.1); color: #64748b; border: 1px solid rgba(148,163,184,0.2); padding: 6px 14px; border-radius: 6px; font-weight: 500; cursor: not-allowed; font-size: 0.9rem;">Get</button>`}
-          ${canManageDrafts() && isDraft ? `<button class="action-btn-link publish-btn" style="background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Submit for Approval</button>` : ''}
-          ${canManageDrafts() && isDraft ? `<button class="action-btn-link delete-draft-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete Draft</button>` : ''}
-          ${canApproveDocuments() && isPending ? `<button class="action-btn-link approve-btn" style="background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Approve</button>` : ''}
-          ${canApproveDocuments() && isPending ? `<button class="action-btn-link reject-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Reject</button>` : ''}
-          ${canEditDocuments() && !isDraft && !isPending ? `<button class="action-btn-link edit-btn" title="Edit" style="background: rgba(234,179,8,0.1); color: #fde047; border: 1px solid rgba(234,179,8,0.2); padding: 6px 10px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;"><i class="fa-solid fa-pen"></i></button>` : ''}
-          ${canDeleteDocuments() && !isDraft && !isPending ? `<button class="action-btn-link delete-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 0.9rem;" data-id="${doc._id}">Delete</button>` : ''}
-        </div>
-      `;
-      card.querySelector('.view-btn').addEventListener('click', () => openPreviewModal(doc.title, doc.fileUrl, doc._id));
-      const getBtn = card.querySelector('.get-btn');
-      if (getBtn) getBtn.addEventListener('click', () => logHistory(doc.title, doc._id));
-      const editBtn = card.querySelector('.edit-btn');
-      if (editBtn) editBtn.addEventListener('click', () => openEditDocumentModal(doc));
-      const deleteBtn = card.querySelector('.delete-btn');
-      if (deleteBtn) deleteBtn.addEventListener('click', () => deleteDocument(doc._id));
-      const publishBtn = card.querySelector('.publish-btn');
-      if (publishBtn) publishBtn.addEventListener('click', () => publishDraft(doc._id));
-      const deleteDraftBtn = card.querySelector('.delete-draft-btn');
-      if (deleteDraftBtn) deleteDraftBtn.addEventListener('click', () => deleteDraft(doc._id));
-      const approveBtn = card.querySelector('.approve-btn');
-      if (approveBtn) approveBtn.addEventListener('click', () => approveDocument(doc._id));
-      const rejectBtn = card.querySelector('.reject-btn');
-      if (rejectBtn) rejectBtn.addEventListener('click', () => rejectDocument(doc._id));
-      resultsGrid.appendChild(card);
-    });
-    const isAdminEmail = activeUserEmail === 'ankushadmin@gmail.com';
-    if (academicActionBtn) {
-      if (currentSelectedCategory === "Academic Resource" && isAdminEmail && isUserLoggedIn) {
-        academicActionBtn.classList.remove('hidden');
-        if (resultsMeta) resultsMeta.classList.add('hidden');
-      } else {
-        academicActionBtn.classList.add('hidden');
-        if (resultsMeta) resultsMeta.classList.remove('hidden');
-      }
+    for (const doc of docs) {
+      await renderDocumentCard(doc, resultsGrid, isPendingView);
     }
-    if (shouldRenderAcademic) { renderAcademicCards(); setupCardEventListeners(); }
-    else if (currentSelectedCategory === "Academic Resource" && !isUserLoggedIn) {
-      const emptyMsg = resultsGrid.querySelector('.history-empty-state');
-      if (!emptyMsg) {
-        const msg = document.createElement('span');
-        msg.className = 'history-empty-state';
-        msg.textContent = 'Please login to view academic resources.';
-        resultsGrid.appendChild(msg);
-      }
-    }
+    if (resultsMeta) resultsMeta.classList.remove('hidden');
   } catch (err) {
     console.error("Error fetching documents:", err);
     if (resultsGrid) {
@@ -2446,6 +2439,9 @@ function renderActionButtons() {
     if (draftTab) draftTab.classList.add('hidden');
     if (draftsPageView) draftsPageView.classList.add('hidden');
     removePendingApprovalTab();
+    removeDeletionRequestsTab();
+  } else if (isUserLoggedIn) {
+    updateRequestTabBadge(0);
   }
   renderDepartmentBranchFilters();
 }
@@ -2471,12 +2467,8 @@ window.addEventListener('DOMContentLoaded', async () => {
       if (response.ok) {
         const user = await response.json();
         handleUserSession(user);
-        if (canManageDrafts()) {
-          fetchDrafts();
-        }
-        if (canApproveDocuments()) {
-          fetchPendingApprovals();
-        }
+        if (canManageDrafts()) fetchDrafts();
+        if (canApproveDocuments()) fetchPendingApprovals();
       } else {
         localStorage.removeItem('token');
         authToken = null;
@@ -2493,325 +2485,16 @@ window.addEventListener('DOMContentLoaded', async () => {
     isUserLoggedIn = false;
     fetchDocuments();
   }
-  setupCardEventListeners();
 });
-
-if (academicActionBtn) {
-  academicActionBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (currentUserRole !== ROLES.ADMIN) {
-      showNotification("Access denied. Admin only.");
-      return;
-    }
-    academicModal.classList.remove('hidden');
-  });
-}
-
-if (closeAcademicModalBtn) {
-  closeAcademicModalBtn.addEventListener('click', () => { academicModal.classList.add('hidden'); });
-}
 
 window.addEventListener('click', (e) => {
-  if (e.target === academicModal) academicModal.classList.add('hidden');
-});
-
-function getAvatarColor(username) {
-  if (!username || username.trim() === "") return '#4f46e5';
-  let hash = 0;
-  const name = username.trim();
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  let color = '#';
-  for (let i = 0; i < 3; i++) {
-    const value = (hash >> (i * 8)) & 0xFF;
-    const baselineValue = Math.floor((value % 120) + 80);
-    color += ('00' + baselineValue.toString(16)).substr(-2);
+  if (e.target === previewModal) {
+    if (previewModal) previewModal.classList.add('hidden');
+    if (previewContainer) previewContainer.innerHTML = '';
   }
-  return color;
-}
-
-function generateCardHTML(data, isAdmin = false, index = 0) {
-  const upperMenuStyle = isAdmin ? '' : 'display: none;';
-  return `
-    <div class="classroom-card" data-subject="${data.subject}" data-index="${index}" style="width: 300px; min-height: 280px; border: 1px solid #dadce0; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; position: relative; background: #fff; box-shadow: 0 1px 2px 0 rgba(60,64,67,0.3), 0 1px 3px 1px rgba(60,64,67,0.15); cursor: pointer;">
-      <div class="card-header-banner ${data.chosenTheme}" style="position: relative; padding: 16px; min-height: 100px; color: white; display: flex; flex-direction: column; justify-content: space-between;">
-        <div class="banner-content" style="max-width: 70%;">
-          <h3 class="course-title" title="${data.subject}" style="margin: 0; font-size: 1.1rem; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-decoration: underline;">${data.subject.toUpperCase()}</h3>
-          <p class="course-subtitle" style="margin: 4px 0 0 0; font-size: 0.85rem; opacity: 0.9;">B.TECH | ${data.branch.toUpperCase()} | ${data.semester} SEM</p>
-        </div>
-        <p class="teacher-name" style="margin: 12px 0 0 0; font-size: 0.8rem; opacity: 0.9; text-transform: uppercase;">${data.teacher}</p>
-        <button class="banner-options-btn upper-menu-btn" style="position: absolute; top: 12px; right: 12px; background: none; border: none; color: white; cursor: pointer; font-size: 1rem; ${upperMenuStyle}">
-          <i class="fas fa-ellipsis-v"></i>
-        </button>
-        <div class="card-avatar-container" style="position: absolute; right: 24px; bottom: -30px; z-index: 2;">
-          <div class="avatar-letter" style="background-color: ${data.avatarBgColor}; width: 65px; height: 65px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-size: 1.75rem; font-weight: 400; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            ${data.firstLetter}
-          </div>
-        </div>
-      </div>
-      <div class="card-body" style="flex-grow: 1; padding: 12px 16px; background: white; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #e0e0e0;">
-        <span style="font-size: 0.8rem; color: #5f6368;">${data.semester} SEM • ${data.branch}</span>
-        <div class="card-actions" style="display: flex; gap: 4px;">
-          <button class="action-btn lower-menu-btn" title="More options" style="background: none; border: none; color: #5f6368; cursor: pointer; font-size: 1.1rem; padding: 4px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-            <i class="fas fa-ellipsis-v"></i>
-          </button>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
-function renderAcademicCards() {
-  if (!isUserLoggedIn) {
-    const existingCards = resultsGrid.querySelectorAll('.classroom-card');
-    existingCards.forEach(card => card.remove());
-    return;
+  if (e.target === editPopup) {
+    if (editPopup) editPopup.classList.add('hidden');
+    editingDocId = null;
   }
-  const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-  const isAdmin = activeUserEmail === 'ankushadmin@gmail.com';
-  const existingCards = resultsGrid.querySelectorAll('.classroom-card');
-  existingCards.forEach(card => card.remove());
-  if (savedCards.length === 0) {
-    if (!resultsGrid.querySelector('.history-empty-state')) {
-      const emptyMsg = document.createElement('span');
-      emptyMsg.className = 'history-empty-state';
-      emptyMsg.textContent = 'No academic resources added yet.';
-      resultsGrid.appendChild(emptyMsg);
-    }
-    return;
-  }
-  savedCards.forEach((cardData, index) => {
-    resultsGrid.insertAdjacentHTML('beforeend', generateCardHTML(cardData, isAdmin, index));
-  });
-  const emptyState = resultsGrid.querySelector('.history-empty-state');
-  if (emptyState) emptyState.remove();
-}
-
-let currentClassroomCard = null;
-let classroomAnnouncements = JSON.parse(localStorage.getItem('classroomAnnouncements')) || {};
-
-function openClassroomModal(cardData) {
-  currentClassroomCard = cardData;
-  const modal = document.getElementById('classroomModal');
-  const title = document.getElementById('classroomTitle');
-  const subtitle = document.getElementById('classroomSubtitle');
-  title.textContent = cardData.subject || 'Unknown Subject';
-  subtitle.textContent = `B.TECH | ${(cardData.branch || 'N/A').toUpperCase()} | ${cardData.semester || '?'} SEM | 2025-26`;
-  modal.classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
-  loadClassroomAnnouncements(cardData.subject);
-  document.querySelectorAll('.classroom-tab').forEach(tab => {
-    tab.addEventListener('click', function() {
-      document.querySelectorAll('.classroom-tab').forEach(t => t.classList.remove('active'));
-      this.classList.add('active');
-      const tabName = this.dataset.tab;
-      document.querySelectorAll('.classroom-tab-content').forEach(content => content.classList.remove('active'));
-      document.getElementById(`classroom${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`).classList.add('active');
-    });
-  });
-}
-
-function closeClassroomModal() {
-  document.getElementById('classroomModal').classList.add('hidden');
-  document.body.style.overflow = '';
-  currentClassroomCard = null;
-}
-
-document.getElementById('closeClassroomModalBtn').addEventListener('click', closeClassroomModal);
-document.getElementById('classroomModal').addEventListener('click', function(e) {
-  if (e.target === this) closeClassroomModal();
+  if (e.target === authModal) authModal.classList.add('hidden');
 });
-
-function loadClassroomAnnouncements(subject) {
-  const container = document.getElementById('announcementsList');
-  if (!classroomAnnouncements[subject]) classroomAnnouncements[subject] = [];
-  container.innerHTML = '';
-  if (classroomAnnouncements[subject].length === 0) {
-    const emptyMsg = document.createElement('p');
-    emptyMsg.style.color = '#5f6368';
-    emptyMsg.style.textAlign = 'center';
-    emptyMsg.style.padding = '20px';
-    emptyMsg.textContent = 'No announcements yet. Post your first announcement!';
-    container.appendChild(emptyMsg);
-    return;
-  }
-  const isAdmin = activeUserEmail === 'ankushadmin@gmail.com';
-  classroomAnnouncements[subject].forEach((announcement, index) => {
-    const div = document.createElement('div');
-    div.className = 'announcement-item';
-    const date = new Date(announcement.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    div.innerHTML = `
-      <div class="announcement-header" style="display: flex; justify-content: space-between; align-items: center;">
-        <div style="display: flex; align-items: center; gap: 12px;">
-          <div class="announcement-avatar">${announcement.author.charAt(0).toUpperCase()}</div>
-          <div class="announcement-user">
-            <span class="announcement-name">${announcement.author}</span>
-            <span class="announcement-date">${date}</span>
-          </div>
-        </div>
-        ${isAdmin ? `<button class="delete-announcement-btn" data-subject="${subject}" data-index="${index}" style="background: none; border: none; color: #ef4444; cursor: pointer; font-size: 0.9rem; padding: 4px 8px; border-radius: 4px; transition: background 0.2s;"><i class="fa-solid fa-trash"></i></button>` : ''}
-      </div>
-      <div class="announcement-body">
-        <p>${announcement.text}</p>
-        ${announcement.attachments && announcement.attachments.length > 0 ? `
-          <div class="announcement-attachments">
-            ${announcement.attachments.map((att, idx) => `
-              <div class="attachment-item" onclick="viewAttachment('${subject}', ${index}, ${idx})">
-                <i class="fa-solid fa-file"></i> ${att.name}
-              </div>
-            `).join('')}
-          </div>
-        ` : ''}
-      </div>
-    `;
-    container.appendChild(div);
-  });
-  container.querySelectorAll('.delete-announcement-btn').forEach(btn => {
-    btn.addEventListener('click', function(e) {
-      e.stopPropagation();
-      const subject = this.dataset.subject;
-      const index = parseInt(this.dataset.index);
-      showDeleteConfirmModal(subject, index);
-    });
-    btn.addEventListener('mouseenter', function() { this.style.background = 'rgba(239, 68, 68, 0.1)'; });
-    btn.addEventListener('mouseleave', function() { this.style.background = 'none'; });
-  });
-}
-
-function deleteAnnouncement(subject, index) {
-  if (activeUserEmail !== 'ankushadmin@gmail.com') { showNotification('Only admins can delete announcements.'); return; }
-  if (classroomAnnouncements[subject]) {
-    classroomAnnouncements[subject].splice(index, 1);
-    localStorage.setItem('classroomAnnouncements', JSON.stringify(classroomAnnouncements));
-    loadClassroomAnnouncements(subject);
-    showNotification('Announcement deleted successfully.');
-  }
-}
-
-function postAnnouncement() {
-  const input = document.getElementById('announcementInput');
-  const text = input.value.trim();
-  if (!text && !window.pendingAttachments) { showNotification('Please enter an announcement message.'); return; }
-  const subject = currentClassroomCard ? currentClassroomCard.subject : 'Unknown';
-  if (!classroomAnnouncements[subject]) classroomAnnouncements[subject] = [];
-  const attachments = window.pendingAttachments || [];
-  classroomAnnouncements[subject].push({
-    text: text || 'Posted an attachment',
-    author: workspaceName ? workspaceName.textContent : 'Anonymous',
-    timestamp: Date.now(),
-    attachments: attachments
-  });
-  localStorage.setItem('classroomAnnouncements', JSON.stringify(classroomAnnouncements));
-  input.value = '';
-  window.pendingAttachments = [];
-  document.getElementById('streamAttachments').innerHTML = '';
-  loadClassroomAnnouncements(subject);
-  showNotification('Announcement posted successfully!');
-}
-
-document.getElementById('postAnnouncementBtn').addEventListener('click', postAnnouncement);
-document.getElementById('announcementInput').addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postAnnouncement(); }
-});
-
-window.pendingAttachments = [];
-document.getElementById('addAttachmentBtn').addEventListener('click', function() {
-  document.getElementById('announcementFileInput').click();
-});
-document.getElementById('announcementFileInput').addEventListener('change', function(e) {
-  const files = Array.from(e.target.files);
-  const container = document.getElementById('streamAttachments');
-  files.forEach(file => {
-    window.pendingAttachments.push({
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      data: URL.createObjectURL(file)
-    });
-    const div = document.createElement('div');
-    div.className = 'attachment-item';
-    div.innerHTML = `<i class="fa-solid fa-file"></i> ${file.name}`;
-    div.onclick = function() {
-      const idx = window.pendingAttachments.indexOf(window.pendingAttachments.find(a => a.name === file.name));
-      if (idx > -1) {
-        window.pendingAttachments.splice(idx, 1);
-        this.remove();
-        if (window.pendingAttachments.length === 0) container.innerHTML = '';
-      }
-    };
-    container.appendChild(div);
-  });
-  this.value = '';
-});
-
-function viewAttachment(subject, announcementIndex, attachmentIndex) {
-  const announcement = classroomAnnouncements[subject][announcementIndex];
-  const attachment = announcement.attachments[attachmentIndex];
-  if (attachment) window.open(attachment.data, '_blank');
-}
-
-function setupClassroomCardClick() {
-  document.addEventListener('click', function(e) {
-    const card = e.target.closest('.classroom-card');
-    if (card && !e.target.closest('.upper-menu-btn') && !e.target.closest('.lower-menu-btn') && !e.target.closest('button')) {
-      const subject = card.dataset.subject;
-      const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-      const cardData = savedCards.find(c => c.subject === subject);
-      if (cardData) openClassroomModal(cardData);
-    }
-  });
-}
-
-setupClassroomCardClick();
-
-window.addEventListener('load', function() {
-  const targetGrid = document.getElementById('resultsGrid');
-  if (!targetGrid) return;
-  if (currentSelectedCategory === "Academic Resource" && isUserLoggedIn) {
-    const savedCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-    const isAdmin = activeUserEmail === 'ankushadmin@gmail.com';
-    if (savedCards.length > 0) {
-      const emptyState = targetGrid.querySelector('.history-empty-state');
-      if (emptyState) emptyState.remove();
-      savedCards.forEach((cardData, index) => {
-        targetGrid.insertAdjacentHTML('beforeend', generateCardHTML(cardData, isAdmin, index));
-      });
-      setupCardEventListeners();
-    }
-  }
-});
-
-if (submitAcademicDetailsBtn) {
-  submitAcademicDetailsBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    if (currentUserRole !== ROLES.ADMIN) {
-      showNotification("Access denied. Admin only.");
-      return;
-    }
-    const subjectInput = document.getElementById('academicSubjectInput');
-    const branchSelect = document.getElementById('academicBranchSelect');
-    const semesterSelect = document.getElementById('academicSemesterSelect');
-    const teacherInput = document.getElementById('academicTeacherInput');
-    if (!subjectInput || !branchSelect || !semesterSelect || !teacherInput) {
-      console.error('One or more form elements were not found in the DOM.');
-      return;
-    }
-    const subject = subjectInput.value.trim();
-    const branch = branchSelect.value;
-    const semester = semesterSelect.value;
-    const teacher = teacherInput.value.trim();
-    if (!subject || !teacher) { showNotification('Please fill out all fields.'); return; }
-    const firstLetter = teacher.charAt(0).toUpperCase() || '?';
-    const avatarBgColor = getAvatarColor(teacher);
-    const bannerThemes = ['banner-blue', 'banner-teal', 'banner-slate'];
-    const chosenTheme = bannerThemes[Math.floor(Math.random() * bannerThemes.length)];
-    const newCard = { subject, branch, semester, teacher, firstLetter, avatarBgColor, chosenTheme };
-    const currentCards = JSON.parse(localStorage.getItem('academicCards')) || [];
-    currentCards.push(newCard);
-    localStorage.setItem('academicCards', JSON.stringify(currentCards));
-    const searchInputValue = searchInput ? searchInput.value.trim() : "";
-    fetchDocuments(searchInputValue);
-    subjectInput.value = '';
-    teacherInput.value = '';
-    if (academicModal) academicModal.classList.add('hidden');
-  });
-}

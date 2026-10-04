@@ -443,44 +443,6 @@ body {
   transition: background 0.2s, color 0.2s;
 }
 
-.academic-tab-wrapper {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding-right: 8px !important;
-}
-
-.tab-inline-action-btn {
-  background: linear-gradient(135deg, #8a2be2, #6a0dad);
-  color: #ffffff;
-  border: none;
-  border-radius: 50%;
-  width: 26px;
-  height: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  box-shadow: 0 2px 6px rgba(138, 43, 226, 0.4);
-  transition: all 0.2s ease-in-out;
-}
-
-.tab-inline-action-btn:hover {
-  background: linear-gradient(135deg, #9932cc, #7b1fa2);
-  transform: scale(1.08);
-  box-shadow: 0 4px 10px rgba(138, 43, 226, 0.6);
-}
-
-.tab-inline-action-btn:active {
-  transform: scale(0.95);
-}
-
-.tab-inline-action-btn i {
-  font-size: 0.75rem;
-  font-weight: 800;
-}
-
 .filter-tab:hover {
   color: var(--text-primary);
   background: rgba(255, 255, 255, 0.02);
@@ -1135,142 +1097,6 @@ body {
   border-radius: 4px;
 }
 
-.classroom-card {
-  width: 100%;
-  max-width: 320px;
-  background: #ffffff;
-  border: 1px solid #dadce0;
-  border-radius: 8px;
-  overflow: visible;
-  position: relative;
-  box-shadow: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
-  display: flex;
-  flex-direction: column;
-}
-
-.card-header-banner {
-  padding: 16px;
-  color: #ffffff;
-  border-top-left-radius: 7px;
-  border-top-right-radius: 7px;
-  position: relative;
-  height: 105px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-}
-
-.banner-blue {
-  background: #1967d2;
-}
-
-.banner-teal {
-  background: #007b83;
-}
-
-.banner-slate {
-  background: #3c4043;
-}
-
-.course-title {
-  font-size: 1.25rem;
-  font-weight: 500;
-  margin: 0 0 4px 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 80%;
-}
-
-.course-subtitle {
-  font-size: 0.875rem;
-  margin: 0 0 12px 0;
-  opacity: 0.9;
-}
-
-.teacher-name {
-  font-size: 0.8rem;
-  margin: 0;
-  opacity: 0.85;
-}
-
-.card-avatar-container {
-  position: absolute;
-  right: 16px;
-  top: 70px;
-  z-index: 2;
-}
-
-.avatar-letter {
-  width: 65px;
-  height: 65px;
-  border-radius: 50%;
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.75rem;
-  font-weight: 500;
-  border: 3px solid #ffffff;
-  box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
-  text-transform: uppercase;
-}
-
-.card-body {
-  padding: 12px 16px;
-  min-height: 50px;
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  border-bottom-left-radius: 8px;
-  border-bottom-right-radius: 8px;
-  background-color: #ffffff;
-}
-
-.card-actions {
-  display: flex;
-  gap: 16px;
-}
-
-.action-btn {
-  background: none;
-  border: none;
-  color: #5f6368;
-  font-size: 1.1rem;
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.action-btn:hover {
-  background-color: rgba(95, 99, 104, 0.1);
-  color: #1a73e8;
-}
-
-.banner-options-btn {
-  background: none;
-  border: none;
-  color: #ffffff;
-  cursor: pointer;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  transition: background 0.15s;
-}
-
-.banner-options-btn:hover {
-  background: rgba(255, 255, 255, 0.15);
-}
-
 .classroom-modal-card {
   max-width: 800px !important;
   width: 95% !important;
@@ -1611,18 +1437,6 @@ body {
     padding: 8px 12px;
     white-space: nowrap;
   }
-}
-
-.card-context-menu {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-}
-
-.card-context-menu div {
-  font-size: 0.85rem;
-}
-
-.card-context-menu div[style*="color: #ef4444"]:hover {
-  background: rgba(239, 68, 68, 0.15) !important;
 }
 
 .delete-announcement-btn {

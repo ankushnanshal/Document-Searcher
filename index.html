@@ -111,13 +111,6 @@
                         <div class="filter-tab" data-category="University Paper">
                             <i class="fa-solid fa-graduation-cap"></i> University Paper
                         </div>
-                        <div class="filter-tab academic-tab-wrapper" data-category="Academic Resource">
-                            <i class="fa-solid fa-book-bookmark"></i> 
-                            <span>Academic Resource</span>
-                            <button class="tab-inline-action-btn" id="academicActionBtn" type="button" title="Add Academic Resource">
-                                <i class="fa-solid fa-plus"></i>
-                            </button>
-                        </div>
                         <div class="filter-tab hidden" id="recommendedTab" data-category="recommended">
                             <i class="fa-solid fa-star"></i> Recommended
                         </div>
@@ -610,64 +603,6 @@
                 <button id="closePreviewModalBtn" class="modal-dismiss-icon preview-modal-close-btn">&times;</button>
             </div>
             <div id="previewContainer" class="preview-modal-container"></div>
-        </div>
-    </div>
-
-    <div id="academicModal" class="modal-overlay hidden">
-        <div class="modal-glass-card">
-            <div class="modal-top-bar">
-                <h3>Add Academic Details</h3>
-                <button id="closeAcademicModalBtn" class="modal-dismiss-icon">&times;</button>
-            </div>
-            <div class="modal-scroll-body">
-                <div class="input-block">
-                    <label for="academicSubjectInput">Subject Name (Subject Code)</label>
-                    <input type="text" id="academicSubjectInput" placeholder="e.g., Data Structures (CS-301)">
-                </div>
-                <div class="input-block">
-                    <label for="academicBranchSelect">Branch</label>
-                    <select id="academicBranchSelect">
-                        <option value="All Branches">All CSE Branches</option>
-                        <option value="CSE-R">CSE-R</option>
-                        <option value="CSE-A.I">CSE-A.I</option>
-                        <option value="CSE-SF">CSE-SF</option>
-                        <option value="ECE">ECE</option>
-                        <option value="EE">EE</option>
-                        <option value="ME">ME</option>
-                        <option value="CE">CE</option>
-                        <option value="CHE">CHE</option>
-                        <option value="All Branches">All Branches</option>
-                    </select>
-                </div>
-                <div class="input-block">
-                    <label for="academicSemesterSelect">Semester</label>
-                    <select id="academicSemesterSelect">
-                        <option value="All Semesters">All Semesters</option>
-                        <option value="1">Semester 1</option>
-                        <option value="2">Semester 2</option>
-                        <option value="3">Semester 3</option>
-                        <option value="4">Semester 4</option>
-                        <option value="5">Semester 5</option>
-                        <option value="6">Semester 6</option>
-                        <option value="7">Semester 7</option>
-                        <option value="8">Semester 8</option>
-                    </select>
-                </div>
-                <div class="input-block">
-                    <label for="academicYearSelect">Year</label>
-                    <select id="academicYearSelect">
-                        <option value="1st">1st Year</option>
-                        <option value="2nd">2nd Year</option>
-                        <option value="3rd">3rd Year</option>
-                        <option value="4th">4th Year</option>
-                    </select>
-                </div>
-                <div class="input-block">
-                    <label for="academicTeacherInput">Teacher Name</label>
-                    <input type="text" id="academicTeacherInput" placeholder="e.g., Dr. Jane Smith">
-                </div>
-                <button id="submitAcademicDetailsBtn" class="form-action-trigger">Submit Details</button>
-            </div>
         </div>
     </div>
 
