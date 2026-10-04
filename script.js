@@ -21,7 +21,6 @@ let authToken = localStorage.getItem('token') || null;
 let isUserLoggedIn = false;
 let isLoading = false;
 let draftCount = 0;
-let pendingDeleteData = null;
 let pendingApprovalCount = 0;
 
 const ROLES = {
@@ -135,10 +134,6 @@ const fullHistoryContainer = document.getElementById('fullHistoryContainer');
 const historyCountText = document.getElementById('historyCountText');
 const navBrandHome = document.getElementById('navBrandHome');
 const resultsMeta = document.getElementById('resultsMeta');
-const deleteConfirmModal = document.getElementById('deleteConfirmModal');
-const closeDeleteConfirmBtn = document.getElementById('closeDeleteConfirmBtn');
-const cancelDeleteBtn = document.getElementById('cancelDeleteBtn');
-const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
 const adminActionWrapper = document.getElementById('adminActionWrapper');
 const departmentFilterContainer = document.getElementById('departmentFilterContainer');
 const branchFilterContainer = document.getElementById('branchFilterContainer');
@@ -209,6 +204,11 @@ function canCollegeWideRequestDelete(doc) {
 
 function getRoleDisplay(role) {
   return ROLE_DISPLAY[role] || role;
+}
+
+function getUploaderDisplay(doc) {
+  if (!doc) return 'Unknown';
+  return doc.uploadedByName || doc.uploadedBy || 'Unknown';
 }
 
 function userCanAccessResource(doc) {
@@ -313,65 +313,35 @@ function showInputModal(title, placeholder, defaultValue, onSubmit, requireValue
   });
 }
 
-function showDeleteConfirmModal(subject, index) {
-  pendingDeleteData = { subject, index };
-  deleteConfirmModal.classList.remove('hidden');
-  const card = deleteConfirmModal.querySelector('.delete-confirm-card');
-  if (card) {
-    card.style.animation = 'none';
-    requestAnimationFrame(() => {
-      card.style.animation = 'scaleUp 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)';
-    });
-  }
-}
-
-function closeDeleteConfirmModal() {
-  deleteConfirmModal.classList.add('hidden');
-  pendingDeleteData = null;
-}
-
-if (deleteConfirmModal) {
-  deleteConfirmModal.addEventListener('click', function(e) {
-    if (e.target === this) closeDeleteConfirmModal();
-  });
-  if (closeDeleteConfirmBtn) closeDeleteConfirmBtn.addEventListener('click', closeDeleteConfirmModal);
-  if (cancelDeleteBtn) cancelDeleteBtn.addEventListener('click', closeDeleteConfirmModal);
-  if (confirmDeleteBtn) {
-    confirmDeleteBtn.addEventListener('click', function() {
-      if (pendingDeleteData) {
-        deleteAnnouncement(pendingDeleteData.subject, pendingDeleteData.index);
-        closeDeleteConfirmModal();
-      }
-    });
-  }
-}
-
 function showDeleteResourceConfirm(doc, onConfirm) {
   const modal = document.createElement('div');
   modal.className = 'modal-overlay';
   modal.style.zIndex = '6000';
   modal.innerHTML = `
-    <div class="modal-glass-card delete-confirm-card" style="max-width: 460px;">
+    <div class="modal-glass-card delete-confirm-card" style="max-width: 500px;">
       <div class="modal-top-bar" style="border-bottom: 1px solid rgba(239, 68, 68, 0.2); padding-bottom: 12px;">
         <h3 style="color: #ef4444; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
           <i class="fa-solid fa-trash-can"></i> Delete Resource
         </h3>
         <button class="modal-dismiss-icon" style="color: #94a3b8;">&times;</button>
       </div>
-      <div style="padding: 16px 0; text-align: center;">
-        <div style="width: 64px; height: 64px; border-radius: 50%; background: rgba(239, 68, 68, 0.1); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px auto;">
-          <i class="fa-solid fa-exclamation-triangle" style="font-size: 2rem; color: #ef4444;"></i>
-        </div>
-        <p style="color: #e2e8f0; margin-bottom: 8px; font-size: 1rem; font-weight: 500;">Are you sure you want to permanently delete "${doc.title}"?</p>
-        <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 16px;">This action cannot be undone. The file, chunks, and embeddings will be permanently removed.</p>
+      <div style="padding: 16px 0; text-align: left;">
+        <p style="color: #94a3b8; margin-bottom: 4px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">Resource:</p>
+        <p style="color: #f1f5f9; margin-bottom: 14px; font-size: 1rem; font-weight: 600;">${doc.title}</p>
+        <p style="color: #94a3b8; margin-bottom: 4px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px;">Original Uploader:</p>
+        <p style="color: #a5b4fc; margin-bottom: 14px; font-size: 0.9rem; font-weight: 600;">${getUploaderDisplay(doc)}</p>
+        <p style="color: #94a3b8; font-size: 0.85rem; margin-bottom: 4px;">You are deleting this resource as:</p>
+        <p style="color: #fbbf24; font-size: 0.9rem; font-weight: 600; margin-bottom: 16px;">${getRoleDisplay(currentUserRole)}</p>
         <div class="input-block" style="text-align: left;">
-          <label style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 6px; display: block;">Reason for deletion (optional)</label>
-          <input type="text" class="delete-reason-input" placeholder="e.g., Outdated content" style="width: 100%; background: rgba(11, 15, 27, 0.6); border: 1px solid var(--border-glass); padding: 10px 14px; border-radius: 8px; color: var(--text-primary); font-size: 0.9rem; outline: none;">
+          <label style="color: #94a3b8; font-size: 0.8rem; margin-bottom: 6px; display: block;">Reason for deletion <span style="color: #ef4444;">*</span></label>
+          <textarea class="delete-reason-input" placeholder="e.g., Outdated syllabus and replaced with the latest version." rows="3" style="width: 100%; background: rgba(11, 15, 27, 0.6); border: 1px solid var(--border-glass); padding: 12px 14px; border-radius: 10px; color: var(--text-primary); font-size: 0.9rem; outline: none; resize: vertical; font-family: inherit;"></textarea>
+          <p class="delete-error-msg" style="color: #ef4444; font-size: 0.8rem; margin-top: 6px; display: none;">Please provide a reason for deleting this resource.</p>
         </div>
+        <p style="color: #94a3b8; font-size: 0.75rem; margin-top: 12px;">This reason will be permanently stored in the deletion audit history.</p>
       </div>
       <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--border-glass);">
         <button class="del-cancel-btn form-action-trigger" style="background: rgba(255,255,255,0.08); padding: 10px 28px; font-size: 0.9rem; color: #94a3b8; border: 1px solid rgba(255,255,255,0.1);">Cancel</button>
-        <button class="del-confirm-btn form-action-trigger" style="background: #ef4444; padding: 10px 28px; font-size: 0.9rem;">Delete</button>
+        <button class="del-confirm-btn form-action-trigger" style="background: #ef4444; padding: 10px 28px; font-size: 0.9rem;">Delete Resource</button>
       </div>
     </div>
   `;
@@ -380,6 +350,8 @@ function showDeleteResourceConfirm(doc, onConfirm) {
   const cancelBtn = modal.querySelector('.del-cancel-btn');
   const confirmBtn = modal.querySelector('.del-confirm-btn');
   const reasonInput = modal.querySelector('.delete-reason-input');
+  const errorMsg = modal.querySelector('.delete-error-msg');
+
   const close = () => {
     modal.style.animation = 'fadeOut 0.2s ease';
     setTimeout(() => modal.remove(), 180);
@@ -387,8 +359,22 @@ function showDeleteResourceConfirm(doc, onConfirm) {
   closeBtn.addEventListener('click', close);
   cancelBtn.addEventListener('click', close);
   modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+
+  reasonInput.addEventListener('input', () => {
+    if (reasonInput.value.trim()) {
+      errorMsg.style.display = 'none';
+      reasonInput.style.borderColor = 'var(--border-glass)';
+    }
+  });
+
   confirmBtn.addEventListener('click', () => {
     const reason = reasonInput.value.trim();
+    if (!reason) {
+      errorMsg.style.display = 'block';
+      reasonInput.style.borderColor = '#ef4444';
+      reasonInput.focus();
+      return;
+    }
     close();
     setTimeout(() => onConfirm(reason), 200);
   });
@@ -412,7 +398,7 @@ function showRequestDeleteModal(doc) {
     `;
   }
   modal.innerHTML = `
-    <div class="modal-glass-card" style="max-width: 540px;">
+    <div class="modal-glass-card" style="max-width: 560px;">
       <div class="modal-top-bar" style="border-bottom: 1px solid rgba(251, 191, 36, 0.2); padding-bottom: 12px;">
         <h3 style="color: #fbbf24; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
           <i class="fa-solid fa-paper-plane"></i> Request Resource Deletion
@@ -425,7 +411,7 @@ function showRequestDeleteModal(doc) {
           <p style="color: #e2e8f0; font-size: 0.85rem;">You cannot directly delete this resource because you are not the original uploader. A deletion request will be sent for approval.</p>
         </div>
         <div class="input-block">
-          <label style="color: #94a3b8; font-size: 0.8rem;">Resource Name</label>
+          <label style="color: #94a3b8; font-size: 0.8rem;">Resource</label>
           <input type="text" value="${doc.title}" disabled style="width: 100%; background: rgba(11, 15, 27, 0.4); border: 1px solid var(--border-glass); padding: 10px 14px; border-radius: 8px; color: #94a3b8; font-size: 0.9rem;">
         </div>
         <div class="input-block">
@@ -433,11 +419,11 @@ function showRequestDeleteModal(doc) {
           <input type="text" value="${doc.uploadedByName || doc.uploadedBy}" disabled style="width: 100%; background: rgba(11, 15, 27, 0.4); border: 1px solid var(--border-glass); padding: 10px 14px; border-radius: 8px; color: #94a3b8; font-size: 0.9rem;">
         </div>
         <div class="input-block">
-          <label style="color: #94a3b8; font-size: 0.8rem;">Your Role</label>
+          <label style="color: #94a3b8; font-size: 0.8rem;">Requested By</label>
           <input type="text" value="${getRoleDisplay(currentUserRole)}" disabled style="width: 100%; background: rgba(11, 15, 27, 0.4); border: 1px solid var(--border-glass); padding: 10px 14px; border-radius: 8px; color: #94a3b8; font-size: 0.9rem;">
         </div>
         <div class="input-block">
-          <label style="color: #94a3b8; font-size: 0.8rem;">Send Request To</label>
+          <label style="color: #94a3b8; font-size: 0.8rem;">Send request to</label>
           <select class="req-target-select" style="width: 100%; background: rgba(11, 15, 27, 0.6); border: 1px solid var(--border-glass); padding: 10px 14px; border-radius: 8px; color: var(--text-primary); font-size: 0.9rem; outline: none;">
             ${targetOptions}
           </select>
@@ -453,6 +439,7 @@ function showRequestDeleteModal(doc) {
         <div class="input-block">
           <label style="color: #94a3b8; font-size: 0.8rem;">Reason for deletion <span style="color: #ef4444;">*</span></label>
           <textarea class="req-comment-textarea" placeholder="Explain why this resource should be deleted..." rows="4" style="width: 100%; background: rgba(11, 15, 27, 0.6); border: 1px solid var(--border-glass); padding: 12px 14px; border-radius: 10px; color: var(--text-primary); font-size: 0.9rem; outline: none; resize: vertical; font-family: inherit;"></textarea>
+          <p class="req-error-msg" style="color: #ef4444; font-size: 0.8rem; margin-top: 6px; display: none;">Reason for deletion is mandatory.</p>
         </div>
         <div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 8px;">
           <button class="req-cancel-btn form-action-trigger" style="background: rgba(255,255,255,0.08); padding: 12px 24px; font-size: 0.9rem; color: #94a3b8;">Cancel</button>
@@ -466,6 +453,7 @@ function showRequestDeleteModal(doc) {
   const authorityBlock = modal.querySelector('.req-authority-block');
   const authoritySelect = modal.querySelector('.req-authority-select');
   const commentArea = modal.querySelector('.req-comment-textarea');
+  const errorMsg = modal.querySelector('.req-error-msg');
   const closeBtn = modal.querySelector('.modal-dismiss-icon');
   const cancelBtn = modal.querySelector('.req-cancel-btn');
   const submitBtn = modal.querySelector('.req-submit-btn');
@@ -480,6 +468,13 @@ function showRequestDeleteModal(doc) {
     });
   }
 
+  commentArea.addEventListener('input', () => {
+    if (commentArea.value.trim()) {
+      errorMsg.style.display = 'none';
+      commentArea.style.borderColor = 'var(--border-glass)';
+    }
+  });
+
   const close = () => {
     modal.style.animation = 'fadeOut 0.2s ease';
     setTimeout(() => modal.remove(), 180);
@@ -492,7 +487,9 @@ function showRequestDeleteModal(doc) {
   submitBtn.addEventListener('click', async () => {
     const comment = commentArea.value.trim();
     if (!comment) {
-      showNotification("Reason for deletion is mandatory.", "error");
+      errorMsg.style.display = 'block';
+      commentArea.style.borderColor = '#ef4444';
+      commentArea.focus();
       return;
     }
     const requestType = targetSelect ? targetSelect.value : 'UPLOADER_APPROVAL';
@@ -606,16 +603,21 @@ function renderRequestList(requests, container, tab) {
     const card = document.createElement('div');
     card.style.cssText = 'background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 12px; padding: 16px; margin-bottom: 12px;';
     let actionButtons = '';
-    if (tab === 'incoming') {
+    if (tab === 'incoming' && req.status === 'pending') {
       actionButtons = `
         <button class="req-approve-btn" style="background: rgba(74,222,128,0.1); color: #4ade80; border: 1px solid rgba(74,222,128,0.3); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 500;"><i class="fa-solid fa-check"></i> Approve Delete</button>
         <button class="req-reject-btn" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: 500;"><i class="fa-solid fa-xmark"></i> Reject Request</button>
       `;
-    } else {
+    } else if (tab === 'outgoing' && req.status === 'pending') {
       actionButtons = `
         <button class="req-cancel-req-btn" style="background: rgba(148,163,184,0.1); color: #94a3b8; border: 1px solid var(--border-glass); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 0.85rem;">Cancel Request</button>
       `;
     }
+    let statusColor = '#3b82f6';
+    if (req.status === 'approved') statusColor = '#4ade80';
+    if (req.status === 'rejected') statusColor = '#ef4444';
+    if (req.status === 'cancelled') statusColor = '#94a3b8';
+
     card.innerHTML = `
       <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
         <div>
@@ -625,13 +627,15 @@ function renderRequestList(requests, container, tab) {
           <p style="color: #94a3b8; font-size: 0.8rem;">Target: ${req.targetAuthority}</p>
           <p style="color: #94a3b8; font-size: 0.8rem;">Type: ${req.requestType === 'UPLOADER_APPROVAL' ? 'Original Uploader' : 'Higher Authority'}</p>
           <p style="color: #94a3b8; font-size: 0.8rem;">Date: ${new Date(req.createdAt).toLocaleString()}</p>
+          ${req.respondedBy ? `<p style="color: #94a3b8; font-size: 0.8rem;">Responded by: ${req.respondedBy} on ${new Date(req.respondedAt).toLocaleString()}</p>` : ''}
         </div>
-        <span style="background: #3b82f6; color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 600;">${req.status.toUpperCase()}</span>
+        <span style="background: ${statusColor}; color: #fff; padding: 4px 10px; border-radius: 6px; font-size: 0.7rem; font-weight: 600;">${req.status.toUpperCase()}</span>
       </div>
       <div style="background: rgba(251,191,36,0.08); border-left: 3px solid #fbbf24; padding: 10px; border-radius: 4px; margin-bottom: 12px;">
         <p style="color: #fbbf24; font-size: 0.75rem; font-weight: 600; margin-bottom: 4px;">Reason:</p>
         <p style="color: #e2e8f0; font-size: 0.85rem;">${req.comment}</p>
       </div>
+      ${req.responseComment ? `<div style="background: rgba(99,102,241,0.08); border-left: 3px solid #6366f1; padding: 10px; border-radius: 4px; margin-bottom: 12px;"><p style="color: #a5b4fc; font-size: 0.75rem; font-weight: 600; margin-bottom: 4px;">Response:</p><p style="color: #e2e8f0; font-size: 0.85rem;">${req.responseComment}</p></div>` : ''}
       <div style="display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;">
         ${actionButtons}
       </div>
@@ -802,18 +806,15 @@ async function fetchNotifications() {
 
 function updateNotificationBadge(count) {
   let badge = document.getElementById('notificationBadge');
-  const dropdown = document.getElementById('authDropdown');
-  if (!dropdown) return;
+  const wrapper = profileMenuBtn || document.querySelector('.auth-wrapper');
+  if (!wrapper) return;
   if (count > 0) {
     if (!badge) {
       badge = document.createElement('div');
       badge.id = 'notificationBadge';
       badge.style.cssText = 'position: absolute; top: -6px; right: -6px; background: #ef4444; color: white; font-size: 0.65rem; font-weight: 700; min-width: 18px; height: 18px; border-radius: 9px; display: flex; align-items: center; justify-content: center; padding: 0 5px; z-index: 10;';
-      const wrapper = profileMenuBtn || document.querySelector('.auth-wrapper');
-      if (wrapper) {
-        wrapper.style.position = 'relative';
-        wrapper.appendChild(badge);
-      }
+      wrapper.style.position = 'relative';
+      wrapper.appendChild(badge);
     }
     badge.textContent = count > 99 ? '99+' : count;
     badge.style.display = 'flex';
@@ -2226,49 +2227,61 @@ async function renderDocumentCard(doc, container, isPendingView) {
   const canDel = canDirectlyDelete(doc);
   const canReq = canRequestDelete(doc);
   const canCWReq = canCollegeWideRequestDelete(doc);
+
   let pillsHtml = `<span style="background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">${doc.category || 'University Paper'}</span>`;
   if (isDraft) pillsHtml += `<span style="background:#f59e0b;color:#000;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;">DRAFT</span>`;
   if (isPending) pillsHtml += `<span style="background:#3b82f6;color:#fff;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:700;">PENDING</span>`;
   if (owner) pillsHtml += `<span style="background:rgba(74,222,128,0.15);color:#4ade80;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;">YOUR UPLOAD</span>`;
   if (doc.department) pillsHtml += `<span style="background:rgba(74,222,128,0.15);color:#4ade80;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;">${doc.department}</span>`;
   if (doc.branch) pillsHtml += `<span style="background:rgba(99,102,241,0.15);color:#a5b4fc;padding:2px 8px;border-radius:4px;font-size:0.75rem;font-weight:600;">${doc.branch}</span>`;
+
   let approvalInfo = '';
   if (isPending) {
     approvalInfo = `<p style="color:#fbbf24;font-size:0.8rem;margin-top:4px;">Stage: ${doc.approvalStage || 'pending'}</p>`;
   }
+
   let rejectionInfo = '';
   if (doc.rejectionReason && doc.status === 'draft') {
     rejectionInfo = `<p style="color:#fca5a5;font-size:0.8rem;margin-top:4px;padding:6px;background:rgba(239,68,68,0.1);border-radius:4px;">Rejected: ${doc.rejectionReason}</p>`;
   }
+
   let actionButtons = `<button class="action-btn-link view-btn" style="background:rgba(99,102,241,0.1);color:#a5b4fc;border:1px solid rgba(99,102,241,0.2);padding:6px 14px;border-radius:6px;font-weight:500;cursor:pointer;font-size:0.9rem;">View</button>`;
+
   if (doc.fileUrl) {
     actionButtons += `<a href="${doc.fileUrl}" target="_blank" rel="noopener" download class="action-btn-link get-btn" style="display:inline-flex;align-items:center;justify-content:center;background:var(--accent-gradient);color:#ffffff;padding:6px 14px;border-radius:6px;font-weight:500;text-decoration:none;font-size:0.9rem;">Get</a>`;
   }
+
   if (canManageDrafts() && isDraft) {
     actionButtons += `<button class="action-btn-link publish-btn" style="background:rgba(74,222,128,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.2);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.9rem;">Submit for Approval</button>`;
   }
+
   if (canApproveDocuments() && isPending) {
     actionButtons += `<button class="action-btn-link approve-btn" style="background:rgba(74,222,128,0.1);color:#4ade80;border:1px solid rgba(74,222,128,0.2);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.9rem;">Approve</button>`;
     actionButtons += `<button class="action-btn-link reject-btn" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.9rem;">Reject</button>`;
   }
+
   if (canEditDocuments() && !isPending) {
     actionButtons += `<button class="action-btn-link edit-btn" title="Edit" style="background:rgba(234,179,8,0.1);color:#fde047;border:1px solid rgba(234,179,8,0.2);padding:6px 10px;border-radius:6px;cursor:pointer;font-size:0.9rem;"><i class="fa-solid fa-pen"></i></button>`;
   }
+
   let deleteTooltip = "";
   let deleteClass = "";
+  let showDeleteButton = false;
+
   if (canDel && !isPending && !isDraft) {
     deleteTooltip = "Delete this resource";
     deleteClass = "delete-btn";
+    showDeleteButton = true;
   } else if ((canReq || canCWReq) && !isPending && !isDraft) {
     deleteTooltip = "Request deletion of this resource";
     deleteClass = "req-delete-btn";
+    showDeleteButton = true;
   }
-  if (deleteTooltip) {
+
+  if (showDeleteButton) {
     actionButtons += `<button class="action-btn-link ${deleteClass}" title="${deleteTooltip}" style="background:rgba(239,68,68,0.1);color:#ef4444;border:1px solid rgba(239,68,68,0.2);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.9rem;"><i class="fa-solid fa-trash"></i> Delete</button>`;
   }
-  if (canCWReq && !isPending && !isDraft) {
-    actionButtons += `<button class="action-btn-link req-delete-cw-btn" title="Request deletion from uploader" style="background:rgba(251,191,36,0.1);color:#fbbf24;border:1px solid rgba(251,191,36,0.2);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:0.9rem;"><i class="fa-solid fa-paper-plane"></i> Request Delete from Uploader</button>`;
-  }
+
   card.innerHTML = `
     <div class="doc-body-details">
       <h3>${doc.title} ${isDraft ? '<span style="background:#f59e0b;color:#000;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700;margin-left:4px;">DRAFT</span>' : ''} ${isPending ? '<span style="background:#3b82f6;color:#fff;padding:2px 8px;border-radius:4px;font-size:0.7rem;font-weight:700;margin-left:4px;">PENDING</span>' : ''}</h3>
@@ -2290,17 +2303,19 @@ async function renderDocumentCard(doc, container, isPendingView) {
     </div>
   `;
   container.appendChild(card);
+
   card.querySelector('.view-btn').addEventListener('click', () => openPreviewModal(doc.title, doc.fileUrl, doc._id));
   const getBtn = card.querySelector('.get-btn');
   if (getBtn) getBtn.addEventListener('click', () => logHistory(doc.title, doc._id));
   const editBtn = card.querySelector('.edit-btn');
   if (editBtn) editBtn.addEventListener('click', () => openEditDocumentModal(doc));
+
   const deleteBtn = card.querySelector('.delete-btn');
   if (deleteBtn) deleteBtn.addEventListener('click', () => showDeleteResourceConfirm(doc, (reason) => deleteDocument(doc._id, reason)));
+
   const reqDeleteBtn = card.querySelector('.req-delete-btn');
   if (reqDeleteBtn) reqDeleteBtn.addEventListener('click', () => showRequestDeleteModal(doc));
-  const reqDeleteCWBtn = card.querySelector('.req-delete-cw-btn');
-  if (reqDeleteCWBtn) reqDeleteCWBtn.addEventListener('click', () => showRequestDeleteModal(doc));
+
   const publishBtn = card.querySelector('.publish-btn');
   if (publishBtn) publishBtn.addEventListener('click', () => publishDraft(doc._id));
   const approveBtn = card.querySelector('.approve-btn');

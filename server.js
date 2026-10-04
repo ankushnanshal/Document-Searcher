@@ -121,6 +121,8 @@ const ROLE_PERMISSIONS = {
 
 const FACULTY_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN, ROLES.HOD, ROLES.PROFESSOR, ROLES.ASSISTANT_PROFESSOR];
 const COLLEGE_WIDE_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN];
+const DIRECT_DELETE_ROLES = [ROLES.ADMIN, ROLES.DIRECTOR, ROLES.DEAN];
+const REQUEST_DELETE_ROLES = [ROLES.HOD, ROLES.PROFESSOR, ROLES.ASSISTANT_PROFESSOR];
 
 const APPROVAL_CHAIN = {
   [ROLES.ASSISTANT_PROFESSOR]: [ROLES.PROFESSOR, ROLES.HOD, ROLES.DEAN, ROLES.DIRECTOR],
@@ -756,6 +758,7 @@ const documentSchema = new mongoose.Schema({
   fileUrl: { type: String, required: true },
   fileType: { type: String, default: "" },
   uploadedBy: { type: String, required: true },
+  uploadedByName: { type: String, default: "" },
   uploadedByRole: { type: String, default: "" },
   category: { type: String, default: "General" },
   docDate: { type: String, default: "" },
@@ -844,10 +847,58 @@ const historySchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now }
 });
 
+const deletionAuditSchema = new mongoose.Schema({
+  resourceId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  resourceName: { type: String, required: true },
+  originalUploader: { type: String, required: true },
+  deletedBy: { type: String, required: true },
+  deletedByName: { type: String, required: true },
+  deletedByRole: { type: String, required: true },
+  deletionType: { type: String, enum: ["DIRECT_DELETE", "REQUEST_APPROVED"], required: true },
+  deletionReason: { type: String, required: true },
+  deletedAt: { type: Date, default: Date.now },
+  department: { type: String, default: null },
+  branch: { type: String, default: "" }
+});
+
+const deletionRequestSchema = new mongoose.Schema({
+  resourceId: { type: mongoose.Schema.Types.ObjectId, ref: "Document", required: true },
+  resourceName: { type: String, required: true },
+  originalUploader: { type: String, required: true },
+  originalUploaderName: { type: String, default: "" },
+  requestedBy: { type: String, required: true },
+  requesterName: { type: String, default: "" },
+  requesterRole: { type: String, required: true },
+  targetAuthority: { type: String, required: true },
+  requestType: { type: String, enum: ["UPLOADER_APPROVAL", "HIGHER_AUTHORITY_APPROVAL"], required: true },
+  comment: { type: String, required: true },
+  status: { type: String, enum: ["pending", "approved", "rejected", "cancelled"], default: "pending" },
+  responseComment: { type: String, default: "" },
+  respondedBy: { type: String, default: "" },
+  respondedAt: { type: Date, default: null },
+  createdAt: { type: Date, default: Date.now }
+});
+
+const notificationSchema = new mongoose.Schema({
+  recipient: { type: String, required: true, lowercase: true, trim: true },
+  sender: { type: String, default: "" },
+  senderName: { type: String, default: "" },
+  type: { type: String, enum: ["DELETION_REQUEST", "DELETION_APPROVED", "DELETION_REJECTED", "INFO"], default: "INFO" },
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  resourceId: { type: mongoose.Schema.Types.ObjectId, ref: "Document" },
+  requestId: { type: mongoose.Schema.Types.ObjectId, ref: "DeletionRequest" },
+  isRead: { type: Boolean, default: false },
+  createdAt: { type: Date, default: Date.now }
+});
+
 const User = mongoose.model("User", userSchema);
 const Document = mongoose.model("Document", documentSchema);
 const Chunk = mongoose.model("Chunk", chunkSchema);
 const History = mongoose.model("History", historySchema);
+const DeletionAudit = mongoose.model("DeletionAudit", deletionAuditSchema);
+const DeletionRequest = mongoose.model("DeletionRequest", deletionRequestSchema);
+const Notification = mongoose.model("Notification", notificationSchema);
 
 function detectLanguage(text) {
   if (!text) return 'en';
@@ -1912,6 +1963,35 @@ const upload = multer({
   }
 });
 
+async function createNotification(recipient, sender, senderName, type, title, message, resourceId, requestId) {
+  try {
+    if (!recipient) return null;
+    const notif = new Notification({
+      recipient: recipient.toLowerCase().trim(),
+      sender: sender || "",
+      senderName: senderName || "",
+      type: type || "INFO",
+      title,
+      message,
+      resourceId: resourceId || null,
+      requestId: requestId || null
+    });
+    await notif.save();
+    return notif;
+  } catch (e) {
+    console.error("Notification error:", e.message);
+    return null;
+  }
+}
+
+async function getUsersByRole(role) {
+  return await User.find({ role }).select('email name');
+}
+
+async function getCollegeWideRecipients() {
+  return await User.find({ role: { $in: COLLEGE_WIDE_ROLES } }).select('email name role');
+}
+
 app.post("/api/auth/signup", async (req, res) => {
   try {
     const { name, email, password, avatar, year, semester, branch } = req.body;
@@ -2125,6 +2205,7 @@ app.post("/api/documents/upload", authenticateToken, requireFaculty, upload.sing
       extractionResult.totalPages = text.totalPages || 1;
     }
     const extractedText = extractionResult.text || '';
+    const uploaderUser = await User.findOne({ email: req.user.email }).select('name');
     const docData = buildIndexedDocument(
       finalTitle, extractedText, fileUrl, req.file.mimetype || "",
       req.user.email, req.user.role, category, docDate, year || "", semester || "",
@@ -2133,6 +2214,7 @@ app.post("/api/documents/upload", authenticateToken, requireFaculty, upload.sing
       extractionResult.ocrConfidence || 0, extractionResult.ocrApplied || false,
       extractionResult.isScanned || false, docStatus
     );
+    docData.uploadedByName = uploaderUser ? uploaderUser.name : req.user.email;
     docData.processingStatus = "completed";
     docData.pageCount = extractionResult.totalPages || 0;
     if (docStatus === "draft") {
@@ -2650,25 +2732,344 @@ app.put("/api/documents/:id", authenticateToken, requireFaculty, async (req, res
 
 app.delete("/api/documents/:id", authenticateToken, requireFaculty, async (req, res) => {
   try {
-    if (!canManageDocuments(req.user)) {
-      return res.status(403).json({ message: "Access denied. Insufficient permissions." });
+    const { reason } = req.body;
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: "Please provide a reason for deleting this resource." });
     }
     const doc = await Document.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: "Document not found." });
-    if (!isCollegeWideRole(req.user) && doc.department !== req.user.department) {
-      return res.status(403).json({ message: "Access denied. You can only delete documents from your department." });
+
+    const userRole = req.user.role;
+    const isDirectDelete = DIRECT_DELETE_ROLES.includes(userRole);
+    const isOwner = doc.uploadedBy && doc.uploadedBy.toLowerCase() === req.user.email.toLowerCase();
+
+    if (!isDirectDelete && !isOwner) {
+      return res.status(403).json({ message: "403 Forbidden: You do not have permission to directly delete this resource. Please use the deletion request API." });
     }
+
+    const deleter = await User.findOne({ email: req.user.email }).select('name');
+    const deleterName = deleter ? deleter.name : req.user.email;
+
+    const auditRecord = new DeletionAudit({
+      resourceId: doc._id,
+      resourceName: doc.title,
+      originalUploader: doc.uploadedBy,
+      deletedBy: req.user.email,
+      deletedByName: deleterName,
+      deletedByRole: userRole,
+      deletionType: "DIRECT_DELETE",
+      deletionReason: reason.trim(),
+      deletedAt: new Date(),
+      department: doc.department,
+      branch: doc.branch
+    });
+    await auditRecord.save();
+
     if (doc.storageName) {
       const filePath = path.join(uploadDir, doc.storageName);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
     }
     await Chunk.deleteMany({ documentId: doc._id });
     await Document.findByIdAndDelete(req.params.id);
+
     res.status(200).json({ message: "Resource removed successfully." });
   } catch (error) {
     res.status(500).json({ message: "Server error while deleting document." });
   }
 });
+
+app.post("/api/deletion-requests", authenticateToken, requireFaculty, async (req, res) => {
+  try {
+    const { resourceId, comment, targetAuthority, requestType } = req.body;
+    if (!resourceId || !comment || !comment.trim()) {
+      return res.status(400).json({ message: "Resource ID and reason are required." });
+    }
+
+    const doc = await Document.findById(resourceId);
+    if (!doc) return res.status(404).json({ message: "Resource not found." });
+
+    const userRole = req.user.role;
+    const isDirectDelete = DIRECT_DELETE_ROLES.includes(userRole);
+    const isOwner = doc.uploadedBy && doc.uploadedBy.toLowerCase() === req.user.email.toLowerCase();
+
+    if (isDirectDelete) {
+      return res.status(400).json({ message: "Direct delete roles should use direct deletion." });
+    }
+    if (isOwner) {
+      return res.status(400).json({ message: "You are the owner. Use direct deletion." });
+    }
+    if (!REQUEST_DELETE_ROLES.includes(userRole) && !COLLEGE_WIDE_ROLES.includes(userRole)) {
+      return res.status(403).json({ message: "Access denied. You cannot request deletion." });
+    }
+
+    const requester = await User.findOne({ email: req.user.email }).select('name');
+    const requesterName = requester ? requester.name : req.user.email;
+
+    let finalRequestType = requestType;
+    let finalTargetAuthority = targetAuthority;
+
+    if (!finalRequestType) {
+      if (targetAuthority && COLLEGE_WIDE_ROLES.includes(targetAuthority)) {
+        finalRequestType = "HIGHER_AUTHORITY_APPROVAL";
+      } else {
+        finalRequestType = "UPLOADER_APPROVAL";
+        finalTargetAuthority = doc.uploadedBy;
+      }
+    }
+
+    if (finalRequestType === "UPLOADER_APPROVAL") {
+      finalTargetAuthority = doc.uploadedBy;
+    }
+
+    const request = new DeletionRequest({
+      resourceId: doc._id,
+      resourceName: doc.title,
+      originalUploader: doc.uploadedBy,
+      originalUploaderName: doc.uploadedByName || doc.uploadedBy,
+      requestedBy: req.user.email,
+      requesterName: requesterName,
+      requesterRole: userRole,
+      targetAuthority: finalTargetAuthority,
+      requestType: finalRequestType,
+      comment: comment.trim(),
+      status: "pending"
+    });
+    await request.save();
+
+    await createNotification(
+      finalTargetAuthority,
+      req.user.email,
+      requesterName,
+      "DELETION_REQUEST",
+      "Deletion Request",
+      `${requesterName} (${getRoleDisplay(userRole)}) has requested deletion of "${doc.title}". Reason: ${comment.trim()}`,
+      doc._id,
+      request._id
+    );
+
+    res.status(201).json({ message: "Deletion request sent successfully.", request });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while creating deletion request." });
+  }
+});
+
+app.get("/api/deletion-requests/incoming", authenticateToken, async (req, res) => {
+  try {
+    const userEmail = req.user.email.toLowerCase();
+    const requests = await DeletionRequest.find({
+      targetAuthority: userEmail,
+      status: "pending"
+    }).sort({ createdAt: -1 });
+    res.status(200).json(requests);
+  } catch (error) {
+    res.status(500).json({ message: "Server error while fetching incoming requests." });
+  }
+});
+
+app.get("/api/deletion-requests/outgoing", authenticateToken, async (req, res) => {
+  try {
+    const requests = await DeletionRequest.find({
+      requestedBy: req.user.email,
+      status: { $in: ["pending", "approved", "rejected", "cancelled"] }
+    }).sort({ createdAt: -1 });
+    res.status(200).json(requests);
+  } catch (error) {
+    res.status(500).json({ message: "Server error while fetching outgoing requests." });
+  }
+});
+
+app.get("/api/deletion-requests/pending-count", authenticateToken, async (req, res) => {
+  try {
+    const userEmail = req.user.email.toLowerCase();
+    const count = await DeletionRequest.countDocuments({
+      targetAuthority: userEmail,
+      status: "pending"
+    });
+    res.status(200).json({ count });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while fetching count." });
+  }
+});
+
+app.post("/api/deletion-requests/:id/approve", authenticateToken, async (req, res) => {
+  try {
+    const { responseComment } = req.body;
+    const request = await DeletionRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ message: "Request not found." });
+    if (request.status !== "pending") return res.status(400).json({ message: "Request already processed." });
+
+    const userEmail = req.user.email.toLowerCase();
+    if (request.targetAuthority.toLowerCase() !== userEmail) {
+      return res.status(403).json({ message: "Access denied. This request is not for you." });
+    }
+
+    const doc = await Document.findById(request.resourceId);
+    if (!doc) {
+      request.status = "approved";
+      request.responseComment = responseComment || "Resource already deleted.";
+      request.respondedBy = req.user.email;
+      request.respondedAt = new Date();
+      await request.save();
+      return res.status(200).json({ message: "Request approved. Resource was already deleted." });
+    }
+
+    const approver = await User.findOne({ email: req.user.email }).select('name');
+    const approverName = approver ? approver.name : req.user.email;
+
+    const auditRecord = new DeletionAudit({
+      resourceId: doc._id,
+      resourceName: doc.title,
+      originalUploader: doc.uploadedBy,
+      deletedBy: req.user.email,
+      deletedByName: approverName,
+      deletedByRole: req.user.role,
+      deletionType: "REQUEST_APPROVED",
+      deletionReason: request.comment,
+      deletedAt: new Date(),
+      department: doc.department,
+      branch: doc.branch
+    });
+    await auditRecord.save();
+
+    if (doc.storageName) {
+      const filePath = path.join(uploadDir, doc.storageName);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    }
+    await Chunk.deleteMany({ documentId: doc._id });
+    await Document.findByIdAndDelete(request.resourceId);
+
+    request.status = "approved";
+    request.responseComment = responseComment || "";
+    request.respondedBy = req.user.email;
+    request.respondedAt = new Date();
+    await request.save();
+
+    await createNotification(
+      request.requestedBy,
+      req.user.email,
+      approverName,
+      "DELETION_APPROVED",
+      "Deletion Request Approved",
+      `Your deletion request for "${request.resourceName}" has been approved by ${approverName}.`,
+      request.resourceId,
+      request._id
+    );
+
+    res.status(200).json({ message: "Request approved and resource deleted.", request });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while approving request." });
+  }
+});
+
+app.post("/api/deletion-requests/:id/reject", authenticateToken, async (req, res) => {
+  try {
+    const { responseComment } = req.body;
+    const request = await DeletionRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ message: "Request not found." });
+    if (request.status !== "pending") return res.status(400).json({ message: "Request already processed." });
+
+    const userEmail = req.user.email.toLowerCase();
+    if (request.targetAuthority.toLowerCase() !== userEmail) {
+      return res.status(403).json({ message: "Access denied. This request is not for you." });
+    }
+
+    const rejecter = await User.findOne({ email: req.user.email }).select('name');
+    const rejecterName = rejecter ? rejecter.name : req.user.email;
+
+    request.status = "rejected";
+    request.responseComment = responseComment || "No reason provided.";
+    request.respondedBy = req.user.email;
+    request.respondedAt = new Date();
+    await request.save();
+
+    await createNotification(
+      request.requestedBy,
+      req.user.email,
+      rejecterName,
+      "DELETION_REJECTED",
+      "Deletion Request Rejected",
+      `Your deletion request for "${request.resourceName}" has been rejected by ${rejecterName}. Comment: ${responseComment || "No reason provided."}`,
+      request.resourceId,
+      request._id
+    );
+
+    res.status(200).json({ message: "Request rejected.", request });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while rejecting request." });
+  }
+});
+
+app.post("/api/deletion-requests/:id/cancel", authenticateToken, async (req, res) => {
+  try {
+    const request = await DeletionRequest.findById(req.params.id);
+    if (!request) return res.status(404).json({ message: "Request not found." });
+    if (request.status !== "pending") return res.status(400).json({ message: "Request already processed." });
+    if (request.requestedBy.toLowerCase() !== req.user.email.toLowerCase()) {
+      return res.status(403).json({ message: "Access denied. You can only cancel your own requests." });
+    }
+    request.status = "cancelled";
+    request.respondedBy = req.user.email;
+    request.respondedAt = new Date();
+    await request.save();
+    res.status(200).json({ message: "Request cancelled.", request });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while cancelling request." });
+  }
+});
+
+app.get("/api/deletion-audit", authenticateToken, requireCollegeWideAccess, async (req, res) => {
+  try {
+    const audits = await DeletionAudit.find().sort({ deletedAt: -1 }).limit(200);
+    res.status(200).json(audits);
+  } catch (error) {
+    res.status(500).json({ message: "Server error while fetching audit history." });
+  }
+});
+
+app.get("/api/notifications", authenticateToken, async (req, res) => {
+  try {
+    const notifications = await Notification.find({ recipient: req.user.email.toLowerCase() }).sort({ createdAt: -1 }).limit(50);
+    res.status(200).json(notifications);
+  } catch (error) {
+    res.status(500).json({ message: "Server error while fetching notifications." });
+  }
+});
+
+app.get("/api/notifications/unread-count", authenticateToken, async (req, res) => {
+  try {
+    const count = await Notification.countDocuments({ recipient: req.user.email.toLowerCase(), isRead: false });
+    res.status(200).json({ count });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while fetching notification count." });
+  }
+});
+
+app.post("/api/notifications/:id/read", authenticateToken, async (req, res) => {
+  try {
+    const notif = await Notification.findOneAndUpdate(
+      { _id: req.params.id, recipient: req.user.email.toLowerCase() },
+      { isRead: true },
+      { new: true }
+    );
+    if (!notif) return res.status(404).json({ message: "Notification not found." });
+    res.status(200).json({ message: "Notification marked as read.", notif });
+  } catch (error) {
+    res.status(500).json({ message: "Server error while updating notification." });
+  }
+});
+
+function getRoleDisplay(role) {
+  const map = {
+    admin: 'Admin',
+    director: 'Director',
+    dean: 'Dean',
+    hod: 'HOD',
+    professor: 'Professor',
+    assistant_professor: 'Assistant Professor',
+    student: 'Student'
+  };
+  return map[role] || role;
+}
 
 app.post("/api/history", authenticateToken, async (req, res) => {
   try {
@@ -2797,9 +3198,11 @@ app.get("/api/status", async (req, res) => {
   const docCount = await Document.countDocuments().catch(() => 0);
   const chunkCount = await Chunk.countDocuments().catch(() => 0);
   const userCount = await User.countDocuments().catch(() => 0);
+  const deletionAuditCount = await DeletionAudit.countDocuments().catch(() => 0);
+  const deletionRequestCount = await DeletionRequest.countDocuments().catch(() => 0);
   res.json({
     status: "online",
-    version: "3.1.0",
+    version: "3.2.0",
     features: {
       ocr: true,
       semanticSearch: process.env.SEMANTIC_SEARCH_ENABLED === 'true',
@@ -2815,13 +3218,21 @@ app.get("/api/status", async (req, res) => {
       roleBasedAccess: true,
       departmentIsolation: true,
       branchAccessControl: true,
-      cseBranches: CSE_BRANCHES
+      cseBranches: CSE_BRANCHES,
+      deletionAudit: true,
+      deletionRequests: true
     },
     roles: Object.values(ROLES),
     departments: Object.values(DEPARTMENTS),
     cseBranches: CSE_BRANCHES,
     storage: "local",
-    stats: { documents: docCount, chunks: chunkCount, users: userCount }
+    stats: {
+      documents: docCount,
+      chunks: chunkCount,
+      users: userCount,
+      deletionAudits: deletionAuditCount,
+      deletionRequests: deletionRequestCount
+    }
   });
 });
 
@@ -2847,8 +3258,11 @@ app.listen(PORT, async () => {
   console.log(`CSE Branches: ${CSE_BRANCHES.join(', ')}`);
   console.log(`Drafts feature: Enabled`);
   console.log(`Department-based access control: Enabled`);
+  console.log(`Deletion audit & request system: Enabled`);
   const docCount = await Document.countDocuments().catch(() => 0);
   const chunkCount = await Chunk.countDocuments().catch(() => 0);
   const userCount = await User.countDocuments().catch(() => 0);
-  console.log(`Existing documents: ${docCount}, chunks: ${chunkCount}, users: ${userCount}`);
+  const auditCount = await DeletionAudit.countDocuments().catch(() => 0);
+  const requestCount = await DeletionRequest.countDocuments().catch(() => 0);
+  console.log(`Existing documents: ${docCount}, chunks: ${chunkCount}, users: ${userCount}, audits: ${auditCount}, requests: ${requestCount}`);
 });
