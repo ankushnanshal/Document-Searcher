@@ -133,11 +133,25 @@ const APPROVAL_CHAIN = {
   [ROLES.ADMIN]: []
 };
 
+const ROLE_DISPLAY_MAP = {
+  admin: 'Admin',
+  director: 'Director',
+  dean: 'Dean',
+  hod: 'HOD',
+  professor: 'Professor',
+  assistant_professor: 'Assistant Professor',
+  student: 'Student'
+};
+
+function getRoleDisplay(role) {
+  return ROLE_DISPLAY_MAP[role] || role;
+}
+
 const DEMO_USERS = [
   {
     name: 'Admin User',
-    email: 'ankushadmin@gmail.com',
-    password: '817167',
+    email: process.env.ADMIN_EMAIL,
+    password: process.env.ADMIN_PASSWORD,
     role: ROLES.ADMIN,
     department: null,
     branch: null,
@@ -145,8 +159,8 @@ const DEMO_USERS = [
   },
   {
     name: 'Director User',
-    email: 'director@college.gmail',
-    password: 'Director@123',
+    email: process.env.DIRECTOR_EMAIL,
+    password: process.env.DIRECTOR_PASSWORD,
     role: ROLES.DIRECTOR,
     department: null,
     branch: null,
@@ -154,8 +168,8 @@ const DEMO_USERS = [
   },
   {
     name: 'Dean User',
-    email: 'dean@college.gmail',
-    password: 'Dean@123',
+    email: process.env.DEAN_EMAIL,
+    password: process.env.DEAN_PASSWORD,
     role: ROLES.DEAN,
     department: null,
     branch: null,
@@ -163,8 +177,8 @@ const DEMO_USERS = [
   },
   {
     name: 'HOD CSE',
-    email: 'hod.cse@college.gmail',
-    password: 'HODCSE@123',
+    email: process.env.HOD_CSE_EMAIL,
+    password: process.env.HOD_CSE_PASSWORD,
     role: ROLES.HOD,
     department: DEPARTMENTS.CSE,
     branch: null,
@@ -172,8 +186,8 @@ const DEMO_USERS = [
   },
   {
     name: 'Professor CSE 1',
-    email: 'professor.cse1@college.gmail',
-    password: 'ProfCSE1@123',
+    email: process.env.PROF_CSE1_EMAIL,
+    password: process.env.PROF_CSE1_PASSWORD,
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.CSE,
     branch: 'CSE-R',
@@ -181,8 +195,8 @@ const DEMO_USERS = [
   },
   {
     name: 'Professor CSE 2',
-    email: 'professor.cse2@college.gmail',
-    password: 'ProfCSE2@123',
+    email: process.env.PROF_CSE2_EMAIL,
+    password: process.env.PROF_CSE2_PASSWORD,
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.CSE,
     branch: 'CSE-A.I',
@@ -190,8 +204,8 @@ const DEMO_USERS = [
   },
   {
     name: 'Assistant Professor CSE 1',
-    email: 'assistant.cse1@college.gmail',
-    password: 'AsstCSE1@123',
+    email: process.env.ASST_CSE1_EMAIL,
+    password: process.env.ASST_CSE1_PASSWORD,
     role: ROLES.ASSISTANT_PROFESSOR,
     department: DEPARTMENTS.CSE,
     branch: 'CSE-SF',
@@ -199,8 +213,26 @@ const DEMO_USERS = [
   },
   {
     name: 'Assistant Professor CSE 2',
-    email: 'assistant.cse2@college.gmail',
-    password: 'AsstCSE2@123',
+    email: process.env.ASST_CSE2_EMAIL,
+    password: process.env.ASST_CSE2_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CSE,
+    branch: 'CSE-R',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CSE 3',
+    email: process.env.ASST_CSE3_EMAIL,
+    password: process.env.ASST_CSE3_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CSE,
+    branch: 'CSE-R',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CSE 4',
+    email: process.env.ASST_CSE4_EMAIL,
+    password: process.env.ASST_CSE4_PASSWORD,
     role: ROLES.ASSISTANT_PROFESSOR,
     department: DEPARTMENTS.CSE,
     branch: 'CSE-R',
@@ -208,8 +240,8 @@ const DEMO_USERS = [
   },
   {
     name: 'HOD ECE',
-    email: 'hod.ece@college.gmail',
-    password: 'HODECE@123',
+    email: process.env.HOD_ECE_EMAIL,
+    password: process.env.HOD_ECE_PASSWORD,
     role: ROLES.HOD,
     department: DEPARTMENTS.ECE,
     branch: null,
@@ -217,8 +249,17 @@ const DEMO_USERS = [
   },
   {
     name: 'Professor ECE 1',
-    email: 'professor.ece1@college.gmail',
-    password: 'ProfECE1@123',
+    email: process.env.PROF_ECE1_EMAIL,
+    password: process.env.PROF_ECE1_PASSWORD,
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.ECE,
+    branch: 'ECE',
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Professor ECE 2',
+    email: process.env.PROF_ECE2_EMAIL,
+    password: process.env.PROF_ECE2_PASSWORD,
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.ECE,
     branch: 'ECE',
@@ -226,8 +267,35 @@ const DEMO_USERS = [
   },
   {
     name: 'Assistant Professor ECE 1',
-    email: 'assistant.ece1@college.gmail',
-    password: 'AsstECE1@123',
+    email: process.env.ASST_ECE1_EMAIL,
+    password: process.env.ASST_ECE1_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ECE,
+    branch: 'ECE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ECE 2',
+    email: process.env.ASST_ECE2_EMAIL,
+    password: process.env.ASST_ECE2_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ECE,
+    branch: 'ECE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ECE 3',
+    email: process.env.ASST_ECE3_EMAIL,
+    password: process.env.ASST_ECE3_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ECE,
+    branch: 'ECE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ECE 4',
+    email: process.env.ASST_ECE4_EMAIL,
+    password: process.env.ASST_ECE4_PASSWORD,
     role: ROLES.ASSISTANT_PROFESSOR,
     department: DEPARTMENTS.ECE,
     branch: 'ECE',
@@ -235,8 +303,8 @@ const DEMO_USERS = [
   },
   {
     name: 'HOD EE',
-    email: 'hod.ee@college.gmail',
-    password: 'HODEE@123',
+    email: process.env.HOD_EE_EMAIL,
+    password: process.env.HOD_EE_PASSWORD,
     role: ROLES.HOD,
     department: DEPARTMENTS.EE,
     branch: null,
@@ -244,17 +312,62 @@ const DEMO_USERS = [
   },
   {
     name: 'Professor EE 1',
-    email: 'professor.ee1@college.gmail',
-    password: 'ProfEE1@123',
+    email: process.env.PROF_EE1_EMAIL,
+    password: process.env.PROF_EE1_PASSWORD,
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.EE,
     branch: 'EE',
     permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
   },
   {
+    name: 'Professor EE 2',
+    email: process.env.PROF_EE2_EMAIL,
+    password: process.env.PROF_EE2_PASSWORD,
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.EE,
+    branch: 'EE',
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor EE 1',
+    email: process.env.ASST_EE1_EMAIL,
+    password: process.env.ASST_EE1_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.EE,
+    branch: 'EE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor EE 2',
+    email: process.env.ASST_EE2_EMAIL,
+    password: process.env.ASST_EE2_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.EE,
+    branch: 'EE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor EE 3',
+    email: process.env.ASST_EE3_EMAIL,
+    password: process.env.ASST_EE3_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.EE,
+    branch: 'EE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor EE 4',
+    email: process.env.ASST_EE4_EMAIL,
+    password: process.env.ASST_EE4_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.EE,
+    branch: 'EE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
     name: 'HOD ME',
-    email: 'hod.me@college.gmail',
-    password: 'HODME@123',
+    email: process.env.HOD_ME_EMAIL,
+    password: process.env.HOD_ME_PASSWORD,
     role: ROLES.HOD,
     department: DEPARTMENTS.ME,
     branch: null,
@@ -262,17 +375,62 @@ const DEMO_USERS = [
   },
   {
     name: 'Professor ME 1',
-    email: 'professor.me1@college.gmail',
-    password: 'ProfME1@123',
+    email: process.env.PROF_ME1_EMAIL,
+    password: process.env.PROF_ME1_PASSWORD,
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.ME,
     branch: 'ME',
     permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
   },
   {
+    name: 'Professor ME 2',
+    email: process.env.PROF_ME2_EMAIL,
+    password: process.env.PROF_ME2_PASSWORD,
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.ME,
+    branch: 'ME',
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ME 1',
+    email: process.env.ASST_ME1_EMAIL,
+    password: process.env.ASST_ME1_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ME,
+    branch: 'ME',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ME 2',
+    email: process.env.ASST_ME2_EMAIL,
+    password: process.env.ASST_ME2_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ME,
+    branch: 'ME',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ME 3',
+    email: process.env.ASST_ME3_EMAIL,
+    password: process.env.ASST_ME3_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ME,
+    branch: 'ME',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor ME 4',
+    email: process.env.ASST_ME4_EMAIL,
+    password: process.env.ASST_ME4_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.ME,
+    branch: 'ME',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
     name: 'HOD CE',
-    email: 'hod.ce@college.gmail',
-    password: 'HODCE@123',
+    email: process.env.HOD_CE_EMAIL,
+    password: process.env.HOD_CE_PASSWORD,
     role: ROLES.HOD,
     department: DEPARTMENTS.CE,
     branch: null,
@@ -280,17 +438,62 @@ const DEMO_USERS = [
   },
   {
     name: 'Professor CE 1',
-    email: 'professor.ce1@college.gmail',
-    password: 'ProfCE1@123',
+    email: process.env.PROF_CE1_EMAIL,
+    password: process.env.PROF_CE1_PASSWORD,
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.CE,
     branch: 'CE',
     permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
   },
   {
+    name: 'Professor CE 2',
+    email: process.env.PROF_CE2_EMAIL,
+    password: process.env.PROF_CE2_PASSWORD,
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.CE,
+    branch: 'CE',
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CE 1',
+    email: process.env.ASST_CE1_EMAIL,
+    password: process.env.ASST_CE1_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CE,
+    branch: 'CE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CE 2',
+    email: process.env.ASST_CE2_EMAIL,
+    password: process.env.ASST_CE2_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CE,
+    branch: 'CE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CE 3',
+    email: process.env.ASST_CE3_EMAIL,
+    password: process.env.ASST_CE3_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CE,
+    branch: 'CE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CE 4',
+    email: process.env.ASST_CE4_EMAIL,
+    password: process.env.ASST_CE4_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CE,
+    branch: 'CE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
     name: 'HOD CHE',
-    email: 'hod.che@college.gmail',
-    password: 'HODCHE@123',
+    email: process.env.HOD_CHE_EMAIL,
+    password: process.env.HOD_CHE_PASSWORD,
     role: ROLES.HOD,
     department: DEPARTMENTS.CHE,
     branch: null,
@@ -298,19 +501,74 @@ const DEMO_USERS = [
   },
   {
     name: 'Professor CHE 1',
-    email: 'professor.che1@college.gmail',
-    password: 'ProfCHE1@123',
+    email: process.env.PROF_CHE1_EMAIL,
+    password: process.env.PROF_CHE1_PASSWORD,
     role: ROLES.PROFESSOR,
     department: DEPARTMENTS.CHE,
     branch: 'CHE',
     permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Professor CHE 2',
+    email: process.env.PROF_CHE2_EMAIL,
+    password: process.env.PROF_CHE2_PASSWORD,
+    role: ROLES.PROFESSOR,
+    department: DEPARTMENTS.CHE,
+    branch: 'CHE',
+    permissions: ROLE_PERMISSIONS[ROLES.PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CHE 1',
+    email: process.env.ASST_CHE1_EMAIL,
+    password: process.env.ASST_CHE1_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CHE,
+    branch: 'CHE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CHE 2',
+    email: process.env.ASST_CHE2_EMAIL,
+    password: process.env.ASST_CHE2_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CHE,
+    branch: 'CHE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CHE 3',
+    email: process.env.ASST_CHE3_EMAIL,
+    password: process.env.ASST_CHE3_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CHE,
+    branch: 'CHE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
+  },
+  {
+    name: 'Assistant Professor CHE 4',
+    email: process.env.ASST_CHE4_EMAIL,
+    password: process.env.ASST_CHE4_PASSWORD,
+    role: ROLES.ASSISTANT_PROFESSOR,
+    department: DEPARTMENTS.CHE,
+    branch: 'CHE',
+    permissions: ROLE_PERMISSIONS[ROLES.ASSISTANT_PROFESSOR]
   }
-];
+].filter(u => u.email && u.password);
 
+const ADMIN_EMAILS = DEMO_USERS.filter(u => u.role === ROLES.ADMIN).map(u => u.email.toLowerCase());
 const STAFF_BY_EMAIL = new Map(DEMO_USERS.map(u => [u.email.toLowerCase().trim(), u]));
 
 function resolveAccess(email) {
-  const staff = STAFF_BY_EMAIL.get(String(email || '').toLowerCase().trim());
+  const normalizedEmail = String(email || '').toLowerCase().trim();
+  if (ADMIN_EMAILS.includes(normalizedEmail)) {
+    return {
+      role: ROLES.ADMIN,
+      department: null,
+      branch: null,
+      permissions: ROLE_PERMISSIONS[ROLES.ADMIN]
+    };
+  }
+  const staff = STAFF_BY_EMAIL.get(normalizedEmail);
   if (staff) {
     return {
       role: staff.role,
@@ -562,6 +820,9 @@ const MIN_CHUNK_LENGTH = parseInt(process.env.MIN_CHUNK_LENGTH) || 100;
 const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "gemini-embedding-001";
 const EMBEDDING_DIMENSION = parseInt(process.env.EMBEDDING_DIMENSION) || 768;
 const SEARCH_RESULTS_LIMIT = parseInt(process.env.SEARCH_RESULTS_LIMIT) || 50;
+const OCR_DPI = parseInt(process.env.OCR_DPI) || 300;
+const OCR_RETRY_ATTEMPTS = parseInt(process.env.OCR_RETRY_ATTEMPTS) || 2;
+const STORAGE_MODE = process.env.STORAGE_MODE || "local";
 
 const uploadDir = path.join(__dirname, "uploads", "documents");
 const tessdataDir = path.join(__dirname, "tessdata");
@@ -603,14 +864,17 @@ async function migrateLegacyData() {
     if (docsResult.modifiedCount > 0) {
       console.log(`Migrated ${docsResult.modifiedCount} legacy documents to published`);
     }
-    const adminEmail = 'ankushadmin@gmail.com';
-    const adminUser = await db.collection('users').findOne({ email: adminEmail });
-    if (adminUser && adminUser.role !== ROLES.ADMIN) {
-      await db.collection('users').updateOne(
-        { email: adminEmail },
-        { $set: { role: ROLES.ADMIN, permissions: ROLE_PERMISSIONS[ROLES.ADMIN], department: null, branch: null } }
-      );
-      console.log('Promoted ankushadmin@gmail.com to admin');
+    if (ADMIN_EMAILS.length > 0) {
+      for (const adminEmail of ADMIN_EMAILS) {
+        const adminUser = await db.collection('users').findOne({ email: adminEmail });
+        if (adminUser && adminUser.role !== ROLES.ADMIN) {
+          await db.collection('users').updateOne(
+            { email: adminEmail },
+            { $set: { role: ROLES.ADMIN, permissions: ROLE_PERMISSIONS[ROLES.ADMIN], department: null, branch: null } }
+          );
+          console.log(`Promoted ${adminEmail} to admin`);
+        }
+      }
     }
     const staffEmails = Array.from(STAFF_BY_EMAIL.keys());
     const demoted = await db.collection('users').updateMany(
@@ -1674,7 +1938,7 @@ async function ocrImage(imagePath, lang = 'eng') {
   const outputPath = path.join(tempDir, `ocr_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
   try {
     const processedPath = await preprocessImage(imagePath);
-    const { stdout, stderr } = await exec(`tesseract "${processedPath}" "${outputPath}" -l ${langOption} --psm 6 --oem 3 --dpi 300 2>&1`);
+    const { stdout, stderr } = await exec(`tesseract "${processedPath}" "${outputPath}" -l ${langOption} --psm 6 --oem 3 --dpi ${OCR_DPI} 2>&1`);
     const resultPath = `${outputPath}.txt`;
     let text = '';
     if (fs.existsSync(resultPath)) {
@@ -1688,7 +1952,7 @@ async function ocrImage(imagePath, lang = 'eng') {
   } catch (e) { return { text: '', confidence: 0 }; }
 }
 
-async function ocrImageWithRetry(imagePath, lang = 'eng', attempts = 2) {
+async function ocrImageWithRetry(imagePath, lang = 'eng', attempts = OCR_RETRY_ATTEMPTS) {
   let lastResult = { text: '', confidence: 0 };
   for (let i = 0; i < attempts; i++) {
     const result = await ocrImage(imagePath, lang);
@@ -1769,7 +2033,7 @@ async function extractPDFText(filePath) {
   try {
     const tempPdfDir = path.join(tempDir, `pdf_ocr_${Date.now()}`);
     if (!fs.existsSync(tempPdfDir)) fs.mkdirSync(tempPdfDir, { recursive: true });
-    await exec(`pdftoppm -png -r 300 "${filePath}" "${path.join(tempPdfDir, 'page')}"`);
+    await exec(`pdftoppm -png -r ${OCR_DPI} "${filePath}" "${path.join(tempPdfDir, 'page')}"`);
     const pageFiles = fs.readdirSync(tempPdfDir).filter(f => f.startsWith('page') && f.endsWith('.png')).sort();
     if (pageFiles.length > 0) {
       let combinedText = '';
@@ -3058,19 +3322,6 @@ app.post("/api/notifications/:id/read", authenticateToken, async (req, res) => {
   }
 });
 
-function getRoleDisplay(role) {
-  const map = {
-    admin: 'Admin',
-    director: 'Director',
-    dean: 'Dean',
-    hod: 'HOD',
-    professor: 'Professor',
-    assistant_professor: 'Assistant Professor',
-    student: 'Student'
-  };
-  return map[role] || role;
-}
-
 app.post("/api/history", authenticateToken, async (req, res) => {
   try {
     const { title, documentId, chunkId } = req.body;
@@ -3225,7 +3476,7 @@ app.get("/api/status", async (req, res) => {
     roles: Object.values(ROLES),
     departments: Object.values(DEPARTMENTS),
     cseBranches: CSE_BRANCHES,
-    storage: "local",
+    storage: STORAGE_MODE,
     stats: {
       documents: docCount,
       chunks: chunkCount,
@@ -3247,8 +3498,8 @@ app.use((error, req, res, next) => {
 
 app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  console.log(`Storage mode: local`);
-  console.log(`OCR DPI: 300`);
+  console.log(`Storage mode: ${STORAGE_MODE}`);
+  console.log(`OCR DPI: ${OCR_DPI}`);
   console.log(`AI services: ${genAI || openai ? 'Enabled' : 'Disabled'}`);
   console.log(`Embedding model: ${EMBEDDING_MODEL}`);
   console.log(`Chunk size: ${CHUNK_SIZE}, Overlap: ${CHUNK_OVERLAP}`);

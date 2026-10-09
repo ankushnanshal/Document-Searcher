@@ -59,6 +59,10 @@ const ROLE_DISPLAY = {
   student: 'Student'
 };
 
+function getRoleDisplay(role) {
+  return ROLE_DISPLAY[role] || role;
+}
+
 const profileMenuBtn = document.getElementById('profileMenuBtn');
 const authDropdown = document.getElementById('authDropdown');
 const authModal = document.getElementById('authModal');
@@ -200,10 +204,6 @@ function canCollegeWideRequestDelete(doc) {
   if (!COLLEGE_WIDE_ROLES.includes(currentUserRole)) return false;
   if (isResourceOwner(doc)) return false;
   return true;
-}
-
-function getRoleDisplay(role) {
-  return ROLE_DISPLAY[role] || role;
 }
 
 function getUploaderDisplay(doc) {
@@ -599,7 +599,12 @@ function renderRequestList(requests, container, tab) {
     return;
   }
   container.innerHTML = '';
-  requests.forEach(req => {
+  const filtered = tab === 'incoming' ? requests.filter(r => r.status === 'pending') : requests;
+  if (filtered.length === 0) {
+    container.innerHTML = `<div style="text-align: center; color: #94a3b8; padding: 40px;">No ${tab} requests.</div>`;
+    return;
+  }
+  filtered.forEach(req => {
     const card = document.createElement('div');
     card.style.cssText = 'background: rgba(255,255,255,0.03); border: 1px solid var(--border-glass); border-radius: 12px; padding: 16px; margin-bottom: 12px;';
     let actionButtons = '';
@@ -774,7 +779,7 @@ function updateRequestTabBadge(count) {
         filterTabs.forEach(t => t.classList.remove('active'));
         reqTab.classList.add('active');
         currentSelectedCategory = 'deletion_requests';
-        fetchDocuments(searchInput ? searchInput.value.trim() : "");
+        showDeletionRequestsModal();
         if (searchSuggestions) searchSuggestions.classList.add('hidden');
       });
     }
