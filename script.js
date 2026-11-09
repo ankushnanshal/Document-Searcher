@@ -144,6 +144,222 @@ const branchFilterContainer = document.getElementById('branchFilterContainer');
 const departmentFilterSelect = document.getElementById('departmentFilterSelect');
 const branchFilterSelect = document.getElementById('branchFilterSelect');
 
+const searchHubView = document.getElementById('searchHubView');
+const searchHubNavBtn = document.getElementById('searchHubNavBtn');
+const backFromSearchHubBtn = document.getElementById('backFromSearchHubBtn');
+const hubSearchInput = document.getElementById('hubSearchInput');
+const hubSearchBtn = document.getElementById('hubSearchBtn');
+const hubResultsList = document.getElementById('hubResultsList');
+const hubResultsCount = document.getElementById('hubResultsCount');
+const hubResultsTitle = document.getElementById('hubResultsTitle');
+const hubContentViewer = document.getElementById('hubContentViewer');
+const hubCloseViewerBtn = document.getElementById('hubCloseViewerBtn');
+const hubResetFiltersBtn = document.getElementById('hubResetFiltersBtn');
+
+let hubActiveCardEl = null;
+
+function escapeHubHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function highlightHubSnippet(text, query) {
+    if (!text) return '—';
+    const safe = escapeHubHtml(text);
+    if (!query || !query.trim()) {
+        return safe.substring(0, 400) + (safe.length > 400 ? '…' : '');
+    }
+    const lower = safe.toLowerCase();
+    const q = query.toLowerCase().trim();
+    const idx = lower.indexOf(q);
+    let start = 0;
+    let end = Math.min(safe.length, 400);
+    if (idx !== -1) {
+        start = Math.max(0, idx - 120);
+        end = Math.min(safe.length, idx + q.length + 240);
+    }
+    let snippet = safe.substring(start, end);
+    if (start > 0) snippet = '… ' + snippet;
+    if (end < safe.length) snippet = snippet + ' …';
+    const escapedQuery = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    try {
+        const re = new RegExp(`(${escapedQuery})`, 'gi');
+        snippet = snippet.replace(re, '<mark>$1</mark>');
+    } catch (e) {}
+    return snippet;
+}
+
+function showSearchHub() {
+    if (!searchHubView) return;
+    if (!isUserLoggedIn) {
+        showNotification("Please sign in to use Search Hub.", "error");
+        return;
+    }
+    if (mainDashboardView) mainDashboardView.classList.add('hidden');
+    if (historyPageView) historyPageView.classList.add('hidden');
+    if (draftsPageView) draftsPageView.classList.add('hidden');
+    searchHubView.classList.remove('hidden');
+    if (hubContentViewer) hubContentViewer.classList.add('hidden');
+    if (hubSearchInput) hubSearchInput.focus();
+    
+    if (hubResultsList) {
+        hubResultsList.innerHTML = `
+            <div class="hub-empty-state">
+                <i class="fa-solid fa-magnifying-glass" style="font-size: 3rem; opacity: 0.3;"></i>
+                <h3>Start Searching</h3>
+                <p>Type a query above, or use the filters on the left.</p>
+            </div>`;
+    }
+    if (hubResultsCount) hubResultsCount.textContent = `0 matches`;
+    if (hubResultsTitle) hubResultsTitle.textContent = 'Search Results';
+}
+
+function hideSearchHub() {
+    if (searchHubView) searchHubView.classList.add('hidden');
+    if (mainDashboardView) mainDashboardView.classList.remove('hidden');
+}
+
+async function runHubSearch(query) {
+    if (!authToken || !hubResultsList) return;
+
+    const category = document.getElementById('hubCategoryFilter')?.value || 'all';
+    const department = document.getElementById('hubDepartmentFilter')?.value || 'all';
+    const branch = document.getElementById('hubBranchFilter')?.value || 'all';
+    const semester = document.getElementById('hubSemesterFilter')?.value || 'all';
+    const session = document.getElementById('hubSessionFilter')?.value || 'all';
+
+    const isFiltered = category !== 'all' || department !== 'all' || branch !== 'all' || semester !== 'all' || session !== 'all';
+
+    if (!query.trim() && !isFiltered) {
+        if (hubResultsList) {
+            hubResultsList.innerHTML = `
+                <div class="hub-empty-state">
+                    <i class="fa-solid fa-magnifying-glass" style="font-size: 3rem; opacity: 0.3;"></i>
+                    <h3>Start Searching</h3>
+                    <p>Type a query above, or use the filters on the left.</p>
+                </div>`;
+        }
+        if (hubResultsCount) hubResultsCount.textContent = `0 matches`;
+        if (hubResultsTitle) hubResultsTitle.textContent = 'Search Results';
+        if (hubContentViewer) hubContentViewer.classList.add('hidden');
+        return;
+    }
+
+    hubResultsList.innerHTML = '<div class="hub-empty-state"><i class="fa-solid fa-spinner fa-spin" style="font-size:2rem;opacity:0.5;"></i><p style="margin-top:12px;">Searching...</p></div>';
+    if (hubContentViewer) hubContentViewer.classList.add('hidden');
+
+    let url = `${API_URL}/documents/search?q=${encodeURIComponent(query)}&limit=60`;
+    if (category !== 'all') url += `&category=${encodeURIComponent(category)}`;
+    if (department !== 'all') url += `&department=${encodeURIComponent(department)}`;
+    if (branch !== 'all') url += `&branch=${encodeURIComponent(branch)}`;
+    if (semester !== 'all') url += `&semester=${encodeURIComponent(semester)}`;
+    if (session !== 'all') url += `&year=${encodeURIComponent(session)}`;
+
+    try {
+        const response = await fetch(url, { headers: { 'Authorization': `Bearer ${authToken}` } });
+        if (!response.ok) throw new Error("Search failed");
+        let docs = await response.json();
+        if (!Array.isArray(docs)) docs = docs.docs || [];
+        docs = docs.filter(doc => userCanAccessResource(doc) && userCanAccessBranch(doc.branch, doc.department));
+        
+        if (hubResultsCount) hubResultsCount.textContent = `${docs.length} match${docs.length !== 1 ? 'es' : ''}`;
+        if (hubResultsTitle) hubResultsTitle.textContent = query.trim() ? `Results for "${escapeHubHtml(query.trim())}"` : 'Filtered Documents';
+        renderHubResults(docs, query);
+    } catch (err) {
+        hubResultsList.innerHTML = `<div class="hub-empty-state"><i class="fa-solid fa-triangle-exclamation" style="font-size:2rem;color:#ef4444;opacity:0.7;"></i><h3>Search Failed</h3><p>${escapeHubHtml(err.message)}</p></div>`;
+    }
+}
+
+function renderHubResults(docs, query) {
+    if (!hubResultsList) return;
+    hubActiveCardEl = null;
+    if (!docs || docs.length === 0) {
+        hubResultsList.innerHTML = '<div class="hub-empty-state"><i class="fa-solid fa-folder-open" style="font-size:2.5rem;opacity:0.4;"></i><h3>No matches found</h3><p>Try a different keyword, or reset the filters on the left.</p></div>';
+        return;
+    }
+    hubResultsList.innerHTML = '';
+    docs.forEach((doc, idx) => {
+        const card = document.createElement('div');
+        card.className = 'hub-result-card';
+        card.dataset.docId = doc._id;
+
+        const pills = [];
+        if (doc.category) pills.push(`<span class="pill hub-pill-cat">${escapeHubHtml(doc.category)}</span>`);
+        if (doc.department) pills.push(`<span class="pill hub-pill-dept">${escapeHubHtml(doc.department)}</span>`);
+        if (doc.branch && doc.branch !== 'All Branches' && doc.branch !== doc.department) pills.push(`<span class="pill hub-pill-branch">${escapeHubHtml(doc.branch)}</span>`);
+        if (doc.semester && doc.semester !== 'All Semesters') pills.push(`<span class="pill hub-pill-sem">Sem ${escapeHubHtml(doc.semester)}</span>`);
+        if (doc.officialDocType) pills.push(`<span class="pill hub-pill-cat">${escapeHubHtml(doc.officialDocType)}</span>`);
+        if (doc.paperType) pills.push(`<span class="pill hub-pill-cat">${escapeHubHtml(doc.paperType)}</span>`);
+
+        const sourceText = doc.extractedText || doc.textContent || doc.title || '';
+        const snippetHTML = highlightHubSnippet(sourceText, query);
+        const uploader = doc.uploadedByName || doc.uploadedBy || 'Unknown';
+        const sessionInfo = doc.session || doc.year || '';
+        const sourceLine = [
+            uploader ? `By <strong>${escapeHubHtml(uploader)}</strong>` : '',
+            sessionInfo ? `Session <strong>${escapeHubHtml(sessionInfo)}</strong>` : '',
+            doc.docDate ? `Dated <strong>${escapeHubHtml(doc.docDate)}</strong>` : ''
+        ].filter(Boolean).join(' · ');
+        const fileLink = doc.fileUrl
+            ? `<a href="${escapeHubHtml(doc.fileUrl)}" target="_blank" rel="noopener" class="hub-result-open-link" onclick="event.stopPropagation();"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open File</a>`
+            : '';
+
+        card.innerHTML = `
+            <div class="hub-result-title">${idx + 1}. ${escapeHubHtml(doc.title || 'Untitled')}</div>
+            <div class="hub-result-pills">${pills.join('')}</div>
+            <div class="hub-result-snippet">${snippetHTML}</div>
+            <div class="hub-result-footer">
+                <div class="hub-result-source"><i class="fa-solid fa-file-lines"></i><span>${sourceLine || 'Source: <em>unknown</em>'}</span></div>
+                ${fileLink}
+            </div>
+        `;
+        card.addEventListener('click', () => openHubViewer(doc, query, card));
+        hubResultsList.appendChild(card);
+    });
+}
+
+function openHubViewer(doc, query, cardEl) {
+    if (!hubContentViewer) return;
+    if (hubActiveCardEl) hubActiveCardEl.classList.remove('active');
+    if (cardEl) { cardEl.classList.add('active'); hubActiveCardEl = cardEl; }
+
+    document.getElementById('hubViewerTitle').textContent = doc.title || 'Untitled';
+    const metaParts = [doc.category, doc.officialDocType, doc.paperType].filter(Boolean);
+    document.getElementById('hubViewerMeta').textContent = metaParts.join(' · ') || 'Document';
+
+    document.getElementById('hubSourceDocName').textContent = doc.title || '—';
+    document.getElementById('hubSourceUploader').textContent = doc.uploadedByName || doc.uploadedBy || '—';
+    const deptInfo = [doc.department, doc.branch].filter(Boolean).join(' / ') || '—';
+    document.getElementById('hubSourceDept').textContent = deptInfo;
+    const sessionInfo = [doc.session || doc.year, doc.semester ? `Sem ${doc.semester}` : ''].filter(Boolean).join(' · ') || '—';
+    document.getElementById('hubSourceSession').textContent = sessionInfo;
+
+    const openBtn = document.getElementById('hubOpenFullDocBtn');
+    const downloadBtn = document.getElementById('hubDownloadDocBtn');
+    if (doc.fileUrl) {
+        openBtn.href = doc.fileUrl;
+        downloadBtn.href = doc.fileUrl;
+        downloadBtn.setAttribute('download', doc.title || 'document');
+        openBtn.style.opacity = '1';
+        openBtn.style.pointerEvents = 'auto';
+        downloadBtn.style.opacity = '1';
+        downloadBtn.style.pointerEvents = 'auto';
+    } else {
+        openBtn.href = '#';
+        downloadBtn.href = '#';
+        openBtn.style.opacity = '0.5';
+        openBtn.style.pointerEvents = 'none';
+        downloadBtn.style.opacity = '0.5';
+        downloadBtn.style.pointerEvents = 'none';
+    }
+
+    const sourceText = doc.extractedText || doc.textContent || doc.title || '';
+    document.getElementById('hubSnippetContent').innerHTML = highlightHubSnippet(sourceText, query);
+
+    hubContentViewer.classList.remove('hidden');
+    hubContentViewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function isFacultyRole(role) {
   return FACULTY_ROLES.includes(String(role || '').toLowerCase());
 }
@@ -991,6 +1207,7 @@ if (logoutBtn) {
     if (mainDashboardView) mainDashboardView.classList.remove('hidden');
     if (historyPageView) historyPageView.classList.add('hidden');
     if (draftsPageView) draftsPageView.classList.add('hidden');
+    if (searchHubView) searchHubView.classList.add('hidden');
     if (resultsMeta) resultsMeta.classList.remove('hidden');
     removePendingApprovalTab();
     removeDeletionRequestsTab();
@@ -1133,6 +1350,7 @@ if (draftManagerBtn) {
     if (draftsPageView) {
       mainDashboardView.classList.add('hidden');
       historyPageView.classList.add('hidden');
+      searchHubView.classList.add('hidden');
       draftsPageView.classList.remove('hidden');
       fetchDrafts();
       fetchPendingApprovals();
@@ -1762,6 +1980,8 @@ function handleUserSession(user) {
   currentUserYear = user.year;
   currentUserSemester = user.semester;
 
+  if (searchHubNavBtn) searchHubNavBtn.classList.remove('hidden');
+
   if (workspaceName) {
     let displayName = user.name;
     if (currentUserDepartment) {
@@ -1968,6 +2188,7 @@ if (viewFullHistoryBtn) {
     if (mainDashboardView) mainDashboardView.classList.add('hidden');
     if (historyPageView) historyPageView.classList.remove('hidden');
     if (draftsPageView) draftsPageView.classList.add('hidden');
+    if (searchHubView) searchHubView.classList.add('hidden');
     authDropdown.classList.add('hidden');
   });
 }
@@ -1983,6 +2204,7 @@ if (navBrandHome) {
   navBrandHome.addEventListener('click', () => {
     if (historyPageView) historyPageView.classList.add('hidden');
     if (draftsPageView) draftsPageView.classList.add('hidden');
+    if (searchHubView) searchHubView.classList.add('hidden');
     if (mainDashboardView) mainDashboardView.classList.remove('hidden');
   });
 }
@@ -2454,6 +2676,15 @@ function renderActionButtons() {
   setElementVisible(document.getElementById('adminActionWrapper'), staff, 'flex');
   setElementVisible(document.getElementById('mainUploadBtn'), staff);
   setElementVisible(document.getElementById('draftManagerBtn'), staff);
+  
+  if (searchHubNavBtn) {
+    if (isUserLoggedIn) {
+      searchHubNavBtn.classList.remove('hidden');
+    } else {
+      searchHubNavBtn.classList.add('hidden');
+    }
+  }
+
   if (!staff) {
     const draftTab = document.querySelector('.filter-tab[data-category="drafts"]');
     if (draftTab) draftTab.classList.add('hidden');
@@ -2518,3 +2749,37 @@ window.addEventListener('click', (e) => {
   }
   if (e.target === authModal) authModal.classList.add('hidden');
 });
+
+if (searchHubNavBtn) searchHubNavBtn.addEventListener('click', showSearchHub);
+if (backFromSearchHubBtn) backFromSearchHubBtn.addEventListener('click', hideSearchHub);
+if (hubSearchBtn) hubSearchBtn.addEventListener('click', () => runHubSearch(hubSearchInput ? hubSearchInput.value.trim() : ''));
+if (hubSearchInput) {
+    hubSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            runHubSearch(hubSearchInput.value.trim());
+        }
+    });
+}
+if (hubCloseViewerBtn) {
+    hubCloseViewerBtn.addEventListener('click', () => {
+        if (hubContentViewer) hubContentViewer.classList.add('hidden');
+        if (hubActiveCardEl) { hubActiveCardEl.classList.remove('active'); hubActiveCardEl = null; }
+    });
+}
+if (hubResetFiltersBtn) {
+    hubResetFiltersBtn.addEventListener('click', () => {
+        ['hubCategoryFilter', 'hubDepartmentFilter', 'hubBranchFilter', 'hubSemesterFilter', 'hubSessionFilter'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = 'all';
+        });
+        if (hubSearchInput) hubSearchInput.value = '';
+        runHubSearch('');
+    });
+}
+['hubCategoryFilter', 'hubDepartmentFilter', 'hubBranchFilter', 'hubSemesterFilter', 'hubSessionFilter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => runHubSearch(hubSearchInput ? hubSearchInput.value.trim() : ''));
+});
+
+if (searchHubNavBtn && !isUserLoggedIn) searchHubNavBtn.classList.add('hidden');

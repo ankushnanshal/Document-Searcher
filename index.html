@@ -28,6 +28,10 @@
                     </button>
                 </div>
 
+                <button id="searchHubNavBtn" class="search-hub-nav-btn">
+                    <i class="fa-solid fa-magnifying-glass"></i> Search Hub
+                </button>
+
                 <div class="auth-wrapper">
                     <button id="profileMenuBtn" class="account-trigger-btn">
                         <div id="avatarContainer" class="avatar-icon-wrap">
@@ -165,6 +169,156 @@
                 <div id="draftsContainer" class="results-stack">
                     <span class="history-empty-state">No drafts found. Create a draft by uploading a file and selecting "Save as Draft".</span>
                 </div>
+            </div>
+        </div>
+
+        <div id="searchHubView" class="hidden search-hub-view">
+            <div class="search-hub-header">
+                <button id="backFromSearchHubBtn" class="action-btn-link back-home-btn"><i class="fa-solid fa-arrow-left"></i> Back to Resources</button>
+                <h1 class="search-hub-title"><i class="fa-solid fa-magnifying-glass" style="color: #6366f1;"></i> Search Hub</h1>
+                <p class="search-hub-subtitle">Search across every document, notice, and paper in the vault. View matched content, trace the source document, and jump straight to the full file.</p>
+            </div>
+            <div class="search-hub-layout">
+                <aside class="search-hub-sidebar">
+                    <div class="search-hub-input-wrap">
+                        <i class="fa-solid fa-magnifying-glass"></i>
+                        <input type="text" id="hubSearchInput" placeholder="Search docs, notices, papers..." autocomplete="off">
+                        <button id="hubSearchBtn" class="hub-search-go-btn" title="Search"><i class="fa-solid fa-arrow-right"></i></button>
+                    </div>
+                    <div class="search-hub-filters">
+                        <h4><i class="fa-solid fa-filter"></i> Filters</h4>
+                        <div class="input-block">
+                            <label>Category</label>
+                            <select id="hubCategoryFilter" class="filter-select">
+                                <option value="all">All Categories</option>
+                                <option value="Official Update">Official Document</option>
+                                <option value="University Paper">University Paper</option>
+                            </select>
+                        </div>
+                        <div class="input-block">
+                            <label>Department</label>
+                            <select id="hubDepartmentFilter" class="filter-select">
+                                <option value="all">All Departments</option>
+                                <option value="CSE">CSE</option>
+                                <option value="ECE">ECE</option>
+                                <option value="EE">EE</option>
+                                <option value="ME">ME</option>
+                                <option value="CE">CE</option>
+                                <option value="CHE">CHE</option>
+                            </select>
+                        </div>
+                        <div class="input-block">
+                            <label>Branch</label>
+                            <select id="hubBranchFilter" class="filter-select">
+                                <option value="all">All Branches</option>
+                                <option value="CSE-R">CSE-R</option>
+                                <option value="CSE-A.I">CSE-A.I</option>
+                                <option value="CSE-SF">CSE-SF</option>
+                                <option value="ECE">ECE</option>
+                                <option value="EE">EE</option>
+                                <option value="ME">ME</option>
+                                <option value="CE">CE</option>
+                                <option value="CHE">CHE</option>
+                            </select>
+                        </div>
+                        <div class="input-block">
+                            <label>Semester</label>
+                            <select id="hubSemesterFilter" class="filter-select">
+                                <option value="all">All Semesters</option>
+                                <option value="1">Semester 1</option>
+                                <option value="2">Semester 2</option>
+                                <option value="3">Semester 3</option>
+                                <option value="4">Semester 4</option>
+                                <option value="5">Semester 5</option>
+                                <option value="6">Semester 6</option>
+                                <option value="7">Semester 7</option>
+                                <option value="8">Semester 8</option>
+                            </select>
+                        </div>
+                        <div class="input-block">
+                            <label>Session</label>
+                            <select id="hubSessionFilter" class="filter-select">
+                                <option value="all">All Sessions</option>
+                                <option value="2026-27">2026-27</option>
+                                <option value="2025-26">2025-26</option>
+                                <option value="2024-25">2024-25</option>
+                                <option value="2023-24">2023-24</option>
+                                <option value="2022-23">2022-23</option>
+                                <option value="2021-22">2021-22</option>
+                                <option value="2020-21">2020-21</option>
+                            </select>
+                        </div>
+                        <button id="hubResetFiltersBtn" class="hub-reset-btn"><i class="fa-solid fa-rotate-left"></i> Reset Filters</button>
+                    </div>
+                    <div class="search-hub-tips">
+                        <h4><i class="fa-solid fa-lightbulb"></i> Tips</h4>
+                        <ul>
+                            <li>Search in English or Hindi</li>
+                            <li>Try: <em>hostel</em>, <em>छात्रावास</em>, <em>syllabus</em></li>
+                            <li>Use filters to narrow the result set</li>
+                        </ul>
+                    </div>
+                </aside>
+                <main class="search-hub-results">
+                    <div class="search-hub-meta">
+                        <h2 id="hubResultsTitle">Search Results</h2>
+                        <span id="hubResultsCount" class="badge-counter">0 matches</span>
+                    </div>
+                    <div id="hubResultsList" class="hub-results-list">
+                        <div class="hub-empty-state">
+                            <i class="fa-solid fa-magnifying-glass" style="font-size: 3rem; opacity: 0.3;"></i>
+                            <h3>Start Searching</h3>
+                            <p>Type a query above, or use the filters on the left.</p>
+                        </div>
+                    </div>
+                    <div id="hubContentViewer" class="hub-content-viewer hidden">
+                        <div class="hub-viewer-header">
+                            <div class="hub-viewer-title-block">
+                                <h3 id="hubViewerTitle">Document Title</h3>
+                                <p id="hubViewerMeta">Source details</p>
+                            </div>
+                            <button id="hubCloseViewerBtn" class="modal-dismiss-icon"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <div class="hub-viewer-source">
+                            <div class="hub-source-item">
+                                <i class="fa-solid fa-file"></i>
+                                <div>
+                                    <span class="hub-source-label">Source Document</span>
+                                    <span id="hubSourceDocName" class="hub-source-value">—</span>
+                                </div>
+                            </div>
+                            <div class="hub-source-item">
+                                <i class="fa-solid fa-user"></i>
+                                <div>
+                                    <span class="hub-source-label">Uploaded By</span>
+                                    <span id="hubSourceUploader" class="hub-source-value">—</span>
+                                </div>
+                            </div>
+                            <div class="hub-source-item">
+                                <i class="fa-solid fa-building-columns"></i>
+                                <div>
+                                    <span class="hub-source-label">Department / Branch</span>
+                                    <span id="hubSourceDept" class="hub-source-value">—</span>
+                                </div>
+                            </div>
+                            <div class="hub-source-item">
+                                <i class="fa-solid fa-calendar"></i>
+                                <div>
+                                    <span class="hub-source-label">Session / Semester</span>
+                                    <span id="hubSourceSession" class="hub-source-value">—</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="hub-viewer-actions">
+                            <a id="hubOpenFullDocBtn" href="#" target="_blank" rel="noopener" class="hub-action-primary"><i class="fa-solid fa-up-right-from-square"></i> Open Full Document</a>
+                            <a id="hubDownloadDocBtn" href="#" download class="hub-action-secondary"><i class="fa-solid fa-download"></i> Download</a>
+                        </div>
+                        <div class="hub-viewer-content">
+                            <h4><i class="fa-solid fa-align-left"></i> Matched Content Snippet</h4>
+                            <div id="hubSnippetContent" class="hub-snippet-box">— content will appear here —</div>
+                        </div>
+                    </div>
+                </main>
             </div>
         </div>
     </div>
